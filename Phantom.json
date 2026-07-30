@@ -1,0 +1,19 @@
+{
+  "Author": "Anmi",
+  "Name": "幻境武器助手",
+  "Punchline": "追踪幻境武器阶段材料、以太与战斗记忆进度。",
+  "Description": "基于灰机 Wiki 幻境武器资料，提供半影、本影、黯影、蚀影、秘影阶段的材料清单、一次性流程勾选和手动进度追踪。",
+  "Tags": [
+    "phantom",
+    "weapon",
+    "tracker"
+  ],
+  "CategoryTags": [
+    "Utility"
+  ],
+  "InternalName": "Phantom",
+  "IconUrl": "https://raw.githubusercontent.com/anmili2022/Phantom/main/images/icon.png",
+  "ApplicableVersion": "any",
+  "AssemblyVersion": "0.1.0.0",
+  "DalamudApiLevel": 15
+}

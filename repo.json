@@ -1,0 +1,23 @@
+[
+  {
+    "Author": "Anmi",
+    "Name": "幻境武器助手",
+    "Description": "基于灰机 Wiki 幻境武器资料，提供阶段材料清单、一次性流程勾选和手动进度追踪。",
+    "InternalName": "Phantom",
+    "AssemblyVersion": "0.1.0.0",
+    "RepoUrl": "",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "Tags": [
+      "phantom",
+      "weapon",
+      "tracker"
+    ],
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadLinkInstall": "",
+    "DownloadLinkTesting": "",
+    "DownloadLinkUpdate": "",
+    "LastUpdated": "0"
+  }
+]
