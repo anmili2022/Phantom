@@ -20,6 +20,7 @@ public sealed class VnavService : IDisposable
     private ICallGateSubscriber<bool>? lifestreamIsBusy;
     private Vector3? pendingTarget;
     private uint pendingTerritoryType;
+    private Vector3? pendingAetherytePosition;
     private bool pendingFly;
     private DateTime pendingStartedUtc;
     private Vector3? pendingMoveTarget;
@@ -118,6 +119,7 @@ public sealed class VnavService : IDisposable
 
         pendingTarget = snapped.Value;
         pendingTerritoryType = DalamudApi.ClientState.TerritoryType;
+        pendingAetherytePosition = TryFindAetherytePosition(aetheryteId, out var aetherytePosition) ? aetherytePosition : null;
         pendingFly = fly;
         pendingStartedUtc = DateTime.UtcNow;
     }
@@ -314,6 +316,7 @@ public sealed class VnavService : IDisposable
 
         pendingTarget = target;
         pendingTerritoryType = territoryType;
+        pendingAetherytePosition = TryFindAetherytePosition(aetheryteId, out var aetherytePosition) ? aetherytePosition : null;
         pendingFly = fly;
         pendingStartedUtc = DateTime.UtcNow;
         PrintEcho($"已请求传送到目标地图 {territoryType}，等待读图完成后继续导航。 ");
@@ -362,6 +365,20 @@ public sealed class VnavService : IDisposable
         return nearestId != 0 ? nearestId : FindAetheryteForTerritory(territoryType);
     }
 
+    private static bool TryFindAetherytePosition(uint aetheryteId, out Vector3 position)
+    {
+        position = default;
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Aetheryte>())
+        {
+            if (aetheryte.RowId == aetheryteId)
+            {
+                return TryResolveAetheryteRawPosition(aetheryte, out position);
+            }
+        }
+
+        return false;
+    }
+
     private void OnFrameworkUpdate(IFramework framework)
     {
         _ = framework;
@@ -381,6 +398,7 @@ public sealed class VnavService : IDisposable
         {
             pendingTarget = null;
             pendingTerritoryType = 0;
+            pendingAetherytePosition = null;
             DalamudApi.Log.Warning("Timed out waiting for Lifestream teleport before vnavmesh navigation.");
             PrintEcho("等待 Lifestream 传送超时，已取消后续导航。 ");
             return;
@@ -395,6 +413,22 @@ public sealed class VnavService : IDisposable
             || DalamudApi.Condition[ConditionFlag.BetweenAreas51])
         {
             return;
+        }
+
+        if (pendingAetherytePosition.HasValue)
+        {
+            var player = DalamudApi.ObjectTable.LocalPlayer;
+            if (player == null)
+            {
+                return;
+            }
+
+            var playerXZ = new Vector2(player.Position.X, player.Position.Z);
+            var aetheryteXZ = new Vector2(pendingAetherytePosition.Value.X, pendingAetherytePosition.Value.Z);
+            if (Vector2.Distance(playerXZ, aetheryteXZ) > 90f)
+            {
+                return;
+            }
         }
 
         try
@@ -413,6 +447,7 @@ public sealed class VnavService : IDisposable
         var fly = pendingFly;
         pendingTarget = null;
         pendingTerritoryType = 0;
+        pendingAetherytePosition = null;
         var snapped = SnapToNavmesh(target);
         if (!snapped.HasValue)
         {
@@ -504,6 +539,7 @@ public sealed class VnavService : IDisposable
     {
         pendingTarget = null;
         pendingTerritoryType = 0;
+        pendingAetherytePosition = null;
         pendingMoveTarget = null;
         try { stop.InvokeAction(); } catch { }
     }
