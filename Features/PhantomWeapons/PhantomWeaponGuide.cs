@@ -50,7 +50,7 @@ public static class PhantomWeaponGuide
 
         new PhantomWeaponTarget("secret-yak-panther", "亚克特尔树海", "长牙狞豹", 1189, 13.06f, 8.97f),
         new PhantomWeaponTarget("secret-yak-wing", "亚克特尔树海", "土石之翼", 1189, 34.74f, 13.77f),
-        new PhantomWeaponTarget("secret-yak-branch", "亚克特尔树海", "拟鸟枝", 1189, 14.78f, 25.73f),
+        new PhantomWeaponTarget("secret-yak-branch", "亚克特尔树海", "拟鸟枝", 1189, 15.42f, 24.10f),
         new PhantomWeaponTarget("secret-yak-leaf", "亚克特尔树海", "蓝叶灵", 1189, 8.22f, 26.65f),
 
         new PhantomWeaponTarget("secret-sha-crab", "夏劳尼荒野", "风滚蟹", 1190, 33.22f, 29.01f),
