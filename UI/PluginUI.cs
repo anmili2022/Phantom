@@ -1,5 +1,6 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Fates;
+using System.Diagnostics;
 using System.Numerics;
 
 namespace Phantom;
@@ -103,10 +104,28 @@ public sealed class PluginUI
                 ImGui.EndTabItem();
             }
 
+            DrawSettingsTab();
             DrawDebugTab();
 
             ImGui.EndTabBar();
         }
+    }
+
+    private void DrawSettingsTab()
+    {
+        if (!ImGui.BeginTabItem("设置##phantom-settings"))
+        {
+            return;
+        }
+
+        var autoHideCompletedFloatingItems = configuration.AutoHideCompletedFloatingItems;
+        if (ImGui.Checkbox("悬浮窗自动隐藏已完成项目", ref autoHideCompletedFloatingItems))
+        {
+            configuration.AutoHideCompletedFloatingItems = autoHideCompletedFloatingItems;
+            configuration.Save();
+        }
+
+        ImGui.EndTabItem();
     }
 
     private void DrawDebugTab()
@@ -178,7 +197,32 @@ public sealed class PluginUI
             }
         }
 
+        ImGui.SameLine();
+        if (ImGui.Button("打开Wiki##debug-open-wiki"))
+        {
+            OpenUrl("https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("读取战斗记忆（未完成）##debug-read-memory-ui"))
+        {
+            PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
+        }
+
         ImGui.EndTabItem();
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            PrintChat("已打开幻境武器 Wiki。");
+        }
+        catch (Exception ex)
+        {
+            PrintChat($"打开Wiki失败: {ex.Message}");
+        }
     }
 
     private static void PrintChat(string message)
@@ -224,6 +268,8 @@ public sealed class PluginUI
         {
             ImGui.Spacing();
             DrawSecretTargets();
+            ImGui.Spacing();
+            DrawSecretDuties(stage);
         }
 
         if (stage.Notes.Count > 0)
@@ -290,6 +336,74 @@ public sealed class PluginUI
         }
     }
 
+    private void DrawSecretDuties(PhantomWeaponStage stage)
+    {
+        _ = stage;
+        if (PhantomWeaponGuide.SecretDutyGroups.Count == 0)
+        {
+            return;
+        }
+
+        ImGui.TextUnformatted("秘影迷宫/讨伐任务");
+        ImGui.SameLine();
+        var showDuties = configuration.ShowSecretDutiesInFloatingWindow;
+        if (DrawFloatingVisibilityCheckbox("##secret-duty-floating-toggle", ref showDuties))
+        {
+            configuration.ShowSecretDutiesInFloatingWindow = showDuties;
+            configuration.Save();
+        }
+        foreach (var group in PhantomWeaponGuide.SecretDutyGroups)
+        {
+            var completed = group.Duties.Count(duty => configuration.CompletedTasks.Contains(duty.Key));
+            var total = group.Duties.Count;
+            var header = completed == total
+                ? $"{group.Name} 已全部完成（{completed}/{total}）"
+                : $"{group.Name} ({completed}/{total})";
+            if (!ImGui.CollapsingHeader($"{header}##{group.Key}", ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                continue;
+            }
+
+            ImGui.ProgressBar(total == 0 ? 1f : (float)completed / total, new Vector2(-1, 0), $"{completed}/{total}");
+            if (ImGui.BeginTable($"secret-duty-table-{group.Key}", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+            {
+                ImGui.TableSetupColumn("完成", ImGuiTableColumnFlags.WidthFixed, 56);
+                ImGui.TableSetupColumn("指定迷宫/讨伐", ImGuiTableColumnFlags.WidthStretch, 1f);
+                ImGui.TableHeadersRow();
+
+                foreach (var duty in group.Duties)
+                {
+                    DrawSecretDutyRow(duty);
+                }
+
+                ImGui.EndTable();
+            }
+        }
+    }
+
+    private void DrawSecretDutyRow(PhantomWeaponDuty duty)
+    {
+        var done = configuration.CompletedTasks.Contains(duty.Key);
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        if (ImGui.Checkbox($"##secret-duty-{duty.Key}", ref done))
+        {
+            if (done)
+            {
+                configuration.CompletedTasks.Add(duty.Key);
+            }
+            else
+            {
+                configuration.CompletedTasks.Remove(duty.Key);
+            }
+
+            configuration.Save();
+        }
+
+        ImGui.TableNextColumn();
+        ImGui.TextWrapped(duty.Name);
+    }
+
     private void DrawRequirementRow(PhantomWeaponRequirement requirement)
     {
         var current = configuration.Progress.GetValueOrDefault(requirement.Key);
@@ -339,6 +453,13 @@ public sealed class PluginUI
     private void DrawSecretTargets()
     {
         ImGui.TextUnformatted("秘影指定目标");
+        ImGui.SameLine();
+        var showTargets = configuration.ShowSecretTargetsInFloatingWindow;
+        if (DrawFloatingVisibilityCheckbox("##secret-target-floating-toggle", ref showTargets))
+        {
+            configuration.ShowSecretTargetsInFloatingWindow = showTargets;
+            configuration.Save();
+        }
         ImGui.TextDisabled("导航会先尝试 Lifestream 传送到目标地图，再用 vnavmesh 前往坐标。坐标来自灰机 Wiki / xivdaily。 ");
 
         foreach (var group in PhantomWeaponGuide.SecretTargets.GroupBy(target => target.Zone))
@@ -375,7 +496,7 @@ public sealed class PluginUI
             {
                 ImGui.TableSetupColumn("完成", ImGuiTableColumnFlags.WidthFixed, 56);
                 ImGui.TableSetupColumn("目标", ImGuiTableColumnFlags.WidthStretch, 1.2f);
-                ImGui.TableSetupColumn("地图坐标", ImGuiTableColumnFlags.WidthFixed, 120);
+                ImGui.TableSetupColumn("坐标", ImGuiTableColumnFlags.WidthFixed, 160);
                 ImGui.TableSetupColumn("导航", ImGuiTableColumnFlags.WidthFixed, 90);
                 ImGui.TableHeadersRow();
 
@@ -413,13 +534,25 @@ public sealed class PluginUI
         ImGui.TextUnformatted(target.Name);
 
         ImGui.TableNextColumn();
-        ImGui.TextUnformatted($"X:{target.MapX:F2} Y:{target.MapY:F2}");
+        ImGui.TextUnformatted(target.UseWorldCoords
+            ? $"W:{target.WorldX:F1}, {target.WorldY:F1}, {target.WorldZ:F1}"
+            : $"X:{target.MapX:F2} Y:{target.MapY:F2}");
 
         ImGui.TableNextColumn();
         if (ImGui.SmallButton($"导航##nav-{target.Key}"))
         {
             vnav.NavigateTo(target, configuration.UseFlightNavigation);
         }
+    }
+
+    private bool DrawFloatingVisibilityCheckbox(string id, ref bool value)
+    {
+        if (ImGui.Checkbox($"显示到悬浮窗{id}", ref value))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private void DrawFloatingObjectiveWindow()
@@ -476,16 +609,18 @@ public sealed class PluginUI
 
         DrawFloatingContextMenu();
 
-        var zone = targets[0].Zone;
-        var completed = targets.Count(target => configuration.CompletedTasks.Contains(target.Key));
-        var targetTerritory = targets[0].TerritoryType;
-        var fateCount = GetSecretFateCount(targetTerritory);
-        ImGui.TextUnformatted(territory == targetTerritory && !configuration.FloatingManualMode ? zone : $"{zone}");
-        ImGui.SameLine();
-        if (ImGui.SmallButton("停止导航##float-stop-nav"))
+        if (configuration.ShowSecretTargetsInFloatingWindow)
         {
-            vnav.Stop();
-        }
+            var zone = targets[0].Zone;
+            var completed = targets.Count(target => configuration.CompletedTasks.Contains(target.Key));
+            var targetTerritory = targets[0].TerritoryType;
+            var fateCount = GetSecretFateCount(targetTerritory);
+            ImGui.TextUnformatted(territory == targetTerritory && !configuration.FloatingManualMode ? zone : $"{zone}");
+            ImGui.SameLine();
+            if (ImGui.SmallButton("停止导航##float-stop-nav"))
+            {
+                vnav.Stop();
+            }
 
         ImGui.SameLine();
         if (ImGui.SmallButton("<##float-prev-zone"))
@@ -519,7 +654,7 @@ public sealed class PluginUI
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("切换到当前地图");
 
-        ImGui.ProgressBar((completed + Math.Min(fateCount, 5)) / 9f, new Vector2(-1, 0), $"{completed + Math.Min(fateCount, 5)}/9");
+            ImGui.ProgressBar((completed + Math.Min(fateCount, 5)) / 9f, new Vector2(-1, 0), $"{completed + Math.Min(fateCount, 5)}/9");
 
         ImGui.TextUnformatted($"金牌 FATE {Math.Min(fateCount, 5)}/5");
         ImGui.SameLine();
@@ -550,8 +685,32 @@ public sealed class PluginUI
                 if (nearest != null)
                 {
                     var fatePos = nearest.Position;
-                    vnav.NavigateTo(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
-                    PrintChat($"导航到最近FATE: {nearest.Name}");
+                    var playerDist = Vector2.Distance(new Vector2(player.Position.X, player.Position.Z), new Vector2(fatePos.X, fatePos.Z));
+                    var aetherytePos = vnav.GetNearestCurrentTerritoryAetherytePosition(fatePos);
+                    if (aetherytePos.HasValue)
+                    {
+                        var aetheryteDist = Vector2.Distance(new Vector2(aetherytePos.Value.X, aetherytePos.Value.Z), new Vector2(fatePos.X, fatePos.Z));
+                        if (playerDist <= aetheryteDist)
+                        {
+                            vnav.NavigateTo(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
+                            PrintChat($"导航到最近FATE: {nearest.Name}（自身距FATE {playerDist:F0} ≤ 水晶距FATE {aetheryteDist:F0}，直接前往）。");
+                        }
+                        else
+                        {
+                            vnav.TeleportAndNavigate(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
+                            PrintChat($"导航到最近FATE: {nearest.Name}（自身距FATE {playerDist:F0} > 水晶距FATE {aetheryteDist:F0}，先传送）。");
+                        }
+                    }
+                    else if (playerDist > 200f)
+                    {
+                        vnav.TeleportAndNavigate(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
+                        PrintChat($"导航到最近FATE: {nearest.Name}（未找到水晶坐标，距离{playerDist:F0}，先传送再前往）。");
+                    }
+                    else
+                    {
+                        vnav.NavigateTo(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
+                        PrintChat($"导航到最近FATE: {nearest.Name}（未找到水晶坐标，距离{playerDist:F0}，直接前往）。");
+                    }
                 }
                 else
                 {
@@ -561,9 +720,32 @@ public sealed class PluginUI
         }
 
         ImGui.Separator();
-        foreach (var target in targets.Where(target => !configuration.CompletedTasks.Contains(target.Key)))
+        foreach (var target in targets)
         {
-            ImGui.TextUnformatted($"{target.Name}  X:{target.MapX:F1} Y:{target.MapY:F1}");
+            var done = configuration.CompletedTasks.Contains(target.Key);
+            if (configuration.AutoHideCompletedFloatingItems && done)
+            {
+                continue;
+            }
+
+            if (ImGui.Checkbox($"##float-target-done-{target.Key}", ref done))
+            {
+                if (done)
+                {
+                    configuration.CompletedTasks.Add(target.Key);
+                }
+                else
+                {
+                    configuration.CompletedTasks.Remove(target.Key);
+                }
+
+                configuration.Save();
+            }
+
+            ImGui.SameLine();
+            ImGui.TextUnformatted(target.UseWorldCoords
+                ? $"{target.Name}  W:{target.WorldX:F0},{target.WorldY:F0},{target.WorldZ:F0}"
+                : $"{target.Name}  X:{target.MapX:F1} Y:{target.MapY:F1}");
             ImGui.SameLine();
             if (ImGui.SmallButton($"导航##float-nav-{target.Key}"))
             {
@@ -572,12 +754,72 @@ public sealed class PluginUI
             }
         }
 
-        if (completed == targets.Length && fateCount >= 5)
+            if (completed == targets.Length && fateCount >= 5)
+            {
+                ImGui.TextUnformatted("当前地图秘影目标已完成。");
+            }
+        }
+
+        if (configuration.ShowSecretDutiesInFloatingWindow)
         {
-            ImGui.TextUnformatted("当前地图秘影目标已完成。");
+            DrawFloatingSecretDuties();
         }
 
         ImGui.End();
+    }
+
+    private void DrawFloatingSecretDuties()
+    {
+        ImGui.Separator();
+        ImGui.TextUnformatted("迷宫/讨伐");
+        var anyVisible = false;
+        foreach (var group in PhantomWeaponGuide.SecretDutyGroups)
+        {
+            var completed = group.Duties.Count(duty => configuration.CompletedTasks.Contains(duty.Key));
+            if (configuration.AutoHideCompletedFloatingItems && completed == group.Duties.Count)
+            {
+                continue;
+            }
+
+            anyVisible = true;
+            if (!ImGui.CollapsingHeader($"{GetFloatingDutyGroupName(group)} ({completed}/{group.Duties.Count})##float-{group.Key}"))
+            {
+                continue;
+            }
+
+            foreach (var duty in group.Duties)
+            {
+                var done = configuration.CompletedTasks.Contains(duty.Key);
+                if (configuration.AutoHideCompletedFloatingItems && done)
+                {
+                    continue;
+                }
+
+                if (ImGui.Checkbox($"{duty.Name}##float-duty-{duty.Key}", ref done))
+                {
+                    if (done)
+                    {
+                        configuration.CompletedTasks.Add(duty.Key);
+                    }
+                    else
+                    {
+                        configuration.CompletedTasks.Remove(duty.Key);
+                    }
+
+                    configuration.Save();
+                }
+            }
+        }
+
+        if (!anyVisible)
+        {
+            ImGui.TextUnformatted("秘影迷宫/讨伐已完成。");
+        }
+    }
+
+    private static string GetFloatingDutyGroupName(PhantomWeaponDutyGroup group)
+    {
+        return group.Name.Replace("迷宫或讨伐任务：", string.Empty, StringComparison.Ordinal);
     }
 
     private void DrawFloatingContextMenu()
@@ -603,6 +845,13 @@ public sealed class PluginUI
         if (ImGui.MenuItem("自动标记击杀", string.Empty, autoMarkKills))
         {
             configuration.AutoMarkSecretKills = !autoMarkKills;
+            configuration.Save();
+        }
+
+        var showDuties = configuration.ShowSecretDutiesInFloatingWindow;
+        if (ImGui.MenuItem("悬浮迷宫/讨伐", string.Empty, showDuties))
+        {
+            configuration.ShowSecretDutiesInFloatingWindow = !showDuties;
             configuration.Save();
         }
 

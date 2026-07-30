@@ -33,8 +33,10 @@
 
 <h2>安装</h2>
 <ol>
-  <li>将 <code>output/Phantom.dll</code> 放入卫月 devPlugins 目录。</li>
-  <li>在游戏内输入 <kbd>/xlplugins</kbd> 打开卫月插件列表，找到「幻境武器助手」启用。</li>
+  <li>在游戏内输入 <kbd>/xlplugins</kbd> 打开卫月插件列表。</li>
+  <li>点击「卫月设置」→「测试版」→「自定义插件仓库」，添加以下库链：</li>
+  <pre style="word-break:break-all">https://raw.githubusercontent.com/flyrio/TargetSelector/refs/heads/main/TargetSelector.json</pre>
+  <li>保存后关闭设置，在插件列表中找到「幻境武器助手」并启用。</li>
   <li>输入 <kbd>/phantom</kbd> 打开主窗口。</li>
 </ol>
 
@@ -107,14 +109,6 @@
   <li><strong>解析地图参数</strong> — 读取当前地图的 <code>MapRowId</code>、<code>SizeFactor</code>、<code>OffsetX/Y</code>。</li>
 </ul>
 
-<h2>坐标换算公式</h2>
-<pre>// 地图坐标 → 世界坐标（vnavmesh 使用）
-worldCoord = 50 × mapCoord − offset − 102400 / SizeFactor − 50
-
-// 世界坐标 → 地图坐标（Dalamud 内部）
-mapCoord = 0.02 × offset + 2048 / SizeFactor + 0.02 × worldCoord + 1
-</pre>
-
 <h2>命令列表</h2>
 <table>
   <tr><th>命令</th><th>说明</th></tr>
@@ -133,6 +127,7 @@ mapCoord = 0.02 × offset + 2048 / SizeFactor + 0.02 × worldCoord + 1
   <li>坐标数据部分来自外站，可能存在偏差（已在「活着的记忆·永恒杉树精」验证并修正）。</li>
   <li>自动标记击杀依赖聊天栏关键词匹配，可能存在误匹配。</li>
   <li>Lifestream 未安装时导航不会自动跨地图，需玩家手动到达目标区域。</li>
+  <li>读取游戏内「战斗的记忆」界面同步进度仍是未完成功能，当前需要手动勾选。</li>
 </ul>
 
 <hr>

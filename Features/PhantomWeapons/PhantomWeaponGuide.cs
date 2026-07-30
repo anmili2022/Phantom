@@ -26,13 +26,28 @@ public sealed record PhantomWeaponReward(
     string Activity,
     string Reward);
 
+public sealed record PhantomWeaponDuty(
+    string Key,
+    string Name);
+
+public sealed record PhantomWeaponDutyGroup(
+    string Key,
+    string Name,
+    IReadOnlyList<PhantomWeaponDuty> Duties);
+
 public sealed record PhantomWeaponTarget(
     string Key,
     string Zone,
     string Name,
     uint TerritoryType,
-    float MapX,
-    float MapY);
+    float MapX = 0f,
+    float MapY = 0f,
+    float WorldX = 0f,
+    float WorldY = 0f,
+    float WorldZ = 0f)
+{
+    public bool UseWorldCoords => WorldX != 0f || WorldZ != 0f;
+}
 
 public static class PhantomWeaponGuide
 {
@@ -46,12 +61,12 @@ public static class PhantomWeaponGuide
         new PhantomWeaponTarget("secret-koz-uruq", "克扎玛乌卡湿地", "呜噜怪", 1188, 16.46f, 5.97f),
         new PhantomWeaponTarget("secret-koz-ocelot", "克扎玛乌卡湿地", "豹猫", 1188, 35.54f, 13.66f),
         new PhantomWeaponTarget("secret-koz-wasp", "克扎玛乌卡湿地", "纸巢胡蜂", 1188, 35.74f, 35.73f),
-        new PhantomWeaponTarget("secret-koz-apollyon", "克扎玛乌卡湿地", "小亚波伦", 1188, 9.34f, 21.93f),
+        new PhantomWeaponTarget("secret-koz-apollyon", "克扎玛乌卡湿地", "小亚波伦", 1188, WorldX: -462.42f, WorldY: 119.82f, WorldZ: -29.59f),
 
         new PhantomWeaponTarget("secret-yak-panther", "亚克特尔树海", "长牙狞豹", 1189, 13.06f, 8.97f),
         new PhantomWeaponTarget("secret-yak-wing", "亚克特尔树海", "土石之翼", 1189, 34.74f, 13.77f),
-        new PhantomWeaponTarget("secret-yak-branch", "亚克特尔树海", "拟鸟枝", 1189, 15.42f, 24.10f),
-        new PhantomWeaponTarget("secret-yak-leaf", "亚克特尔树海", "蓝叶灵", 1189, 8.22f, 26.65f),
+        new PhantomWeaponTarget("secret-yak-branch", "亚克特尔树海", "拟鸟枝", 1189, WorldX: -312.23f, WorldY: -144.16f, WorldZ: 140.4f),
+        new PhantomWeaponTarget("secret-yak-leaf", "亚克特尔树海", "蓝叶灵", 1189, WorldX: -636.24f, WorldY: -158.37f, WorldZ: 214.53f),
 
         new PhantomWeaponTarget("secret-sha-crab", "夏劳尼荒野", "风滚蟹", 1190, 33.22f, 29.01f),
         new PhantomWeaponTarget("secret-sha-raptor", "夏劳尼荒野", "角盗龙", 1190, 27.38f, 13.33f),
@@ -67,6 +82,60 @@ public static class PhantomWeaponGuide
         new PhantomWeaponTarget("secret-liv-scorpion", "活着的记忆", "火绳蝎", 1192, 26.5f, 6.61f),
         new PhantomWeaponTarget("secret-liv-tree", "活着的记忆", "永恒杉树精", 1192, 17.35f, 21.65f),
         new PhantomWeaponTarget("secret-liv-soul", "活着的记忆", "液态灵魂", 1192, 10.38f, 36.57f),
+    };
+
+    public static readonly IReadOnlyList<PhantomWeaponDutyGroup> SecretDutyGroups = new[]
+    {
+        new PhantomWeaponDutyGroup("secret-duty-leveling", "迷宫或讨伐任务：练级迷宫", new[]
+        {
+            new PhantomWeaponDuty("secret-duty-leveling-river", "丛林竞流生息河岸"),
+            new PhantomWeaponDuty("secret-duty-leveling-mountain", "通天绝壁沃刻佐莫山"),
+            new PhantomWeaponDuty("secret-duty-leveling-skydeep", "神圣禁地深空天坑"),
+            new PhantomWeaponDuty("secret-duty-leveling-vanguard", "前哨基地先锋营"),
+            new PhantomWeaponDuty("secret-duty-leveling-origenics", "魂魄工厂创生设施"),
+        }),
+        new PhantomWeaponDutyGroup("secret-duty-expert", "迷宫或讨伐任务：顶级迷宫", new[]
+        {
+            new PhantomWeaponDuty("secret-duty-expert-alexandria", "忆中金曦亚历山德里亚"),
+            new PhantomWeaponDuty("secret-duty-expert-cactus", "荒野秘境仙人刺谷"),
+            new PhantomWeaponDuty("secret-duty-expert-strayborough", "噩梦乐园迷途鬼区"),
+            new PhantomWeaponDuty("secret-duty-expert-yuweyawata", "废弃据点玉韦亚瓦塔实验站"),
+            new PhantomWeaponDuty("secret-duty-expert-keeper", "王城古迹永护塔底"),
+            new PhantomWeaponDuty("secret-duty-expert-terminal", "永久幽界中央终端"),
+            new PhantomWeaponDuty("secret-duty-expert-mistwake", "遗忘行路雾之迹"),
+            new PhantomWeaponDuty("secret-duty-expert-klythios", "军工要地克吕提俄斯魔导工厂"),
+        }),
+        new PhantomWeaponDutyGroup("secret-duty-trial", "迷宫或讨伐任务：讨伐歼灭战", new[]
+        {
+            new PhantomWeaponDuty("secret-duty-trial-valigarmanda", "艳翼蛇鸟歼灭战"),
+            new PhantomWeaponDuty("secret-duty-trial-zoraal-ja", "佐拉加歼灭战"),
+            new PhantomWeaponDuty("secret-duty-trial-queen", "永恒女王歼灭战"),
+            new PhantomWeaponDuty("secret-duty-trial-zelenia", "泽莲尼娅歼灭战"),
+            new PhantomWeaponDuty("secret-duty-trial-eternal-darkness", "永远之暗歼灭战"),
+            new PhantomWeaponDuty("secret-duty-trial-recollection", "格莱杨拉波尔歼灭战"),
+            new PhantomWeaponDuty("secret-duty-trial-necron", "恩欧歼灭战"),
+        }),
+        new PhantomWeaponDutyGroup("secret-duty-alliance", "迷宫或讨伐任务：团队任务", new[]
+        {
+            new PhantomWeaponDuty("secret-duty-alliance-jeuno", "朱诺：第一巡行"),
+            new PhantomWeaponDuty("secret-duty-alliance-san-d-oria", "桑多利亚：第二巡行"),
+            new PhantomWeaponDuty("secret-duty-alliance-windurst", "温达斯：第三巡行"),
+        }),
+        new PhantomWeaponDutyGroup("secret-duty-arcadion", "迷宫或讨伐任务：阿卡狄亚登天斗技场", new[]
+        {
+            new PhantomWeaponDuty("secret-duty-arcadion-l1", "阿卡狄亚登天斗技场 轻量级1"),
+            new PhantomWeaponDuty("secret-duty-arcadion-l2", "阿卡狄亚登天斗技场 轻量级2"),
+            new PhantomWeaponDuty("secret-duty-arcadion-l3", "阿卡狄亚登天斗技场 轻量级3"),
+            new PhantomWeaponDuty("secret-duty-arcadion-l4", "阿卡狄亚登天斗技场 轻量级4"),
+            new PhantomWeaponDuty("secret-duty-arcadion-m1", "阿卡狄亚登天斗技场 中量级1"),
+            new PhantomWeaponDuty("secret-duty-arcadion-m2", "阿卡狄亚登天斗技场 中量级2"),
+            new PhantomWeaponDuty("secret-duty-arcadion-m3", "阿卡狄亚登天斗技场 中量级3"),
+            new PhantomWeaponDuty("secret-duty-arcadion-m4", "阿卡狄亚登天斗技场 中量级4"),
+            new PhantomWeaponDuty("secret-duty-arcadion-h1", "阿卡狄亚登天斗技场 重量级1"),
+            new PhantomWeaponDuty("secret-duty-arcadion-h2", "阿卡狄亚登天斗技场 重量级2"),
+            new PhantomWeaponDuty("secret-duty-arcadion-h3", "阿卡狄亚登天斗技场 重量级3"),
+            new PhantomWeaponDuty("secret-duty-arcadion-h4", "阿卡狄亚登天斗技场 重量级4"),
+        }),
     };
 
     public static readonly IReadOnlyList<PhantomWeaponStage> Stages = new[]

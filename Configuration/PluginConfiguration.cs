@@ -13,6 +13,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool Enabled { get; set; } = true;
     public bool UseFlightNavigation { get; set; } = true;
     public bool ShowFloatingObjectiveWindow { get; set; } = true;
+    public bool ShowSecretTargetsInFloatingWindow { get; set; } = true;
+    public bool ShowSecretDutiesInFloatingWindow { get; set; } = true;
+    public bool AutoHideCompletedFloatingItems { get; set; } = true;
     public bool AutoMarkSecretKills { get; set; } = true;
     public uint FloatingSecretTerritoryType { get; set; }
     public bool FloatingManualMode { get; set; }

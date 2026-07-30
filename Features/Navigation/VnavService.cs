@@ -64,6 +64,79 @@ public sealed class VnavService : IDisposable
         }
     }
 
+    public void TeleportAndNavigate(Vector3 targetPos, bool fly)
+    {
+        var snapped = SnapToNavmesh(targetPos);
+        if (!snapped.HasValue)
+        {
+            DalamudApi.Log.Warning("vnavmesh could not find a nearby navmesh point for target position.");
+            return;
+        }
+
+        if (teleport == null)
+        {
+            DalamudApi.Log.Warning("Lifestream is not available; navigating directly.");
+            StartMove(snapped.Value, fly);
+            return;
+        }
+
+        var aetheryteId = FindNearestAetheryteForTerritory(DalamudApi.ClientState.TerritoryType, snapped.Value);
+        if (aetheryteId == 0)
+        {
+            DalamudApi.Log.Warning("No aetheryte found for current territory; navigating directly.");
+            StartMove(snapped.Value, fly);
+            return;
+        }
+
+        try { stop.InvokeAction(); } catch { }
+
+        try
+        {
+            if (!teleport.InvokeFunc(aetheryteId, 0))
+            {
+                DalamudApi.Log.Warning("Lifestream teleport did not start; navigating directly.");
+                StartMove(snapped.Value, fly);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Warning(ex, "Lifestream teleport IPC failed; navigating directly.");
+            StartMove(snapped.Value, fly);
+            return;
+        }
+
+        pendingTarget = snapped.Value;
+        pendingFly = fly;
+        pendingStartedUtc = DateTime.UtcNow;
+    }
+
+    public Vector3? GetNearestCurrentTerritoryAetherytePosition(Vector3 targetPos)
+    {
+        var territoryType = DalamudApi.ClientState.TerritoryType;
+        Vector3? nearestPosition = null;
+        var nearestDistance = float.MaxValue;
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Aetheryte>())
+        {
+            if (!aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryType)
+            {
+                continue;
+            }
+
+            if (TryResolveAetheryteRawPosition(aetheryte, out var position))
+            {
+                var distance = Vector2.Distance(new Vector2(position.X, position.Z), new Vector2(targetPos.X, targetPos.Z));
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearestPosition = position;
+                }
+            }
+        }
+
+        return nearestPosition;
+    }
+
     public void NavigateTo(PhantomWeaponTarget target, bool fly)
     {
         try
@@ -97,6 +170,12 @@ public sealed class VnavService : IDisposable
     private bool TryResolveWorldPosition(PhantomWeaponTarget target, out Vector3 worldPosition)
     {
         worldPosition = default;
+
+        if (target.UseWorldCoords)
+        {
+            worldPosition = new Vector3(target.WorldX, target.WorldY, target.WorldZ);
+            return true;
+        }
 
         var territories = DalamudApi.DataManager.GetExcelSheet<TerritoryType>();
         if (!territories.TryGetRow(target.TerritoryType, out var territory))
@@ -145,6 +224,42 @@ public sealed class VnavService : IDisposable
         }
     }
 
+    private static bool TryResolveAetheryteRawPosition(Aetheryte aetheryte, out Vector3 position)
+    {
+        position = default;
+
+        var maps = DalamudApi.DataManager.GetExcelSheet<Map>();
+        var map = maps.FirstOrDefault(m => m.TerritoryType.RowId == aetheryte.Territory.RowId);
+        if (map.RowId == 0 || map.SizeFactor <= 0)
+        {
+            return false;
+        }
+
+        foreach (var markerRow in DalamudApi.DataManager.GetSubrowExcelSheet<MapMarker>())
+        {
+            foreach (var marker in markerRow)
+            {
+                if (marker.DataType != 3 || marker.DataKey.RowId != aetheryte.RowId)
+                {
+                    continue;
+                }
+
+                position = new Vector3(
+                    ConvertMapMarkerToRawPosition(marker.X, map.SizeFactor),
+                    0f,
+                    ConvertMapMarkerToRawPosition(marker.Y, map.SizeFactor));
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static float ConvertMapMarkerToRawPosition(int pos, float scale)
+    {
+        return (pos - 1024f) / (scale / 100f);
+    }
+
     private bool TryTeleportToTerritory(uint territoryType, Vector3 target, bool fly)
     {
         if (teleport == null)
@@ -153,7 +268,7 @@ public sealed class VnavService : IDisposable
             return false;
         }
 
-        var aetheryteId = FindAetheryteForTerritory(territoryType);
+        var aetheryteId = FindNearestAetheryteForTerritory(territoryType, target);
         if (aetheryteId == 0)
         {
             DalamudApi.Log.Warning("No aetheryte found for territory {TerritoryType}.", territoryType);
@@ -195,6 +310,33 @@ public sealed class VnavService : IDisposable
         }
 
         return 0;
+    }
+
+    private static uint FindNearestAetheryteForTerritory(uint territoryType, Vector3 target)
+    {
+        var nearestId = 0u;
+        var nearestDistance = float.MaxValue;
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Aetheryte>())
+        {
+            if (!aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryType)
+            {
+                continue;
+            }
+
+            if (!TryResolveAetheryteRawPosition(aetheryte, out var position))
+            {
+                continue;
+            }
+
+            var distance = Vector2.Distance(new Vector2(position.X, position.Z), new Vector2(target.X, target.Z));
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                nearestId = aetheryte.RowId;
+            }
+        }
+
+        return nearestId != 0 ? nearestId : FindAetheryteForTerritory(territoryType);
     }
 
     private void OnFrameworkUpdate(IFramework framework)

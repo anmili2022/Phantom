@@ -35,6 +35,11 @@ public sealed class SecretKillTracker : IDisposable
         }
 
         var text = ExtractChatMessageText(message);
+        if (TryAutoMarkSecretDuty(text))
+        {
+            return;
+        }
+
         if (!LooksLikeKillMessage(text))
         {
             return;
@@ -54,6 +59,51 @@ public sealed class SecretKillTracker : IDisposable
             DalamudApi.Log.Information("Auto-marked Secret target complete: {Target}", target.Name);
             return;
         }
+    }
+
+    private bool TryAutoMarkSecretDuty(string text)
+    {
+        if (!LooksLikeSecretDutyMessage(text))
+        {
+            return false;
+        }
+
+        foreach (var group in PhantomWeaponGuide.SecretDutyGroups)
+        {
+            foreach (var duty in group.Duties)
+            {
+                if (configuration.CompletedTasks.Contains(duty.Key) || !MatchesDuty(text, duty.Name))
+                {
+                    continue;
+                }
+
+                configuration.CompletedTasks.Add(duty.Key);
+                configuration.Save();
+                DalamudApi.Log.Information("Auto-marked Secret duty complete: {Duty}", duty.Name);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeSecretDutyMessage(string text)
+    {
+        return !string.IsNullOrWhiteSpace(text)
+               && text.Contains("战斗的记忆", StringComparison.OrdinalIgnoreCase)
+               && text.Contains("完成", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesDuty(string text, string dutyName)
+    {
+        if (text.Contains(dutyName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var shortName = dutyName.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+        return !string.IsNullOrWhiteSpace(shortName)
+               && text.Contains(shortName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool LooksLikeKillMessage(string text)
