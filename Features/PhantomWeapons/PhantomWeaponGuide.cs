@@ -1,5 +1,16 @@
 namespace Phantom;
 
+public sealed record PhantomWeaponProgressStage(
+    string Key,
+    string Name,
+    int ItemLevel,
+    string ItemNameFragment);
+
+public sealed record PhantomWeaponJob(
+    string Key,
+    string Name,
+    IReadOnlyList<IReadOnlyList<string>> StageItemNames);
+
 public sealed record PhantomWeaponStage(
     string Key,
     string Name,
@@ -51,6 +62,43 @@ public sealed record PhantomWeaponTarget(
 
 public static class PhantomWeaponGuide
 {
+    public static readonly IReadOnlyList<PhantomWeaponProgressStage> ProgressStages = new[]
+    {
+        new PhantomWeaponProgressStage("penumbra", "半影", 745, "半影"),
+        new PhantomWeaponProgressStage("umbra", "本影", 760, "本影"),
+        new PhantomWeaponProgressStage("darkness", "黯影", 775, "黯影"),
+        new PhantomWeaponProgressStage("eclipse", "蚀影", 790, "蚀影"),
+        new PhantomWeaponProgressStage("secret", "秘影", 795, "秘影"),
+    };
+
+    public static readonly IReadOnlyList<PhantomWeaponJob> WeaponJobs = new[]
+    {
+        new PhantomWeaponJob("pld", "骑士", new[] { new[] { "幻境利剑·半影", "幻境鸢盾·半影" }, new[] { "幻境利剑·本影", "幻境鸢盾·本影" }, new[] { "幻境利剑·黯影", "幻境盾·黯影" }, new[] { "幻境利剑·蚀影", "幻境盾·蚀影" }, new[] { "幻境利剑·秘影", "幻境盾·秘影" } }),
+        new PhantomWeaponJob("war", "战士", StageItems("幻境巨斧·半影", "幻境巨斧·本影", "幻境巨斧·黯影", "幻境战锤·蚀影", "幻境战锤·秘影")),
+        new PhantomWeaponJob("drk", "暗黑骑士", StageItems("幻境断头剑·半影", "幻境断头剑·本影", "幻境断头剑·黯影", "幻境断头剑·蚀影", "幻境断头剑·秘影")),
+        new PhantomWeaponJob("gnb", "绝枪战士", StageItems("幻境刺刀·半影", "幻境刺刀·本影", "幻境枪刃·黯影", "幻境枪刃·蚀影", "幻境枪刃·秘影")),
+        new PhantomWeaponJob("whm", "白魔法师", StageItems("幻境手杖·半影", "幻境手杖·本影", "幻境牧杖·黯影", "幻境牧杖·蚀影", "幻境牧杖·秘影")),
+        new PhantomWeaponJob("sch", "学者", StageItems("幻境魔导典·半影", "幻境魔导典·本影", "幻境魔导典·黯影", "幻境魔导典·蚀影", "幻境魔导典·秘影")),
+        new PhantomWeaponJob("ast", "占星术士", StageItems("幻境天球仪·半影", "幻境天球仪·本影", "幻境垂星仪·黯影", "幻境天球仪·蚀影", "幻境天球仪·秘影")),
+        new PhantomWeaponJob("sge", "贤者", StageItems("幻境振空摆·半影", "幻境振空摆·本影", "幻境飞翼·黯影", "幻境振空摆·蚀影", "幻境振空摆·秘影")),
+        new PhantomWeaponJob("mnk", "武僧", StageItems("幻境指虎·半影", "幻境指虎·本影", "幻境拳锋·黯影", "幻境旋棍·蚀影", "幻境旋棍·秘影")),
+        new PhantomWeaponJob("drg", "龙骑士", StageItems("幻境长枪·半影", "幻境长枪·本影", "幻境战叉·黯影", "幻境长枪·蚀影", "幻境长枪·秘影")),
+        new PhantomWeaponJob("nin", "忍者", StageItems("幻境屠刀·半影", "幻境屠刀·本影", "幻境反曲刀·黯影", "幻境匕首·蚀影", "幻境匕首·秘影")),
+        new PhantomWeaponJob("sam", "武士", StageItems("幻境武士刀·半影", "幻境武士刀·本影", "幻境武士刀·黯影", "幻境武士刀·蚀影", "幻境武士刀·秘影")),
+        new PhantomWeaponJob("rpr", "钐镰客", StageItems("幻境战镰·半影", "幻境战镰·本影", "幻境战镰·黯影", "幻境战镰·蚀影", "幻境战镰·秘影")),
+        new PhantomWeaponJob("vpr", "蝰蛇剑士", StageItems("幻境双牙·半影", "幻境双牙·本影", "幻境双牙·黯影", "幻境双牙·蚀影", "幻境双牙·秘影")),
+        new PhantomWeaponJob("brd", "吟游诗人", StageItems("幻境琴弓·半影", "幻境琴弓·本影", "幻境长弓·黯影", "幻境琴弓·蚀影", "幻境琴弓·秘影")),
+        new PhantomWeaponJob("mch", "机工士", StageItems("幻境明火枪·半影", "幻境明火枪·本影", "幻境火枪·黯影", "幻境左轮枪·蚀影", "幻境左轮枪·秘影")),
+        new PhantomWeaponJob("dnc", "舞者", StageItems("幻境欢刺·半影", "幻境欢刺·本影", "幻境环刃·黯影", "幻境折扇·蚀影", "幻境折扇·秘影")),
+        new PhantomWeaponJob("blm", "黑魔法师", StageItems("幻境长杖·半影", "幻境长杖·本影", "幻境长玉杖·黯影", "幻境咒杖·蚀影", "幻境咒杖·秘影")),
+        new PhantomWeaponJob("smn", "召唤师", StageItems("幻境魔导书·半影", "幻境魔导书·本影", "幻境魔导书·黯影", "幻境魔导书·蚀影", "幻境魔导书·秘影")),
+        new PhantomWeaponJob("rdm", "赤魔法师", StageItems("幻境刺剑·半影", "幻境刺剑·本影", "幻境重刺剑·黯影", "幻境刺剑·蚀影", "幻境刺剑·秘影")),
+        new PhantomWeaponJob("pct", "绘灵法师", StageItems("幻境平笔·半影", "幻境平笔·本影", "幻境圆笔·黯影", "幻境圆笔·蚀影", "幻境圆笔·秘影")),
+    };
+
+    private static IReadOnlyList<IReadOnlyList<string>> StageItems(params string[] names)
+        => names.Select(name => (IReadOnlyList<string>)new[] { name }).ToArray();
+
     public static readonly IReadOnlyList<PhantomWeaponTarget> SecretTargets = new[]
     {
         new PhantomWeaponTarget("secret-okp-badger", "奥阔帕恰山", "图拉尔蜜獾", 1187, 30.34f, 15.73f),
