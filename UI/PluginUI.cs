@@ -347,7 +347,7 @@ public sealed class PluginUI
             var completed = targets.Count(target => configuration.CompletedTasks.Contains(target.Key));
             var fateCount = GetSecretFateCount(targets[0].TerritoryType);
             var doneStr = completed == 4 && fateCount >= 5
-                ? $"√ {group.Key}"
+                ? $"{group.Key} 已全部完成（{completed}/4, {Math.Min(fateCount, 5)}/5）"
                 : $"{group.Key} ({completed}/4, {Math.Min(fateCount, 5)}/5)";
             if (!ImGui.CollapsingHeader($"{doneStr}##secret-zone-{group.Key}", ImGuiTreeNodeFlags.DefaultOpen))
             {
