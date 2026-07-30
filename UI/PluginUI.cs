@@ -343,14 +343,17 @@ public sealed class PluginUI
 
         foreach (var group in PhantomWeaponGuide.SecretTargets.GroupBy(target => target.Zone))
         {
-            if (!ImGui.CollapsingHeader($"{group.Key}##secret-zone-{group.Key}", ImGuiTreeNodeFlags.DefaultOpen))
+            var targets = group.ToArray();
+            var completed = targets.Count(target => configuration.CompletedTasks.Contains(target.Key));
+            var fateCount = GetSecretFateCount(targets[0].TerritoryType);
+            var doneStr = completed == 4 && fateCount >= 5
+                ? $"√ {group.Key}"
+                : $"{group.Key} ({completed}/4, {Math.Min(fateCount, 5)}/5)";
+            if (!ImGui.CollapsingHeader($"{doneStr}##secret-zone-{group.Key}", ImGuiTreeNodeFlags.DefaultOpen))
             {
                 continue;
             }
 
-            var targets = group.ToArray();
-            var completed = targets.Count(target => configuration.CompletedTasks.Contains(target.Key));
-            var fateCount = GetSecretFateCount(targets[0].TerritoryType);
             ImGui.ProgressBar((completed + Math.Min(fateCount, 5)) / 9f, new Vector2(-1, 0), $"总进度 {completed + Math.Min(fateCount, 5)}/9（目标 {completed}/4，FATE {Math.Min(fateCount, 5)}/5）");
 
             ImGui.TextUnformatted("金牌 FATE");
@@ -488,7 +491,6 @@ public sealed class PluginUI
         if (ImGui.SmallButton("<##float-prev-zone"))
         {
             configuration.FloatingManualMode = true;
-            configuration.FloatingSecretTerritoryType = territory;
             SwitchFloatingSecretZone(-1);
             configuration.Save();
             ImGui.End();
@@ -500,7 +502,6 @@ public sealed class PluginUI
         if (ImGui.SmallButton(">##float-next-zone"))
         {
             configuration.FloatingManualMode = true;
-            configuration.FloatingSecretTerritoryType = territory;
             SwitchFloatingSecretZone(1);
             configuration.Save();
             ImGui.End();
