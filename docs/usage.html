@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>幻境武器助手 — 使用说明</title>
+<style>
+  body { font-family: -apple-system, "Microsoft YaHei", sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; }
+  h1 { color: #c084fc; border-bottom: 2px solid #c084fc; padding-bottom: 8px; }
+  h2 { color: #a78bfa; margin-top: 28px; }
+  h3 { color: #93c5fd; }
+  code { background: #2d2d4a; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+  pre { background: #2d2d4a; padding: 12px; border-radius: 6px; overflow-x: auto; }
+  kbd { background: #3d3d5a; padding: 2px 8px; border-radius: 4px; border: 1px solid #666; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td { border: 1px solid #444; padding: 8px 12px; text-align: left; }
+  th { background: #2d2d4a; color: #a78bfa; }
+  tr:nth-child(even) { background: #22223a; }
+  .note { background: #2d2d4a; border-left: 4px solid #c084fc; padding: 12px; margin: 16px 0; border-radius: 4px; }
+  .warn { background: #3d2d2a; border-left: 4px solid #f59e0b; padding: 12px; margin: 16px 0; border-radius: 4px; }
+  .key { background: #3d3d5a; padding: 1px 6px; border-radius: 3px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<h1>幻境武器助手 — 使用说明</h1>
+<p>版本 0.1.0 | Dalamud API 15 | 适用于《最终幻想 XIV》7.25+</p>
+
+<div class="warn">
+  <strong>前置依赖：</strong>
+  vnavmesh（路径导航）和 Lifestream（跨地图传送）为可选依赖。若未安装，导航按钮会静默失败。
+</div>
+
+<h2>安装</h2>
+<ol>
+  <li>将 <code>output/Phantom.dll</code> 放入卫月 devPlugins 目录。</li>
+  <li>在游戏内输入 <kbd>/xlplugins</kbd> 打开卫月插件列表，找到「幻境武器助手」启用。</li>
+  <li>输入 <kbd>/phantom</kbd> 打开主窗口。</li>
+</ol>
+
+<h2>主窗口</h2>
+<p>顶部工具栏：</p>
+<ul>
+  <li><strong>启用插件</strong> — 全局开关，关闭后所有追踪和导航停止。</li>
+  <li><strong>飞行导航</strong> — 勾选后 vnavmesh 使用飞行路径。</li>
+  <li><strong>悬浮目标</strong> — 显示/隐藏秘影悬浮追踪窗口。</li>
+  <li><strong>自动标记击杀</strong> — 聊天栏检测到击杀秘影目标时自动勾选。</li>
+  <li><strong>重置当前阶段进度</strong> — 清空当前 Tab 的所有进度数据。</li>
+</ul>
+
+<h3>阶段 Tab</h3>
+<p>五个阶段分别对应一个 Tab：</p>
+<table>
+  <tr><th>阶段</th><th>物品等级</th><th>核心内容</th></tr>
+  <tr><td>幻境武器·半影</td><td>iLvl 745</td><td>6 种半魂晶 × 3，首把额外流程</td></tr>
+  <tr><td>幻境武器·本影</td><td>iLvl 760</td><td>5 种素材 + 4 个魔法球各 10000 以太</td></tr>
+  <tr><td>幻境武器·黯影</td><td>iLvl 775</td><td>4 种素材 + 1200 身体重塑素材</td></tr>
+  <tr><td>幻境武器·蚀影</td><td>iLvl 790</td><td>4 种素材 + 三类驱幻晶</td></tr>
+  <tr><td>幻境武器·秘影</td><td>iLvl 795</td><td>6 张地图各 4 个目标 + 5 个金牌 FATE</td></tr>
+</table>
+
+<p>每个阶段分为：</p>
+<ul>
+  <li><strong>[仅一次] 流程</strong> — 黄色标题，勾选后对后续同阶段武器通用。</li>
+  <li><strong>材料与进度</strong> — 表格列出项目、可编辑进度、来源说明。</li>
+  <li><strong>可重复来源</strong>（黯影阶段）— 副本/FATE 等掉落数量参考。</li>
+</ul>
+
+<h3>秘影阶段</h3>
+<p>按地图折叠，每张地图显示：</p>
+<ul>
+  <li>总进度条（目标 4/4 + FATE 5/5）</li>
+  <li>金牌 FATE +/- 计数器（上限 5）</li>
+  <li>4 个目标的勾选框、坐标、导航按钮</li>
+</ul>
+
+<h2>秘影悬浮追踪窗口</h2>
+<p>位于主窗口之外的可拖动小窗口，始终显示当前地图（或手动切换后的地图）的秘影未完成目标。</p>
+
+<table>
+  <tr><th>按钮</th><th>功能</th></tr>
+  <tr><td><kbd>停止导航</kbd></td><td>取消当前 vnavmesh 导航</td></tr>
+  <tr><td><kbd>&lt;</kbd></td><td>切换到上一张地图（工具提示：切换上一张）</td></tr>
+  <tr><td><kbd>&gt;</kbd></td><td>切换到下一张地图（工具提示：切换下一张）</td></tr>
+  <tr><td><kbd>当</kbd></td><td>返回自动跟随当前地图模式（工具提示：切换到当前地图）</td></tr>
+  <tr><td><kbd>-</kbd> / <kbd>+</kbd></td><td>调整金牌 FATE 计数</td></tr>
+  <tr><td><kbd>最近FATE</kbd></td><td>导航到地图上最近的活跃 FATE</td></tr>
+  <tr><td><kbd>导航</kbd>（目标旁）</td><td>导航到该目标位置，聊天栏输出提示</td></tr>
+</table>
+
+<p><strong>右键菜单：</strong> 在窗口任意位置右键可打开主窗口、切换飞行/自动标记、关闭悬浮窗。</p>
+
+<div class="note">
+  <strong>地图切换逻辑：</strong>
+  <ul>
+    <li>默认自动跟随当前所在地图。</li>
+    <li>点击 <kbd>&lt;</kbd> 或 <kbd>&gt;</kbd> 进入手动模式，锁定显示指定地图。</li>
+    <li>点击 <kbd>当</kbd> 回到自动模式。</li>
+  </ul>
+</div>
+
+<h2>DEBUG 功能</h2>
+<p>主窗口最后一个 Tab 有三个调试按钮：</p>
+<ul>
+  <li><strong>读取当前坐标</strong> — 在聊天栏输出 <code>TerritoryType</code> 和玩家世界坐标 <code>Vector3</code>。</li>
+  <li><strong>测试坐标换算</strong> — 将玩家当前位置转换为地图坐标，并用示例坐标（20.7, 14.3）反向验证世界坐标。</li>
+  <li><strong>解析地图参数</strong> — 读取当前地图的 <code>MapRowId</code>、<code>SizeFactor</code>、<code>OffsetX/Y</code>。</li>
+</ul>
+
+<h2>坐标换算公式</h2>
+<pre>// 地图坐标 → 世界坐标（vnavmesh 使用）
+worldCoord = 50 × mapCoord − offset − 102400 / SizeFactor − 50
+
+// 世界坐标 → 地图坐标（Dalamud 内部）
+mapCoord = 0.02 × offset + 2048 / SizeFactor + 0.02 × worldCoord + 1
+</pre>
+
+<h2>命令列表</h2>
+<table>
+  <tr><th>命令</th><th>说明</th></tr>
+  <tr><td><kbd>/phantom</kbd></td><td>打开主窗口</td></tr>
+</table>
+
+<h2>数据来源</h2>
+<ul>
+  <li>幻境武器阶段资料：<a href="https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8" style="color:#93c5fd">灰机 Wiki</a></li>
+  <li>秘影目标坐标：<a href="https://www.xivdaily.com/cn/hunts/dt" style="color:#93c5fd">xivdaily</a> + 游戏内验证</li>
+  <li>导航 IPC：vnavmesh + Lifestream</li>
+</ul>
+
+<h2>已知问题</h2>
+<ul>
+  <li>坐标数据部分来自外站，可能存在偏差（已在「活着的记忆·永恒杉树精」验证并修正）。</li>
+  <li>自动标记击杀依赖聊天栏关键词匹配，可能存在误匹配。</li>
+  <li>Lifestream 未安装时导航不会自动跨地图，需玩家手动到达目标区域。</li>
+</ul>
+
+<hr>
+<p style="color:#888; text-align:center;">Phantom — 幻境武器助手 © Anmi</p>
+</body>
+</html>
