@@ -19,6 +19,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool GroupWeaponProgressByRole { get; set; }
     public bool ShowWeaponProgressIcons { get; set; } = true;
     public bool AutoMarkSecretKills { get; set; } = true;
+    public uint TuliyollalAetheryteId { get; set; } = 13;
     public uint FloatingSecretTerritoryType { get; set; }
     public bool FloatingManualMode { get; set; }
     public int SelectedStageIndex { get; set; }

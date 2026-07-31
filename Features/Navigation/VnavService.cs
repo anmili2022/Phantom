@@ -6,18 +6,29 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using Lumina.Excel.Sheets;
 
 namespace Phantom;
 
 public sealed class VnavService : IDisposable
 {
+    private const uint TuliyollalTerritoryType = 1185;
+    private const uint OccultVillageTerritoryType = 1278;
+    private const uint TuliyollalAetheryteId = 216;
+    private const uint OccultVillageAethernetId = 239;
+    private static readonly Vector3 OccultVillageDestination = new(26.98f, 0f, 11.26f);
+
     private readonly ICallGateSubscriber<bool> isReady;
     private readonly ICallGateSubscriber<Vector3, bool, bool> pathfindAndMoveTo;
     private readonly ICallGateSubscriber<Vector3, float, float, Vector3?> nearestPoint;
     private readonly ICallGateSubscriber<object> stop;
+    private readonly IDalamudPluginInterface pluginInterface;
     private ICallGateSubscriber<uint, byte, bool>? teleport;
+    private ICallGateSubscriber<uint, bool>? aethernetTeleportById;
     private ICallGateSubscriber<bool>? lifestreamIsBusy;
+    private ICallGateSubscriber<uint>? getActiveAetheryte;
     private Vector3? pendingTarget;
     private uint pendingTerritoryType;
     private Vector3? pendingAetherytePosition;
@@ -27,19 +38,29 @@ public sealed class VnavService : IDisposable
     private bool pendingMoveFly;
     private DateTime pendingMoveStartedUtc;
     private DateTime lastMountAttemptUtc = DateTime.MinValue;
+    private OccultVillageRouteStep occultRouteStep;
+    private DateTime occultRouteStepStartedUtc;
+    private DateTime occultDestinationMoveStartedUtc;
+    private Vector3 occultDestinationLastPosition;
+    private int occultDestinationRetryCount;
+
+    private enum OccultVillageRouteStep
+    {
+        None,
+        WaitingTuliyollal,
+        WaitingOccultVillageAethernet,
+        MovingToDestination,
+    }
 
     public VnavService(IDalamudPluginInterface pluginInterface)
     {
+        this.pluginInterface = pluginInterface;
         isReady = pluginInterface.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
         pathfindAndMoveTo = pluginInterface.GetIpcSubscriber<Vector3, bool, bool>("vnavmesh.SimpleMove.PathfindAndMoveTo");
         nearestPoint = pluginInterface.GetIpcSubscriber<Vector3, float, float, Vector3?>("vnavmesh.Query.Mesh.NearestPoint");
         stop = pluginInterface.GetIpcSubscriber<object>("vnavmesh.Path.Stop");
 
-        if (pluginInterface.InstalledPlugins.Any(plugin => plugin.InternalName == "Lifestream" && plugin.IsLoaded))
-        {
-            teleport = pluginInterface.GetIpcSubscriber<uint, byte, bool>("Lifestream.Teleport");
-            lifestreamIsBusy = pluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy");
-        }
+        EnsureLifestreamIpc();
 
         DalamudApi.Framework.Update += OnFrameworkUpdate;
     }
@@ -80,7 +101,7 @@ public sealed class VnavService : IDisposable
             return;
         }
 
-        if (teleport == null)
+        if (!EnsureLifestreamIpc() || teleport == null)
         {
             DalamudApi.Log.Warning("Lifestream is not available; navigating directly.");
             PrintEcho("Lifestream 不可用，改为直接导航。 ");
@@ -124,12 +145,59 @@ public sealed class VnavService : IDisposable
         pendingStartedUtc = DateTime.UtcNow;
     }
 
+    public void GoToOccultVillage()
+    {
+        Stop();
+        if (DalamudApi.ClientState.TerritoryType == OccultVillageTerritoryType)
+        {
+            if (!TryGetOccultDestinationNavmeshPoint(out var destination))
+            {
+                PrintEcho("当前已在幻境村，但 vnavmesh 未就绪或目标点不可达。 ");
+                return;
+            }
+
+            occultRouteStep = OccultVillageRouteStep.MovingToDestination;
+            occultRouteStepStartedUtc = DateTime.UtcNow;
+            occultDestinationRetryCount = 0;
+            PrintEcho("当前已在幻境村，直接步行导航到目标点。 ");
+            StartOccultDestinationMove(destination);
+            return;
+        }
+
+        if (!EnsureLifestreamIpc() || teleport == null)
+        {
+            PrintEcho("前往幻境村失败：Lifestream 不可用。 ");
+            return;
+        }
+
+        try
+        {
+            if (!teleport.InvokeFunc(TuliyollalAetheryteId, 0))
+            {
+                PrintEcho("前往幻境村失败：Lifestream 没有开始传送到图莱忧菈。 ");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            PrintEcho($"前往幻境村失败：Lifestream IPC 异常：{ex.Message}");
+            return;
+        }
+
+        occultRouteStep = OccultVillageRouteStep.WaitingTuliyollal;
+        occultRouteStepStartedUtc = DateTime.UtcNow;
+        occultDestinationMoveStartedUtc = DateTime.MinValue;
+        occultDestinationLastPosition = default;
+        occultDestinationRetryCount = 0;
+        PrintEcho("已请求传送到图莱忧菈，等待读图完成。 ");
+    }
+
     public Vector3? GetNearestCurrentTerritoryAetherytePosition(Vector3 targetPos)
     {
         var territoryType = DalamudApi.ClientState.TerritoryType;
         Vector3? nearestPosition = null;
         var nearestDistance = float.MaxValue;
-        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Aetheryte>())
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
         {
             if (!aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryType)
             {
@@ -243,7 +311,7 @@ public sealed class VnavService : IDisposable
         }
     }
 
-    private static bool TryResolveAetheryteRawPosition(Aetheryte aetheryte, out Vector3 position)
+    private static bool TryResolveAetheryteRawPosition(Lumina.Excel.Sheets.Aetheryte aetheryte, out Vector3 position)
     {
         position = default;
 
@@ -281,7 +349,7 @@ public sealed class VnavService : IDisposable
 
     private bool TryTeleportToTerritory(uint territoryType, Vector3 target, bool fly)
     {
-        if (teleport == null)
+        if (!EnsureLifestreamIpc() || teleport == null)
         {
             DalamudApi.Log.Warning("Lifestream is not available; navigate after moving to the target zone manually.");
             PrintEcho("Lifestream 不可用；请手动到目标地图后再导航。 ");
@@ -325,7 +393,7 @@ public sealed class VnavService : IDisposable
 
     private static uint FindAetheryteForTerritory(uint territoryType)
     {
-        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Aetheryte>())
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
         {
             if (!aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryType)
             {
@@ -338,11 +406,58 @@ public sealed class VnavService : IDisposable
         return 0;
     }
 
+    private bool EnsureLifestreamIpc()
+    {
+        if (teleport != null && aethernetTeleportById != null && lifestreamIsBusy != null && getActiveAetheryte != null)
+        {
+            return true;
+        }
+
+        if (!pluginInterface.InstalledPlugins.Any(plugin => plugin.InternalName == "Lifestream" && plugin.IsLoaded))
+        {
+            return false;
+        }
+
+        try
+        {
+            teleport ??= pluginInterface.GetIpcSubscriber<uint, byte, bool>("Lifestream.Teleport");
+            aethernetTeleportById ??= pluginInterface.GetIpcSubscriber<uint, bool>("Lifestream.AethernetTeleportById");
+            lifestreamIsBusy ??= pluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy");
+            getActiveAetheryte ??= pluginInterface.GetIpcSubscriber<uint>("Lifestream.GetActiveAetheryte");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Warning(ex, "Failed to initialize Lifestream IPC.");
+            return false;
+        }
+    }
+
+    private static uint FindAetheryteByName(uint territoryType, string name)
+    {
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
+        {
+            if (!aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryType)
+            {
+                continue;
+            }
+
+            var aethernetName = aetheryte.AethernetName.ValueNullable?.Name.ExtractText() ?? string.Empty;
+            var placeName = aetheryte.PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty;
+            if (aethernetName.Contains(name, StringComparison.Ordinal) || placeName.Contains(name, StringComparison.Ordinal))
+            {
+                return aetheryte.RowId;
+            }
+        }
+
+        return 0;
+    }
+
     private static uint FindNearestAetheryteForTerritory(uint territoryType, Vector3 target)
     {
         var nearestId = 0u;
         var nearestDistance = float.MaxValue;
-        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Aetheryte>())
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
         {
             if (!aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryType)
             {
@@ -368,7 +483,7 @@ public sealed class VnavService : IDisposable
     private static bool TryFindAetherytePosition(uint aetheryteId, out Vector3 position)
     {
         position = default;
-        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Aetheryte>())
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
         {
             if (aetheryte.RowId == aetheryteId)
             {
@@ -382,6 +497,7 @@ public sealed class VnavService : IDisposable
     private void OnFrameworkUpdate(IFramework framework)
     {
         _ = framework;
+        ProcessOccultVillageRoute();
         ProcessPendingMove();
 
         if (!pendingTarget.HasValue)
@@ -459,6 +575,253 @@ public sealed class VnavService : IDisposable
         StartMove(snapped.Value, fly);
     }
 
+    private void TeleportTuliyollalOccultVillage()
+    {
+        if (!EnsureLifestreamIpc() || aethernetTeleportById == null)
+        {
+            PrintEcho("前往幻境村失败：Lifestream 不可用。 ");
+            occultRouteStep = OccultVillageRouteStep.None;
+            return;
+        }
+
+        try
+        {
+            if (!aethernetTeleportById.InvokeFunc(OccultVillageAethernetId))
+            {
+                PrintEcho("前往幻境村失败：Lifestream 没有开始传送到幻境村。 ");
+                occultRouteStep = OccultVillageRouteStep.None;
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            PrintEcho($"前往幻境村失败：Lifestream IPC 异常：{ex.Message}");
+            occultRouteStep = OccultVillageRouteStep.None;
+            return;
+        }
+
+        occultRouteStep = OccultVillageRouteStep.WaitingOccultVillageAethernet;
+        occultRouteStepStartedUtc = DateTime.UtcNow;
+        PrintEcho("已请求传送到幻境村，等待读图/传送完成。 ");
+    }
+
+    private bool IsTuliyollalRootAetheryteReady()
+    {
+        if (DalamudApi.ClientState.TerritoryType != TuliyollalTerritoryType)
+        {
+            return false;
+        }
+
+        if (DateTime.UtcNow - occultRouteStepStartedUtc < TimeSpan.FromSeconds(2))
+        {
+            return false;
+        }
+
+        if (DalamudApi.Condition[ConditionFlag.BetweenAreas] || DalamudApi.Condition[ConditionFlag.BetweenAreas51])
+        {
+            return false;
+        }
+
+        try
+        {
+            if (lifestreamIsBusy?.InvokeFunc() == true)
+            {
+                return false;
+            }
+
+            if (getActiveAetheryte?.InvokeFunc() != TuliyollalAetheryteId)
+            {
+                return false;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return DalamudApi.ObjectTable.LocalPlayer != null;
+    }
+
+    private void ProcessOccultVillageRoute()
+    {
+        if (occultRouteStep == OccultVillageRouteStep.None)
+        {
+            return;
+        }
+
+        if (DateTime.UtcNow - occultRouteStepStartedUtc > TimeSpan.FromSeconds(90))
+        {
+            PrintEcho("前往幻境村超时，已取消流程。 ");
+            occultRouteStep = OccultVillageRouteStep.None;
+            return;
+        }
+
+        if (DalamudApi.Condition[ConditionFlag.BetweenAreas] || DalamudApi.Condition[ConditionFlag.BetweenAreas51])
+        {
+            return;
+        }
+
+        switch (occultRouteStep)
+        {
+            case OccultVillageRouteStep.WaitingTuliyollal:
+                if (IsTuliyollalRootAetheryteReady())
+                {
+                    TeleportTuliyollalOccultVillage();
+                }
+                break;
+            case OccultVillageRouteStep.WaitingOccultVillageAethernet:
+                if (lifestreamIsBusy?.InvokeFunc() == true)
+                {
+                    return;
+                }
+
+                if (DalamudApi.ClientState.TerritoryType != OccultVillageTerritoryType)
+                {
+                    return;
+                }
+
+                if (DateTime.UtcNow - occultRouteStepStartedUtc < TimeSpan.FromSeconds(2))
+                {
+                    return;
+                }
+
+                if (DalamudApi.ObjectTable.LocalPlayer == null)
+                {
+                    return;
+                }
+
+                if (!TryGetOccultDestinationNavmeshPoint(out var destination))
+                {
+                    return;
+                }
+
+                occultRouteStep = OccultVillageRouteStep.MovingToDestination;
+                occultRouteStepStartedUtc = DateTime.UtcNow;
+                PrintEcho("开始步行导航到幻境村目标点。 ");
+                StartOccultDestinationMove(destination);
+                break;
+            case OccultVillageRouteStep.MovingToDestination:
+                if (IsPlayerNear(OccultVillageDestination, 4f))
+                {
+                    Stop();
+                    PrintEcho("已到达幻境村目标点。 ");
+                    return;
+                }
+
+                if (DalamudApi.ClientState.TerritoryType != OccultVillageTerritoryType)
+                {
+                    Stop();
+                    PrintEcho("已离开幻境村，取消目标点导航。 ");
+                    return;
+                }
+
+                RetryOccultDestinationMoveIfStuck();
+                break;
+        }
+    }
+
+    private bool TryGetOccultDestinationNavmeshPoint(out Vector3 destination)
+    {
+        destination = default;
+        try
+        {
+            if (!isReady.InvokeFunc())
+            {
+                return false;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        var snapped = SnapToNavmesh(OccultVillageDestination);
+        if (!snapped.HasValue)
+        {
+            return false;
+        }
+
+        destination = snapped.Value;
+        return true;
+    }
+
+    private void StartOccultDestinationMove(Vector3 destination)
+    {
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        occultDestinationMoveStartedUtc = DateTime.UtcNow;
+        occultDestinationLastPosition = player?.Position ?? default;
+        StartPathfind(destination, false);
+    }
+
+    private void RetryOccultDestinationMoveIfStuck()
+    {
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        if (player == null)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (now - occultRouteStepStartedUtc > TimeSpan.FromSeconds(60))
+        {
+            Stop();
+            PrintEcho("前往幻境村目标点超时，已取消导航。 ");
+            return;
+        }
+
+        if (now - occultDestinationMoveStartedUtc < TimeSpan.FromSeconds(7))
+        {
+            return;
+        }
+
+        var moved = Vector3.Distance(player.Position, occultDestinationLastPosition);
+        if (moved >= 2.5f)
+        {
+            occultDestinationMoveStartedUtc = now;
+            occultDestinationLastPosition = player.Position;
+            return;
+        }
+
+        if (occultDestinationRetryCount >= 3)
+        {
+            Stop();
+            PrintEcho("前往幻境村目标点失败：多次重试后仍未移动。 ");
+            return;
+        }
+
+        if (!TryGetOccultDestinationNavmeshPoint(out var destination))
+        {
+            occultDestinationMoveStartedUtc = now;
+            occultDestinationLastPosition = player.Position;
+            return;
+        }
+
+        occultDestinationRetryCount++;
+        PrintEcho($"幻境村目标点导航未移动，重试 {occultDestinationRetryCount}/3。 ");
+        StartOccultDestinationMove(destination);
+    }
+
+    private static bool IsPlayerNear(Vector3 position, float distance)
+    {
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        return player != null && Vector3.Distance(player.Position, position) <= distance;
+    }
+
+    private static unsafe bool TryInteractNearestObject(Vector3 position, float maxDistance)
+    {
+        var obj = DalamudApi.ObjectTable
+            .Where(obj => obj is { IsTargetable: true })
+            .OrderBy(obj => Vector3.Distance(obj.Position, position))
+            .FirstOrDefault(obj => Vector3.Distance(obj.Position, position) <= maxDistance);
+        if (obj == null)
+        {
+            return false;
+        }
+
+        TargetSystem.Instance()->InteractWithObject((GameObject*)obj.Address, false);
+        return true;
+    }
+
     private void StartMove(Vector3 target, bool fly)
     {
         if (QueueMountBeforeMove(target, fly))
@@ -471,6 +834,11 @@ public sealed class VnavService : IDisposable
 
     private bool QueueMountBeforeMove(Vector3 target, bool fly)
     {
+        if (!fly)
+        {
+            return false;
+        }
+
         if (DalamudApi.Condition[ConditionFlag.Mounted]
             || DalamudApi.Condition[ConditionFlag.InCombat]
             || DalamudApi.ObjectTable.LocalPlayer is not { IsDead: false })
@@ -541,6 +909,10 @@ public sealed class VnavService : IDisposable
         pendingTerritoryType = 0;
         pendingAetherytePosition = null;
         pendingMoveTarget = null;
+        occultRouteStep = OccultVillageRouteStep.None;
+        occultDestinationMoveStartedUtc = DateTime.MinValue;
+        occultDestinationLastPosition = default;
+        occultDestinationRetryCount = 0;
         try { stop.InvokeAction(); } catch { }
     }
 

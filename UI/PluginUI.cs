@@ -101,6 +101,12 @@ public sealed class PluginUI
             ResetCurrentStage();
         }
 
+        ImGui.SameLine();
+        if (ImGui.Button("前往幻境村"))
+        {
+            vnav.GoToOccultVillage();
+        }
+
         ImGui.Separator();
         DrawStageTabs();
 

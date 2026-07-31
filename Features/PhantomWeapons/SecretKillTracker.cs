@@ -13,6 +13,16 @@ public sealed class SecretKillTracker : IDisposable
         "slay",
         "slain",
     };
+    private static readonly (string MemoryName, IReadOnlyList<string> Zones)[] ExplorationMemoryGroups =
+    {
+        ("场景探索：尤卡图拉尔", new[] { "奥阔帕恰山", "克扎玛乌卡湿地", "亚克特尔树海" }),
+        ("场景探索：萨卡图拉尔", new[] { "夏劳尼荒野", "遗产之地" }),
+        ("场景探索：无失世界", new[] { "活着的记忆" }),
+        ("场景探索：克扎玛乌卡湿地", new[] { "克扎玛乌卡湿地" }),
+        ("场景探索：亚克特尔树海", new[] { "亚克特尔树海" }),
+        ("场景探索：夏劳尼荒野", new[] { "夏劳尼荒野" }),
+        ("场景探索：遗产之地", new[] { "遗产之地" }),
+    };
 
     private readonly PluginConfiguration configuration;
 
@@ -68,8 +78,30 @@ public sealed class SecretKillTracker : IDisposable
             return false;
         }
 
+        if (TryAutoMarkSecretExploration(text))
+        {
+            return true;
+        }
+
         foreach (var group in PhantomWeaponGuide.SecretDutyGroups)
         {
+            if (MatchesDutyGroup(text, group))
+            {
+                var changed = false;
+                foreach (var duty in group.Duties)
+                {
+                    changed |= configuration.CompletedTasks.Add(duty.Key);
+                }
+
+                if (changed)
+                {
+                    configuration.Save();
+                    DalamudApi.Log.Information("Auto-marked Secret duty group complete: {Group}", group.Name);
+                }
+
+                return true;
+            }
+
             foreach (var duty in group.Duties)
             {
                 if (configuration.CompletedTasks.Contains(duty.Key) || !MatchesDuty(text, duty.Name))
@@ -85,6 +117,64 @@ public sealed class SecretKillTracker : IDisposable
         }
 
         return false;
+    }
+
+    private bool TryAutoMarkSecretExploration(string text)
+    {
+        if (!text.Contains("所有项目", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        foreach (var group in ExplorationMemoryGroups)
+        {
+            if (!text.Contains(group.MemoryName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var changed = false;
+            foreach (var zone in group.Zones)
+            {
+                var targets = PhantomWeaponGuide.SecretTargets
+                    .Where(target => string.Equals(target.Zone, zone, StringComparison.Ordinal))
+                    .ToArray();
+                foreach (var target in targets)
+                {
+                    changed |= configuration.CompletedTasks.Add(target.Key);
+                }
+
+                foreach (var territoryType in targets.Select(target => target.TerritoryType).Distinct())
+                {
+                    var fateKey = GetSecretFateKey(territoryType);
+                    if (configuration.Progress.GetValueOrDefault(fateKey) < 5)
+                    {
+                        configuration.Progress[fateKey] = 5;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed)
+            {
+                configuration.Save();
+                DalamudApi.Log.Information("Auto-marked Secret exploration complete: {MemoryName}", group.MemoryName);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string GetSecretFateKey(uint territoryType)
+        => $"secret-fate-{territoryType}";
+
+    private static bool MatchesDutyGroup(string text, PhantomWeaponDutyGroup group)
+    {
+        return text.Contains("所有项目", StringComparison.OrdinalIgnoreCase)
+               && (text.Contains(group.Name, StringComparison.OrdinalIgnoreCase)
+                   || text.Contains(group.Name.Replace("迷宫或讨伐任务：", string.Empty, StringComparison.Ordinal), StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool LooksLikeSecretDutyMessage(string text)

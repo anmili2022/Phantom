@@ -5,7 +5,7 @@
     "Description": "基于灰机 Wiki 幻境武器资料，提供阶段材料清单、一次性流程勾选和手动进度追踪。",
     "InternalName": "Phantom",
     "IconUrl": "https://raw.githubusercontent.com/anmili2022/Phantom/main/images/icon.png",
-    "AssemblyVersion": "0.1.4.0",
+    "AssemblyVersion": "0.1.5.0",
     "RepoUrl": "https://github.com/anmili2022/Phantom",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -16,9 +16,9 @@
     ],
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://github.com/anmili2022/Phantom/releases/download/0.1.4.0/Phantom.zip",
-    "DownloadLinkTesting": "https://github.com/anmili2022/Phantom/releases/download/0.1.4.0/Phantom.zip",
-    "DownloadLinkUpdate": "https://github.com/anmili2022/Phantom/releases/download/0.1.4.0/Phantom.zip",
-    "LastUpdated": "2026-07-31T00:00:00Z"
+    "DownloadLinkInstall": "https://github.com/anmili2022/Phantom/releases/download/0.1.5.0/Phantom.zip",
+    "DownloadLinkTesting": "https://github.com/anmili2022/Phantom/releases/download/0.1.5.0/Phantom.zip",
+    "DownloadLinkUpdate": "https://github.com/anmili2022/Phantom/releases/download/0.1.5.0/Phantom.zip",
+    "LastUpdated": "2026-07-31T14:44:37Z"
   }
 ]
