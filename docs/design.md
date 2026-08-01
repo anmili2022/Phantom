@@ -1,15 +1,17 @@
-# 幻境武器助手设计文档
+# 肝武助手设计文档
+
+> 当前版本：0.1.6.0（待发布）| 更新日期：2026-08-01
 
 ## 目标
 
-幻境武器助手是一个 Dalamud/卫月插件，用于辅助《最终幻想 XIV》幻境武器制作流程。
+肝武助手是一个 Dalamud/卫月插件，用于辅助《最终幻想 XIV》多系列武器制作流程，当前已接入幻境武器和妖怪手表联动奖励追踪。
 
-首版目标：
+当前目标：
 
+- 以左侧系列导航统一管理幻武、古武、魂武、优武、义武、曼武和妖表联动。
 - 展示幻境武器各阶段所需材料、一次性流程和可重复来源。
-- 保存用户手动录入的材料、以太、战斗记忆进度。
-- 用醒目标记区分“仅需完成一次”的流程。
-- 优先完善“幻境武器·秘影”阶段，提供指定目标小怪清单、坐标和导航按钮。
+- 自动同步当前角色的幻境武器持有进度和妖表奖励状态。
+- 用醒目标记区分“仅需完成一次”的流程，并为秘影阶段提供目标与 FATE 追踪。
 
 非首版目标：
 
@@ -27,14 +29,42 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置。
-- `Phantom.json`：卫月插件清单。
-- `repo.json`：仓库发布清单占位。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.6.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.6.0）。
+- `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
-- `Infrastructure/DalamudApi.cs`：Dalamud 服务注入。
+- `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider）。
 - `Configuration/PluginConfiguration.cs`：插件配置与进度持久化。
-- `Features/PhantomWeapons/PhantomWeaponGuide.cs`：幻境武器阶段静态资料。
-- `UI/PluginUI.cs`：主窗口、阶段 Tab、材料进度和一次性流程 UI。
+- `Features/PhantomWeapons/PhantomWeaponGuide.cs`：幻境武器阶段静态资料、秘影目标、讨伐任务分组、武器进度总览资料。
+- `Features/PhantomWeapons/SecretKillTracker.cs`：聊天击杀/讨伐任务/探索记忆自动标记。
+- `Features/PhantomWeapons/FateTracker.cs`：金牌 FATE 自动检测。
+- `Features/Navigation/VnavService.cs`：导航 IPC 服务，含幻境村路线状态机。
+- `UI/PluginUI.cs`：主窗口、左侧系列导航、自绘阶段页签、武器进度总览、妖表页面、悬浮窗和设置页。
+- `Features/Yokai/YokaiWatchGuide.cs`：妖表联动奖励定义。
+- `Features/Yokai/YokaiProgressService.cs`：背包、装备栏、兵装库和投影台奖励扫描。
+- `docs/`：设计文档、使用说明（usage.html）、发布指南（release.md）、幻境村路由移植指南（occult-village-route-porting.md）。
+
+## 当前进度
+
+已完成的主功能：
+
+- 幻境武器各阶段的静态资料展示。
+- 一次性流程勾选与持久化。
+- 秘影阶段按地图的目标清单、坐标、导航。
+- 悬浮窗口显示当前地图秘影进度。
+- 聊天消息自动标记击杀、讨伐任务组、探索记忆组和金牌 FATE。
+- 武器进度总览页，支持按职业分组和按角色保存。
+- 妖表联动奖励扫描，支持隐藏已获得奖励、投影台缓存状态和按类别展示。
+- 左侧导航显示当前角色与插件状态，右侧阶段页签使用与武器进度卡片一致的自绘配色。
+- vnavmesh + Lifestream 的两段式导航，以及“前往幻境村”独立入口。
+
+当前还保留的手动项：
+
+- 材料进度仍然手填。
+- 任务状态仍然手动勾选。
+- 物品计数进度尚未做成自动汇总显示。
+- 其他肝武系列目前保留入口，专属数据模型尚未接入。
+- 多语言支持仍未开始。
 
 ## 数据模型
 
@@ -44,12 +74,22 @@
 - `PhantomWeaponRequirement`：可录入进度的材料、以太或记忆项目。
 - `PhantomWeaponTask`：一次性流程，用配置中的 `CompletedTasks` 保存勾选状态。
 - `PhantomWeaponReward`：可重复来源，例如副本、FATE、CE 的奖励数量。
+- `PhantomWeaponTarget`：秘影目标小怪，支持地图显示坐标（MapX/MapY）或直接世界坐标（WorldX/WorldY/WorldZ，`UseWorldCoords` 为 true 时使用）。
+- `PhantomWeaponDuty` / `PhantomWeaponDutyGroup`：秘影讨伐任务及其分组（练级迷宫、顶级迷宫、讨伐歼灭战、团队任务、阿卡狄亚登天斗技场）。
+- `PhantomWeaponProgressStage` / `PhantomWeaponJob`：武器进度总览用的阶段与职业静态资料（各阶段物品名片段）。
 
 用户进度保存在 `PluginConfiguration`：
 
 - `SelectedStageIndex`：当前选中的阶段。
 - `Progress`：键为资料项 Key，值为当前进度。
-- `CompletedTasks`：已完成的一次性流程 Key。
+- `CompletedTasks`：已完成的一次性流程 Key（含秘影目标、讨伐任务）。
+- `FloatingSecretTerritoryType` / `FloatingManualMode`：悬浮窗当前地图与手动模式。
+- `ShowSecretTargetsInFloatingWindow` / `ShowSecretDutiesInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗显示选项。
+- `GroupWeaponProgressByRole` / `ShowWeaponProgressIcons`：武器进度总览选项。
+- `WeaponProgressByCharacter` / `WeaponProgressItemsByCharacter` / `WeaponProgressSyncTimes`：按角色维度的武器进度总览数据。
+- `YokaiOwnedRewardKeysByCharacter` / `YokaiSyncTimesByCharacter`：按角色维度保存妖表奖励和同步时间。
+- `HideOwnedYokaiRewards`：妖表页面是否隐藏已获得奖励。
+- `TuliyollalAetheryteId`：旧配置字段（默认 13），幻境村路由当前使用固定常量 216，不再读取此字段。
 
 ## 秘影阶段需求
 
@@ -97,6 +137,19 @@ vnavmesh 的 `PathfindAndMoveTo` 需要游戏世界坐标 `Vector3`。
 - 优先使用 Lumina 表的 `Map.OffsetX`、`Map.OffsetY`、`Map.SizeFactor` 与 territory transient 的 Z offset 做转换。
 - 如果无法可靠转换，应在 UI 中显示坐标但禁用导航，避免把玩家导航到错误位置。
 
+已实现的反向转换公式（取自 `VnavService.TryResolveWorldPosition`）：
+
+```csharp
+worldX = 50f * mapX - map.OffsetX - 102400f / scale - 50f;
+worldZ = 50f * mapY - map.OffsetY - 102400f / scale - 50f;
+```
+
+部分目标已用已验证的世界坐标直接硬编码（`UseWorldCoords = true`），跳过上述转换，例如：
+
+- 小亚波伦（克扎玛乌卡湿地）：`(-462.42, 119.82, -29.59)`
+- 拟鸟枝（亚克特尔树海）：`(-312.23, -144.16, 140.4)`
+- 蓝叶灵（亚克特尔树海）：`(-636.24, -158.37, 214.53)`
+
 ## 导航方案
 
 导航分两段：
@@ -125,6 +178,41 @@ Lifestream IPC：
 
 野外跨地图传送应优先使用 `Lifestream.Teleport(uint destination, byte subIndex)`。同城/同区域以太网移动才使用 `AethernetTeleportById` 或 `AethernetTeleportByPlaceNameId`。
 
+## 前往幻境村路由
+
+新增独立入口“前往幻境村”（`VnavService.GoToOccultVillage`），不依赖秘影目标导航。路由为纯步行，不上坐骑、不飞行。
+
+### 固定常量（VnavService.cs）
+
+- `TuliyollalTerritoryType = 1185`：图莱尤拉。
+- `OccultVillageTerritoryType = 1278`：幻境村。
+- `TuliyollalAetheryteId = 216`：图莱尤拉主城以太之光（勿用字符串“珠串万货街”）。
+- `OccultVillageAethernetId = 239`：幻境村以太网目的地。
+- `OccultVillageDestination = (26.98, 0, 11.26)`：幻境村目标点。
+
+### 状态机（OccultVillageRouteStep）
+
+```
+None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestination → None
+```
+
+流程：
+
+1. 已在幻境村（1278）：直接 `SnapToNavmesh` 后步行导航到目标点。
+2. 否则 `Lifestream.Teleport(216, 0)` 传送到图莱尤拉，进入 `WaitingTuliyollal`。
+3. `WaitingTuliyollal`：等待 `TerritoryType == 1185`、不在读图、`Lifestream.IsBusy == false`、`Lifestream.GetActiveAetheryte() == 216`（必须确认根水晶已激活，否则 `AethernetTeleportById(239)` 会报 `Destination could not be found (3)`）。满足后调用 `Lifestream.AethernetTeleportById(239)`。
+4. `WaitingOccultVillageAethernet`：等待读图完成、`TerritoryType == 1278`、本地玩家存在、vnavmesh ready，取得目标点后进入步行导航。
+5. `MovingToDestination`：距离目标点 ≤ 4 单位视为到达；离开 1278 则取消；若 7 秒内移动 < 2.5 单位则重试（最多 3 次）；整体超时 60 秒取消。
+
+### 超时与清理
+
+- 全程超过 90 秒自动取消。
+- `Stop()` 会清空所有 pending 状态并把 `occultRouteStep` 重置为 `None`，防止持续触发。
+
+### Lifestream IPC
+
+仅 `Lifestream.Teleport` 使用 `ICallGateSubscriber<uint, byte, bool>`。`AethernetTeleportById` 使用 `ICallGateSubscriber<uint, bool>`。IPC 通过 `InstalledPlugins` 判断 Lifestream 是否已加载，未加载时提示失败而不是崩溃。
+
 ## 飞行选项
 
 秘影目标导航需要增加“飞行”选框。
@@ -139,7 +227,18 @@ Lifestream IPC：
 - 未勾选时，调用 `vnavmesh.SimpleMove.PathfindAndMoveTo(target, false)`。
 - 如果目标地图未解锁飞行，vnavmesh 或游戏状态可能导致飞行路径失败，应允许用户取消并改用步行。
 
+前往幻境村路由固定使用步行（`fly = false`），不使用此选项。
+
 ## UI 设计
+
+### 主窗口结构
+
+- 左侧固定导航栏分为 `Workspace` 和 `Tools` 两组。
+- 左侧显示品牌、系列入口、数量、当前角色和插件启用状态。
+- 右侧显示当前系列内容；幻境武器页面顶部为横向阶段页签。
+- 阶段页签使用自绘按钮，选中项为深青背景、亮青边框和左侧高亮条，未选中项使用更暗的武器进度卡片配色。
+- 阶段页签只使用 `InvisibleButton` 作为布局占位，背景和文字通过窗口 DrawList 绘制，避免 `SameLine` 产生阶梯状错位。
+- 当前角色信息只在左侧导航显示，妖表页面和幻境武器进度页面不再重复显示。
 
 秘影阶段 UI 应拆成两个区块：
 
@@ -150,6 +249,22 @@ Lifestream IPC：
 
 - 标题：`*** 仅需完成一次的流程 ***`
 - 勾选项前缀：`[仅一次]`
+
+已实现的其他 UI 元素：
+
+- 顶栏“前往幻境村”按钮 → `VnavService.GoToOccultVillage()`。
+- 武器进度总览（按职业/阶段/角色维度，含物品名片段匹配与图标）。
+- 悬浮窗显示选项：是否显示秘影目标、是否显示讨伐任务、自动隐藏已完成项。
+
+### 妖表联动页面
+
+页面顶部显示分行攻略提示：
+
+1. 找 NPC 开启活动后，带上妖怪手表，先去刷 FATE，拿奖励兑换宠物。
+2. 带着宠物后才会掉落兑换武器的材料，材料不是必出，最后用武器材料兑换对应武器。
+3. 注意：不同宠物掉落的材料不一样。该行使用红色强调。
+
+奖励按妖怪手表、坐骑、肖像、宠物和武器分类展示。同步扫描背包、关键道具、装备栏、兵装库和投影台缓存，结果按角色 ContentId 保存。
 
 ## 战斗记忆界面读取（未完成）
 
@@ -168,13 +283,39 @@ Lifestream IPC：
 - 优点：可自动同步，不需要用户打开界面。
 - 缺点：需要逆向内存结构，维护成本高，版本更新风险高，不建议首选。
 
-当前决策：先预留 DEBUG 按钮作为未完成功能，后续优先实现方案 A。实现前需要先增加“列出当前 Addon”调试能力，确认“战斗的记忆”界面的 Addon 名称和节点结构。
+当前决策：该功能尚未实现，DEBUG 页已移除“读取幻境村入口坐标”按钮，仅保留读取当前坐标、测试坐标换算、解析地图参数三个调试能力。后续实现前需要先增加“列出当前 Addon”调试能力，确认“战斗的记忆”界面的 Addon 名称和节点结构。
+
+## 聊天自动标记
+
+`SecretKillTracker` 监听 `ChatGui.ChatMessage`，命中后自动写入进度并保存。以下功能均已实现。
+
+### 击杀小怪
+
+- 匹配关键词：打倒、击倒、讨伐、消灭、defeat、defeated、slay、slain。
+- 匹配当前 `TerritoryType` 下未完成的秘影目标名，命中即加入 `CompletedTasks`。
+
+### 讨伐任务分组完成
+
+- 识别“战斗的记忆……完成……”类消息（`LooksLikeSecretDutyMessage`）。
+- 若消息包含“所有项目”且匹配到某分组名（练级迷宫/顶级迷宫/讨伐歼灭战/团队任务/阿卡狄亚登天斗技场），一次勾选该分组全部副本（`MatchesDutyGroup`）。
+- 否则逐个匹配分组内的副本名，命中单个副本即标记其完成（`MatchesDuty`）。
+
+### 探索记忆分组完成
+
+- 消息包含“所有项目”且匹配探索记忆分组名（`ExplorationMemoryGroups`）时：
+  - 尤卡图拉尔 → 奥阔帕恰山 + 克扎玛乌卡湿地 + 亚克特尔树海。
+  - 萨卡图拉尔 → 夏劳尼荒野 + 遗产之地。
+  - 无失世界 → 活着的记忆。
+  - 同时支持单地图：克扎玛乌卡湿地、亚克特尔树海、夏劳尼荒野、遗产之地。
+- 将对应地图的所有秘影目标勾选，并把该地图的 FATE 进度 `Progress["secret-fate-{TerritoryType}"]` 设为 5。
 
 ## 实现注意事项
 
 - 插件内置资料应注明来源日期，后续资料变动需要人工更新。
 - 导航服务必须容忍 vnavmesh 或 Lifestream 未安装、未加载、IPC 不可用。
 - Lifestream 传送后需要等待 `Lifestream.IsBusy == false` 且 vnavmesh ready，再继续路径导航。
+- 幻境村路由使用固定常量 216/239/1185/1278，不使用字符串地名，避免本地化差异。
 - 当前工作区可能不是 Git 仓库，不依赖 Git 操作。
 - 构建命令：`dotnet build`
 - 构建产物：`output/Phantom.dll`
+- 发布流程见 `docs/release.md`（tag 推送触发 GitHub Actions）。

@@ -22,4 +22,5 @@ internal sealed class DalamudApi
     [PluginService] public static IPluginLog Log { get; private set; } = null!;
     [PluginService] public static IFateTable FateTable { get; private set; } = null!;
     [PluginService] public static ITextureProvider TextureProvider { get; private set; } = null!;
+    [PluginService] public static IUnlockState UnlockState { get; private set; } = null!;
 }

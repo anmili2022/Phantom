@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>肝武助手宣传海报</title>
+  <style>
+    :root {
+      --paper: #10161c;
+      --ink: #eef6f4;
+      --muted: #9eb2b7;
+      --line: #2e4148;
+      --cyan: #67d6c8;
+      --gold: #e3b35f;
+      --rose: #e18878;
+      --blue: #7db7e9;
+      --panel: #172128;
+      --panel-2: #1d2a32;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0b0f13;
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    }
+
+    .poster {
+      width: 1080px;
+      height: 1350px;
+      position: relative;
+      overflow: hidden;
+      background: var(--paper);
+      border: 1px solid #263842;
+      padding: 54px 58px;
+    }
+
+    .poster::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,.035) 1px, transparent 1px);
+      background-size: 54px 54px;
+      opacity: .42;
+    }
+
+    .content { position: relative; z-index: 1; }
+    .topline { display: flex; align-items: center; justify-content: space-between; margin-bottom: 34px; }
+    .brand { display: flex; align-items: center; gap: 20px; }
+    .brand img { width: 70px; height: 70px; border-radius: 12px; border: 1px solid #456a70; }
+    .brand strong { display: block; font-size: 22px; letter-spacing: 1px; }
+    .brand span { color: var(--muted); font-size: 14px; }
+    .tag { border: 1px solid #456a70; color: var(--cyan); padding: 8px 12px; font-size: 14px; }
+
+    h1 {
+      margin: 0;
+      font-size: 72px;
+      line-height: 1.02;
+      letter-spacing: 2px;
+      font-weight: 800;
+    }
+    .lead { margin-top: 18px; width: 780px; color: #c7d6d8; font-size: 20px; line-height: 1.5; }
+
+    .hero-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 24px; margin-top: 30px; }
+    .panel { border: 1px solid var(--line); background: rgba(23,33,40,.92); }
+    .window { min-height: 382px; }
+    .window-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 12px 16px; color: var(--muted); font-size: 13px; }
+    .window-body { display: grid; grid-template-columns: 172px 1fr; min-height: 326px; }
+    .side { border-right: 1px solid var(--line); padding: 14px 12px; }
+    .side small { color: #66828a; text-transform: uppercase; letter-spacing: 1px; }
+    .nav { margin-top: 7px; padding: 7px 9px; color: #d9e8e7; font-size: 14px; }
+    .nav.active { border-left: 4px solid var(--cyan); background: #203d3f; color: #c8fff8; }
+    .main-preview { padding: 18px; }
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .card { min-height: 90px; border: 1px solid #344952; background: #121b22; padding: 13px; }
+    .card b { display: block; font-size: 20px; margin: 8px 0 10px; }
+    .card span { color: var(--muted); font-size: 13px; }
+    .bar { height: 7px; background: #2a3941; }
+    .bar i { display: block; height: 100%; background: var(--cyan); }
+
+    .feature-stack { display: grid; gap: 14px; }
+    .feature { padding: 18px 20px; border-left: 5px solid var(--cyan); }
+    .feature:nth-child(2) { border-left-color: var(--gold); }
+    .feature:nth-child(3) { border-left-color: var(--blue); }
+    .feature h2 { margin: 0 0 7px; font-size: 22px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.42; }
+
+    .systems { margin-top: 30px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+    .system { min-height: 96px; border: 1px solid var(--line); background: var(--panel); padding: 12px 10px; display: flex; flex-direction: column; justify-content: space-between; }
+    .system b { font-size: 18px; }
+    .system span { color: var(--muted); font-size: 13px; }
+
+    .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 28px; }
+    .list { padding: 20px 22px; }
+    .list h2 { margin: 0 0 14px; font-size: 22px; }
+    .list p { margin: 9px 0; color: #d5e3e2; font-size: 15px; }
+    .list p::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 10px; background: var(--cyan); vertical-align: middle; }
+    .footer { display: flex; justify-content: space-between; align-items: end; margin-top: 24px; color: var(--muted); font-size: 14px; }
+    .install { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .install .list p::before { background: var(--gold); }
+    .repo { color: var(--cyan); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <article class="poster">
+    <div class="content">
+      <div class="topline">
+        <div class="brand">
+          <img src="../images/icon.png" alt="肝武助手图标">
+          <div><strong>肝武助手</strong><span>Weapon Progress Hub</span></div>
+        </div>
+        <div class="tag">Dalamud API 15</div>
+      </div>
+
+      <h1>一站式<br>肝武进度管理</h1>
+      <p class="lead">从幻境武器到妖表联动，把材料、任务、奖励、导航和角色进度收进同一个工具面板。</p>
+
+      <section class="hero-grid">
+        <div class="panel window">
+          <div class="window-head"><span>肝武助手 / 总览</span><span>同步当前角色</span></div>
+          <div class="window-body">
+            <div class="side">
+              <small>Workspace</small>
+              <div class="nav active">幻武 · 幻境武器</div>
+              <div class="nav">妖表联动</div>
+              <div class="nav">古武 · Zodiac</div>
+              <div class="nav">魂武 · Anima</div>
+              <div class="nav">义武 · Resistance</div>
+            </div>
+            <div class="main-preview">
+              <div class="cards">
+                <div class="card"><span>当前进行中</span><b>6 把</b><div class="bar"><i style="width:58%"></i></div></div>
+                <div class="card"><span>秘影完成</span><b>12/23</b><div class="bar"><i style="width:52%"></i></div></div>
+                <div class="card"><span>妖表奖励</span><b>24/37</b><div class="bar"><i style="width:65%"></i></div></div>
+                <div class="card"><span>最近同步</span><b>14:26</b><div class="bar"><i style="width:100%"></i></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="feature-stack">
+          <div class="panel feature"><h2>幻武进度总览</h2><p>保留职业卡片、武器图标、阶段胶囊和按角色同步。</p></div>
+          <div class="panel feature"><h2>妖表奖励进度</h2><p>扫描背包、关键道具、装备栏、兵装库与投影台缓存。</p></div>
+          <div class="panel feature"><h2>导航与悬浮窗</h2><p>vnavmesh + Lifestream 支持目标导航和幻境村入口。</p></div>
+        </div>
+      </section>
+
+      <section class="systems">
+        <div class="system"><b>幻武</b><span>已接入</span></div>
+        <div class="system"><b>妖表</b><span>奖励进度</span></div>
+        <div class="system"><b>古武</b><span>预留</span></div>
+        <div class="system"><b>魂武</b><span>预留</span></div>
+        <div class="system"><b>优武</b><span>预留</span></div>
+        <div class="system"><b>义武</b><span>预留</span></div>
+        <div class="system"><b>曼武</b><span>预留</span></div>
+      </section>
+
+      <section class="bottom">
+        <div class="panel list"><h2>已经支持</h2><p>按角色保存进度</p><p>幻武武器阶段同步</p><p>秘影目标与 FATE 追踪</p><p>妖表联动奖励扫描</p></div>
+        <div class="panel list"><h2>推荐依赖</h2><p>vnavmesh 0.7.6.0+</p><p>Lifestream 2.5.4.15+</p><p>Dalamud API 15</p><p>FFXIV 国服 7.55+</p></div>
+      </section>
+
+      <section class="install">
+        <div class="panel list">
+          <h2>安装方式</h2>
+          <p>在游戏内输入 `/xlplugins` 打开卫月插件列表。</p>
+          <p>点击「卫月设置」→「测试版」→「自定义插件仓库」。</p>
+          <p>添加插件仓库链接后保存。</p>
+          <p>在插件列表中启用「肝武助手」。</p>
+        </div>
+        <div class="panel list">
+          <h2>使用入口</h2>
+          <p>输入 `/phantom` 打开主窗口。</p>
+          <p>左侧切换系列：幻武、妖表联动及后续肝武内容。</p>
+          <p>在设置里管理依赖显示和调试工具。</p>
+          <p>首次同步后可按角色独立保存进度。</p>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span>Phantom / Grind Weapon Assistant</span>
+        <span class="repo">github.com/anmili2022/Phantom</span>
+      </footer>
+    </div>
+  </article>
+</body>
+</html>

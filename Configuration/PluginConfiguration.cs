@@ -28,6 +28,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public Dictionary<string, Dictionary<string, uint>> WeaponProgressByCharacter { get; set; } = new();
     public Dictionary<string, Dictionary<string, List<uint>>> WeaponProgressItemsByCharacter { get; set; } = new();
     public Dictionary<string, string> WeaponProgressSyncTimes { get; set; } = new();
+    public Dictionary<string, List<string>> YokaiOwnedRewardKeysByCharacter { get; set; } = new();
+    public Dictionary<string, string> YokaiSyncTimesByCharacter { get; set; } = new();
+    public bool HideOwnedYokaiRewards { get; set; }
 
     public void Initialize(IDalamudPluginInterface pluginInterface)
     {

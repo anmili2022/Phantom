@@ -1,8 +1,8 @@
 {
   "Author": "Anmi",
-  "Name": "幻境武器助手",
-  "Punchline": "追踪幻境武器阶段材料、以太与战斗记忆进度。",
-  "Description": "基于灰机 Wiki 幻境武器资料，提供半影、本影、黯影、蚀影、秘影阶段的材料清单、一次性流程勾选和手动进度追踪。",
+  "Name": "肝武助手",
+  "Punchline": "统一追踪幻武、妖表联动及其他肝武系列的材料、奖励与角色进度。",
+  "Description": "肝武助手用于管理最终幻想 XIV 的长期武器目标。当前支持幻境武器阶段进度、秘影目标与 FATE 追踪、按角色保存的武器持有状态，以及妖怪手表联动奖励扫描。妖表页面支持扫描背包、关键道具、装备栏、兵装库和投影台缓存，并按奖励类别展示获得进度。支持 vnavmesh 与 Lifestream 导航辅助前往目标区域。",
   "Tags": [
     "phantom",
     "weapon",
@@ -14,6 +14,6 @@
   "InternalName": "Phantom",
   "IconUrl": "https://raw.githubusercontent.com/anmili2022/Phantom/main/images/icon.png",
   "ApplicableVersion": "any",
-  "AssemblyVersion": "0.1.5.0",
+  "AssemblyVersion": "0.1.6.0",
   "DalamudApiLevel": 15
 }

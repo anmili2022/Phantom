@@ -1,5 +1,7 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Fates;
+using Dalamud.Interface;
+using Dalamud.Interface.Internal;
 using Dalamud.Interface.Textures;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
@@ -11,7 +13,24 @@ namespace Phantom;
 
 public sealed class PluginUI
 {
-    private static readonly string WindowTitle = $"幻境武器助手 v{typeof(PluginUI).Assembly.GetName().Version?.ToString(4) ?? "0.0.0.0"}";
+    private static readonly string WindowTitle = $"肝武助手 v{typeof(PluginUI).Assembly.GetName().Version?.ToString(4) ?? "0.0.0.0"}";
+    private static readonly string IconPath = Path.Combine(Path.GetDirectoryName(typeof(PluginUI).Assembly.Location) ?? string.Empty, "icon.png");
+    private static readonly (string Key, string Label, string Count)[] MainSections =
+    {
+        ("overview", "总览", "6"),
+        ("phantom", "幻武 · 幻境武器", "5"),
+        ("zodiac", "古武 · Zodiac", "-"),
+        ("anima", "魂武 · Anima", "-"),
+        ("eureka", "优武 · Eurekan", "-"),
+        ("resistance", "义武 · Resistance", "-"),
+        ("manderville", "曼武 · Manderville", "-"),
+        ("yokai", "妖表联动", "37"),
+        ("settings", "设置", "-"),
+    };
+    private static readonly (string Key, string Label, string Count)[] WorkspaceSections =
+        MainSections.Where(section => section.Key != "settings").ToArray();
+    private static readonly (string Key, string Label, string Count)[] ToolSections =
+        MainSections.Where(section => section.Key == "settings").ToArray();
     private static readonly InventoryType[] WeaponInventoryTypes =
     {
         InventoryType.Inventory1,
@@ -33,7 +52,11 @@ public sealed class PluginUI
     private readonly PluginConfiguration configuration;
     private readonly VnavService vnav;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? weaponItemLookup;
+    private IReadOnlyList<YokaiRewardProgress> yokaiResults = Array.Empty<YokaiRewardProgress>();
+    private readonly YokaiProgressService yokaiProgress = new();
     private bool isMainWindowOpen;
+    private int selectedMainSection;
+    private bool showWeaponProgressTab;
 
     public PluginUI(PluginConfiguration configuration, VnavService vnav)
     {
@@ -55,15 +78,247 @@ public sealed class PluginUI
             return;
         }
 
-        ImGui.SetNextWindowSize(new Vector2(760, 620), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(1050, 720), ImGuiCond.FirstUseEver);
         if (!ImGui.Begin(WindowTitle, ref isMainWindowOpen))
         {
             ImGui.End();
             return;
         }
 
-        DrawDependencyStatus();
+        DrawMainShell();
 
+        ImGui.End();
+    }
+
+    private void DrawMainShell()
+    {
+        if (!ImGui.BeginTable("grind-weapon-main-shell", 2, ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp))
+        {
+            return;
+        }
+
+        ImGui.TableSetupColumn("导航", ImGuiTableColumnFlags.WidthFixed, 226f);
+        ImGui.TableSetupColumn("内容", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        DrawMainSidebar();
+        ImGui.TableNextColumn();
+        DrawMainContent();
+        ImGui.EndTable();
+    }
+
+    private void DrawMainSidebar()
+    {
+        DrawSidebarBrand();
+        ImGui.Separator();
+
+        DrawSidebarLabel("Workspace");
+        foreach (var section in WorkspaceSections)
+        {
+            DrawSidebarButton(GetMainSectionIndex(section.Key), section.Label, section.Count, GetSidebarIcon(section.Key));
+        }
+
+        ImGui.Separator();
+        DrawSidebarLabel("Tools");
+        foreach (var section in ToolSections)
+        {
+            DrawSidebarButton(GetMainSectionIndex(section.Key), section.Label, section.Count, GetSidebarIcon(section.Key));
+        }
+
+        ImGui.Separator();
+        ImGui.TextDisabled($"角色：{GetCurrentCharacterLabel()}");
+        ImGui.TextDisabled(configuration.Enabled ? "状态：已启用" : "状态：已停用");
+    }
+
+    private static void DrawSidebarBrand()
+    {
+        if (File.Exists(IconPath))
+        {
+            var icon = DalamudApi.TextureProvider.GetFromFile(IconPath).GetWrapOrEmpty();
+            ImGui.Image(icon.Handle, new Vector2(32f, 32f));
+            ImGui.SameLine();
+        }
+
+        ImGui.BeginGroup();
+        ImGui.TextColored(new Vector4(0.68f, 0.96f, 0.92f, 1f), "肝武助手");
+        ImGui.TextDisabled("Weapon Progress Hub");
+        ImGui.EndGroup();
+    }
+
+    private static void DrawSidebarLabel(string text)
+    {
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.38f, 0.48f, 0.52f, 1f), text);
+    }
+
+    private int GetMainSectionIndex(string key)
+    {
+        for (var i = 0; i < MainSections.Length; i++)
+        {
+            if (MainSections[i].Key == key)
+            {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+
+    private static FontAwesomeIcon GetSidebarIcon(string key)
+        => key switch
+        {
+            "overview" => FontAwesomeIcon.ChartPie,
+            "phantom" => FontAwesomeIcon.Gem,
+            "zodiac" => FontAwesomeIcon.Diamond,
+            "anima" => FontAwesomeIcon.Fire,
+            "eureka" => FontAwesomeIcon.Bolt,
+            "resistance" => FontAwesomeIcon.ShieldAlt,
+            "manderville" => FontAwesomeIcon.Music,
+            "yokai" => FontAwesomeIcon.Paw,
+            "settings" => FontAwesomeIcon.Cog,
+            _ => FontAwesomeIcon.Circle,
+        };
+
+    private void DrawSidebarButton(int index, string label, string count, FontAwesomeIcon icon)
+    {
+        var active = selectedMainSection == index;
+        var cursor = ImGui.GetCursorScreenPos();
+        var width = ImGui.GetColumnWidth() - 8f;
+        var height = 28f;
+        var drawList = ImGui.GetWindowDrawList();
+        var bg = active ? new Vector4(0.12f, 0.23f, 0.25f, 1f) : new Vector4(0.08f, 0.10f, 0.13f, 0f);
+        var bgHovered = new Vector4(0.10f, 0.15f, 0.18f, 1f);
+
+        ImGui.InvisibleButton($"##main-section-{MainSections[index].Key}", new Vector2(width, height));
+        var hovered = ImGui.IsItemHovered();
+        if (ImGui.IsItemClicked())
+        {
+            selectedMainSection = index;
+        }
+
+        if (active || hovered)
+        {
+            drawList.AddRectFilled(cursor, cursor + new Vector2(width, height), ImGui.GetColorU32(active ? bg : bgHovered), 4f);
+        }
+
+        if (active)
+        {
+            drawList.AddRectFilled(cursor, cursor + new Vector2(3f, height), ImGui.GetColorU32(new Vector4(0.40f, 0.83f, 0.79f, 1f)), 2f);
+        }
+
+        var textColor = active ? new Vector4(0.76f, 1f, 0.95f, 1f) : new Vector4(0.86f, 0.91f, 0.92f, 1f);
+        var mutedColor = active ? new Vector4(0.40f, 0.83f, 0.79f, 1f) : new Vector4(0.55f, 0.64f, 0.68f, 1f);
+        ImGui.PushFont(UiBuilder.IconFont);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(10f, 5f));
+        ImGui.TextColored(mutedColor, icon.ToIconString());
+        ImGui.PopFont();
+        ImGui.SetCursorScreenPos(cursor + new Vector2(30f, 5f));
+        ImGui.TextColored(textColor, label);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(width - 26f, 5f));
+        ImGui.TextColored(mutedColor, count);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(0f, height + 2f));
+    }
+
+    private void DrawMainContent()
+    {
+        var section = MainSections[Math.Clamp(selectedMainSection, 0, MainSections.Length - 1)];
+        DrawMainToolbar(section.Label);
+        ImGui.Separator();
+
+        switch (section.Key)
+        {
+            case "overview":
+                DrawWeaponHubOverview();
+                break;
+            case "phantom":
+                DrawPhantomWeaponWorkspace();
+                break;
+            case "yokai":
+                DrawYokaiWorkspace();
+                break;
+            case "settings":
+                DrawSettingsWorkspace();
+                break;
+            default:
+                DrawWeaponSeriesPlaceholder(section.Label);
+                break;
+        }
+    }
+
+    private void DrawMainToolbar(string title)
+    {
+        ImGui.TextUnformatted(title);
+        ImGui.SameLine();
+        ImGui.TextDisabled("/ 当前角色维度保存进度");
+        ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 124f);
+        if (ImGui.Button("刷新扫描##hub-sync"))
+        {
+            var characterKey = GetCurrentCharacterKey();
+            if (characterKey.Length > 0)
+            {
+                SyncCurrentCharacterWeaponProgress(characterKey, GetPhantomWeaponItemLookup());
+            }
+        }
+    }
+
+    private void DrawWeaponHubOverview()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        var itemLookup = GetPhantomWeaponItemLookup();
+        var syncedItems = characterKey.Length > 0 && configuration.WeaponProgressItemsByCharacter.TryGetValue(characterKey, out var stored)
+            ? stored
+            : new Dictionary<string, List<uint>>();
+        var secretJobs = PhantomWeaponGuide.WeaponJobs.Count(job => GetHighestSyncedStage(job, itemLookup, syncedItems)?.Key == "secret");
+        var activeJobs = PhantomWeaponGuide.WeaponJobs.Count(job => GetHighestSyncedStage(job, itemLookup, syncedItems) != null);
+
+        if (ImGui.BeginTable("weapon-hub-summary", 4, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
+        {
+            DrawSummaryCard("所有系列", "幻武已接入", "其他肝武系列待接入数据");
+            DrawSummaryCard("当前进行中", $"{activeJobs} 把", "按当前角色同步结果统计");
+            DrawSummaryCard("秘影完成", $"{secretJobs}/{PhantomWeaponGuide.WeaponJobs.Count}", "保留原幻武进度统计");
+            var syncTime = characterKey.Length > 0 && configuration.WeaponProgressSyncTimes.TryGetValue(characterKey, out var time) ? time : "未同步";
+            DrawSummaryCard("最近同步", syncTime, "背包/兵装库/ItemFinder");
+            ImGui.EndTable();
+        }
+
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "今日清单");
+        ImGui.BulletText("幻武：同步当前角色，确认已持有的最高阶段。");
+        ImGui.BulletText("秘影：继续完成当前地图的 4 个目标和 5 个金牌 FATE。");
+        ImGui.BulletText("古武/魂武/优武/义武/曼武：数据模型待接入，界面入口已预留。");
+
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "幻武进度");
+        DrawPhantomWeaponProgressPanel();
+    }
+
+    private static void DrawSummaryCard(string title, string value, string note)
+    {
+        ImGui.TableNextColumn();
+        var cursor = ImGui.GetCursorScreenPos();
+        var width = Math.Max(150f, ImGui.GetColumnWidth() - 8f);
+        var size = new Vector2(width, 78f);
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(cursor, cursor + size, ImGui.GetColorU32(new Vector4(0.10f, 0.13f, 0.16f, 0.92f)), 8f);
+        drawList.AddRect(cursor, cursor + size, ImGui.GetColorU32(new Vector4(0.22f, 0.31f, 0.36f, 1f)), 8f);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(12f, 10f));
+        ImGui.TextDisabled(title);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(12f, 30f));
+        ImGui.TextUnformatted(value);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(12f, 52f));
+        ImGui.TextDisabled(note);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(0f, size.Y + 8f));
+    }
+
+    private void DrawPhantomWeaponWorkspace()
+    {
+        DrawPhantomToolbar();
+        ImGui.Separator();
+        DrawStageTabs();
+    }
+
+    private void DrawPhantomToolbar()
+    {
         var enabled = configuration.Enabled;
         if (ImGui.Checkbox("启用插件", ref enabled))
         {
@@ -106,11 +361,15 @@ public sealed class PluginUI
         {
             vnav.GoToOccultVillage();
         }
+    }
 
-        ImGui.Separator();
-        DrawStageTabs();
-
-        ImGui.End();
+    private static void DrawWeaponSeriesPlaceholder(string name)
+    {
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), name);
+        ImGui.TextWrapped("该武器系列入口已预留。后续接入时复用幻武进度页的职业卡片、阶段胶囊、图标和按角色同步逻辑，只替换阶段资料、物品 RowId/名称和系列专属任务面板。 ");
+        ImGui.BulletText("通用层：职业、阶段、物品持有、材料进度、任务勾选。");
+        ImGui.BulletText("专属层：古武书籍/魂武水晶砂/优武禁地等级/义武战线/曼武任务货币等。 ");
     }
 
     private static void DrawDependencyStatus()
@@ -162,37 +421,87 @@ public sealed class PluginUI
             configuration.SelectedStageIndex = 0;
         }
 
-        if (ImGui.BeginTabBar("phantom-stage-tabs"))
+        ImGui.BeginGroup();
+        for (var i = 0; i < stages.Count; i++)
         {
-            for (var i = 0; i < stages.Count; i++)
+            var stage = stages[i];
+            var tabName = stage.Name.Replace("幻境武器·", string.Empty, StringComparison.Ordinal);
+            if (DrawContentTabButton($"phantom-stage-{stage.Key}", tabName, !showWeaponProgressTab && configuration.SelectedStageIndex == i))
             {
-                var stage = stages[i];
-                var tabName = stage.Name.Replace("幻境武器·", string.Empty, StringComparison.Ordinal);
-                if (!ImGui.BeginTabItem($"{tabName}##{stage.Key}"))
-                {
-                    continue;
-                }
-
+                showWeaponProgressTab = false;
                 configuration.SelectedStageIndex = i;
-                DrawStage(stage);
-                ImGui.EndTabItem();
             }
 
-            DrawWeaponProgressTab();
-            DrawSettingsTab();
-            DrawDebugTab();
+            if (i < stages.Count - 1)
+            {
+                ImGui.SameLine(0f, 4f);
+            }
+        }
 
-            ImGui.EndTabBar();
+        if (stages.Count > 0)
+        {
+            ImGui.SameLine(0f, 4f);
+        }
+
+        if (DrawContentTabButton("phantom-weapon-progress", "幻境武器进度", showWeaponProgressTab))
+        {
+            showWeaponProgressTab = true;
+        }
+
+        ImGui.EndGroup();
+
+        if (showWeaponProgressTab)
+        {
+            DrawPhantomWeaponProgressPanel();
+        }
+        else
+        {
+            DrawStage(stages[configuration.SelectedStageIndex]);
         }
     }
 
-    private void DrawWeaponProgressTab()
+    private static bool DrawContentTabButton(string id, string label, bool active)
     {
-        if (!ImGui.BeginTabItem("幻境武器进度##phantom-weapon-progress"))
+        var textSize = ImGui.CalcTextSize(label);
+        var width = textSize.X + 24f;
+        var height = 28f;
+        var cursor = ImGui.GetCursorScreenPos();
+        var drawList = ImGui.GetWindowDrawList();
+        var bgColor = active
+            ? new Vector4(0.18f, 0.45f, 0.48f, 0.72f)
+            : new Vector4(0.10f, 0.11f, 0.15f, 0.72f);
+        var borderColor = active
+            ? new Vector4(0.38f, 0.92f, 0.92f, 1f)
+            : new Vector4(0.25f, 0.27f, 0.34f, 0.9f);
+        var textColor = active ? new Vector4(0.78f, 0.96f, 0.94f, 1f) : new Vector4(0.72f, 0.78f, 0.81f, 1f);
+
+        ImGui.InvisibleButton($"##{id}", new Vector2(width, height));
+        var hovered = ImGui.IsItemHovered();
+        var clicked = ImGui.IsItemClicked();
+
+        var drawBg = bgColor;
+        if (!active && hovered)
         {
-            return;
+            drawBg = new Vector4(0.14f, 0.18f, 0.24f, 0.82f);
         }
 
+        drawList.AddRectFilled(cursor, cursor + new Vector2(width, height), ImGui.GetColorU32(drawBg), 4f);
+        drawList.AddRect(cursor, cursor + new Vector2(width, height), ImGui.GetColorU32(borderColor), 4f, ImDrawFlags.None, 1f);
+
+        if (active)
+        {
+            drawList.AddRectFilled(cursor, cursor + new Vector2(3f, height), ImGui.GetColorU32(new Vector4(0.40f, 0.83f, 0.79f, 1f)), 2f);
+        }
+
+        drawList.AddText(
+            cursor + new Vector2((width - textSize.X) / 2f, 5f),
+            ImGui.GetColorU32(textColor),
+            label);
+        return clicked;
+    }
+
+    private void DrawPhantomWeaponProgressPanel()
+    {
         var characterKey = GetCurrentCharacterKey();
         var canSync = characterKey.Length > 0;
         var itemLookup = GetPhantomWeaponItemLookup();
@@ -201,7 +510,6 @@ public sealed class PluginUI
             : new Dictionary<string, List<uint>>();
         var completedJobs = 0;
 
-        ImGui.TextUnformatted($"当前角色：{GetCurrentCharacterLabel()}");
         ImGui.TextDisabled("点击同步时先扫描当前角色背包/兵装库/装备栏，再调用游戏 ItemFinder（/isearch 同源）补查雇员、鞍囊、投影台等缓存位置；多角色按角色 ID 分开保存。 ");
         if (!canSync)
         {
@@ -257,7 +565,6 @@ public sealed class PluginUI
         }
 
         ImGui.TextDisabled($"秘影完成职业 {completedJobs}/{PhantomWeaponGuide.WeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
-        ImGui.EndTabItem();
     }
 
     private void DrawWeaponCollectionGrid(
@@ -722,12 +1029,140 @@ public sealed class PluginUI
         ImGui.TextColored(color, text);
     }
 
-    private void DrawSettingsTab()
+    private void DrawYokaiWorkspace()
     {
-        if (!ImGui.BeginTabItem("设置##phantom-settings"))
+        ImGui.TextDisabled("扫描当前角色已加载的背包、关键道具、装备栏和完整兵装库，统计妖怪手表联动奖励。已同步结果按角色 ContentId 保存。");
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "一句话攻略：");
+        ImGui.TextWrapped("找 NPC 开启活动后，带上妖怪手表，先去刷 FATE，拿奖励兑换宠物；");
+        ImGui.TextWrapped("带着宠物后才会掉落兑换武器的材料（不是必出），最后用武器材料兑换对应武器。");
+        ImGui.TextColored(new Vector4(1f, 0.35f, 0.30f, 1f), "注意：不同宠物掉落的材料不一样。");
+
+        var characterKey = GetCurrentCharacterKey();
+        if (string.IsNullOrWhiteSpace(characterKey))
+        {
+            ImGui.TextColored(new Vector4(1f, 0.72f, 0.28f, 1f), "未登录角色，无法同步。");
+            return;
+        }
+
+        if (ImGui.Button("同步当前角色##sync-yokai-progress"))
+        {
+            yokaiResults = yokaiProgress.ScanCurrentCharacter();
+            configuration.YokaiOwnedRewardKeysByCharacter[characterKey] = yokaiResults
+                .Where(reward => reward.Owned)
+                .Select(reward => reward.Key)
+                .ToList();
+            configuration.YokaiSyncTimesByCharacter[characterKey] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("打开妖表 Wiki##open-yokai-wiki"))
+        {
+            OpenUrl("https://ff14.huijiwiki.com/wiki/%E5%A6%96%E6%80%AA%E6%89%8B%E8%A1%A8");
+        }
+
+        var glamourStatus = yokaiProgress.GetGlamourDresserStatus();
+        ImGui.TextDisabled($"投影台缓存：{(glamourStatus.IsCached ? "已加载" : "未加载")}，物品数：{glamourStatus.CachedItemCount}");
+        if (glamourStatus.SearchGlamourDresserCount > 0)
+        {
+            ImGui.TextDisabled($"最近检索投影台命中：{glamourStatus.SearchGlamourDresserCount}，名称：{glamourStatus.SearchItemName}");
+        }
+
+        if (yokaiResults.Count == 0 && configuration.YokaiOwnedRewardKeysByCharacter.TryGetValue(characterKey, out var storedKeys))
+        {
+            yokaiResults = YokaiWatchGuide.Rewards
+                .Select(reward => new YokaiRewardProgress(reward.Key, reward.Name, reward.Category, Array.Empty<uint>(), storedKeys.Contains(reward.Key)))
+                .ToArray();
+        }
+
+        ImGui.SameLine();
+        var syncTime = configuration.YokaiSyncTimesByCharacter.TryGetValue(characterKey, out var time) ? time : "未同步";
+        ImGui.TextDisabled($"上次同步：{syncTime}");
+
+        var hideOwned = configuration.HideOwnedYokaiRewards;
+        if (ImGui.Checkbox("隐藏已获得##hide-owned-yokai", ref hideOwned))
+        {
+            configuration.HideOwnedYokaiRewards = hideOwned;
+            configuration.Save();
+        }
+
+        ImGui.Spacing();
+        var totalOwned = yokaiResults.Count(reward => reward.Owned);
+        if (ImGui.BeginTable("yokai-summary", 4, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
+        {
+            DrawSummaryCard("奖励总数", $"{totalOwned}/{yokaiResults.Count}", "妖表联动全部奖励");
+            DrawYokaiSummaryCard(YokaiWatchGuide.WatchCategory);
+            DrawYokaiSummaryCard(YokaiWatchGuide.MinionCategory);
+            DrawYokaiSummaryCard(YokaiWatchGuide.WeaponCategory);
+            ImGui.EndTable();
+        }
+
+        ImGui.Spacing();
+        DrawYokaiCategoryGrid(YokaiWatchGuide.WatchCategory);
+        DrawYokaiCategoryGrid(YokaiWatchGuide.MountCategory);
+        DrawYokaiCategoryGrid(YokaiWatchGuide.PortraitCategory);
+        DrawYokaiCategoryGrid(YokaiWatchGuide.MinionCategory);
+        DrawYokaiCategoryGrid(YokaiWatchGuide.WeaponCategory);
+    }
+
+    private void DrawYokaiSummaryCard(string category)
+    {
+        var rewards = yokaiResults.Where(reward => reward.Category == category).ToArray();
+        DrawSummaryCard(category, $"{rewards.Count(reward => reward.Owned)}/{rewards.Length}", "奖励进度");
+    }
+
+    private void DrawYokaiCategoryGrid(string category)
+    {
+        var rewards = yokaiResults.Where(reward => reward.Category == category && (!configuration.HideOwnedYokaiRewards || !reward.Owned)).ToArray();
+        var total = yokaiResults.Count(reward => reward.Category == category);
+        var completed = yokaiResults.Count(reward => reward.Category == category && reward.Owned);
+        if (configuration.HideOwnedYokaiRewards && rewards.Length == 0)
         {
             return;
         }
+
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), $"{category}  {completed}/{total}");
+        if (ImGui.BeginTable($"yokai-reward-grid-{category}", 4, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+        {
+            foreach (var reward in rewards)
+            {
+                ImGui.TableNextColumn();
+                DrawYokaiRewardTile(reward);
+            }
+
+            ImGui.EndTable();
+        }
+
+        ImGui.Spacing();
+    }
+
+    private static void DrawYokaiRewardTile(YokaiRewardProgress reward)
+    {
+        var cursor = ImGui.GetCursorScreenPos();
+        var size = new Vector2(150f, 88f);
+        var bg = reward.Owned ? new Vector4(0.10f, 0.22f, 0.24f, 0.96f) : new Vector4(0.10f, 0.11f, 0.15f, 0.72f);
+        var border = reward.Owned ? new Vector4(0.30f, 0.84f, 0.78f, 0.92f) : new Vector4(0.25f, 0.27f, 0.34f, 0.9f);
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(cursor, cursor + size, ImGui.GetColorU32(bg), 8f);
+        drawList.AddRect(cursor, cursor + size, ImGui.GetColorU32(border), 8f, ImDrawFlags.None, reward.Owned ? 1.8f : 1f);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 9f));
+        ImGui.TextColored(reward.Owned ? new Vector4(0.78f, 0.96f, 0.94f, 1f) : new Vector4(0.78f, 0.80f, 0.84f, 1f), reward.Name);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 38f));
+        ImGui.TextDisabled(reward.Category);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 55f));
+        ImGui.TextDisabled(reward.Owned ? "已获得" : "未获得");
+        ImGui.SetCursorScreenPos(cursor);
+        ImGui.InvisibleButton($"yokai-reward-{reward.Key}", size);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(reward.Owned ? $"{reward.Name}\n已获得" : $"{reward.Name}\n未获得");
+        }
+    }
+
+    private void DrawSettingsWorkspace()
+    {
+        DrawDependencyStatus();
 
         var autoHideCompletedFloatingItems = configuration.AutoHideCompletedFloatingItems;
         if (ImGui.Checkbox("悬浮窗自动隐藏已完成项目", ref autoHideCompletedFloatingItems))
@@ -736,15 +1171,9 @@ public sealed class PluginUI
             configuration.Save();
         }
 
-        ImGui.EndTabItem();
-    }
-
-    private void DrawDebugTab()
-    {
-        if (!ImGui.BeginTabItem("DEBUG##phantom-debug"))
-        {
-            return;
-        }
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "DEBUG");
 
         if (ImGui.Button("读取当前坐标##debug-print-coords"))
         {
@@ -819,8 +1248,6 @@ public sealed class PluginUI
         {
             PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
         }
-
-        ImGui.EndTabItem();
     }
 
     private static void OpenUrl(string url)
