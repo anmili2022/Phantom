@@ -48,16 +48,16 @@ public static class RelicWeaponGuide
 
     public static readonly IReadOnlyList<PhantomWeaponJob> ZodiacWeaponJobs = new[]
     {
-        new PhantomWeaponJob("pld", "骑士", new[] { new[] { "无锋剑柯塔纳", "神圣盾" }, new[] { "无锋剑柯塔纳·天极", "神圣盾·天极" }, new[] { "无锋剑柯塔纳·魂晶", "神圣盾·魂晶" }, new[] { "无锋剑柯塔纳·魂灵", "神圣盾·魂灵" }, new[] { "无锋剑柯塔纳·新星", "神圣盾·新星" }, new[] { "无锋剑柯塔纳·镇魂", "神圣盾·镇魂" }, new[] { "王者之剑", "圣盾埃癸斯" }, new[] { "王者之剑·本我", "圣盾埃癸斯·本我" } }),
-        new PhantomWeaponJob("mnk", "武僧", StageItems("释法来", "释法来·天极", "释法来·魂晶", "释法来·魂灵", "释法来·新星", "释法来·镇魂", "凯撒裂爪", "凯撒裂爪·本我")),
-        new PhantomWeaponJob("war", "战士", StageItems("勇悍斧", "勇悍斧·天极", "勇悍斧·魂晶", "勇悍斧·魂灵", "勇悍斧·新星", "勇悍斧·镇魂", "诸神黄昏斧", "诸神黄昏斧·本我")),
-        new PhantomWeaponJob("drg", "龙骑士", StageItems("穿心枪盖博尔格", "穿心枪盖博尔格·天极", "穿心枪盖博尔格·魂晶", "穿心枪盖博尔格·魂灵", "穿心枪盖博尔格·新星", "穿心枪盖博尔格·镇魂", "圣枪朗基努斯", "圣枪朗基努斯·本我")),
-        new PhantomWeaponJob("brd", "吟游诗人", StageItems("月神之弓", "月神之弓·天极", "月神之弓·魂晶", "月神之弓·魂灵", "月神之弓·新星", "月神之弓·镇魂", "与一之弓", "与一之弓·本我")),
-        new PhantomWeaponJob("whm", "白魔法师", StageItems("酒神杖", "酒神杖·天极", "酒神杖·魂晶", "酒神杖·魂灵", "酒神杖·新星", "酒神杖·镇魂", "涅槃杖", "涅槃杖·本我")),
-        new PhantomWeaponJob("blm", "黑魔法师", StageItems("星尘杖", "星尘杖·天极", "星尘杖·魂晶", "星尘杖·魂灵", "星尘杖·新星", "星尘杖·镇魂", "莉莉丝魔杖", "莉莉丝魔杖·本我")),
-        new PhantomWeaponJob("smn", "召唤师", StageItems("绿瞳列传", "绿瞳列传·天极", "绿瞳列传·魂晶", "绿瞳列传·魂灵", "绿瞳列传·新星", "绿瞳列传·镇魂", "启示录", "启示录·本我")),
-        new PhantomWeaponJob("sch", "学者", StageItems("万辞全书", "万辞全书·天极", "万辞全书·魂晶", "万辞全书·魂灵", "万辞全书·新星", "万辞全书·镇魂", "最终宝典", "最终宝典·本我")),
-        new PhantomWeaponJob("nin", "忍者", StageItems("吉光", "吉光·天极", "吉光·魂晶", "吉光·魂灵", "吉光·新星", "吉光·镇魂", "佐助之刀", "佐助之刀·本我")),
+        new PhantomWeaponJob("pld", "骑士", new[] { new[] { "无锋剑柯塔纳", "神圣盾" }, new[] { "无锋剑柯塔纳·天极", "神圣盾·天极" }, new[] { "无锋剑柯塔纳·魂晶", "神圣盾·魂晶" }, new[] { "无锋剑柯塔纳·魂灵", "神圣盾·魂灵" }, new[] { "无锋剑柯塔纳·新星", "神圣盾·新星" }, new[] { "无锋剑柯塔纳·镇魂", "神圣盾·镇魂" }, new[] { "王者之剑", "圣盾埃癸斯" }, new[] { "王者之剑·本我", "王者之剑·本我（复制品）", "圣盾埃癸斯·本我", "圣盾埃癸斯·本我（复制品）" } }),
+        new PhantomWeaponJob("mnk", "武僧", StageItemsWithReplica("释法来", "释法来·天极", "释法来·魂晶", "释法来·魂灵", "释法来·新星", "释法来·镇魂", "凯撒裂爪", "凯撒裂爪·本我", "凯撒裂爪·本我（复制品）")),
+        new PhantomWeaponJob("war", "战士", StageItemsWithReplica("勇悍斧", "勇悍斧·天极", "勇悍斧·魂晶", "勇悍斧·魂灵", "勇悍斧·新星", "勇悍斧·镇魂", "诸神黄昏斧", "诸神黄昏斧·本我", "诸神黄昏斧·本我（复制品）")),
+        new PhantomWeaponJob("drg", "龙骑士", StageItemsWithReplica("穿心枪盖博尔格", "穿心枪盖博尔格·天极", "穿心枪盖博尔格·魂晶", "穿心枪盖博尔格·魂灵", "穿心枪盖博尔格·新星", "穿心枪盖博尔格·镇魂", "圣枪朗基努斯", "圣枪朗基努斯·本我", "圣枪朗基努斯·本我（复制品）")),
+        new PhantomWeaponJob("brd", "吟游诗人", StageItemsWithReplica("月神之弓", "月神之弓·天极", "月神之弓·魂晶", "月神之弓·魂灵", "月神之弓·新星", "月神之弓·镇魂", "与一之弓", "与一之弓·本我", "与一之弓·本我（复制品）")),
+        new PhantomWeaponJob("whm", "白魔法师", StageItemsWithReplica("酒神杖", "酒神杖·天极", "酒神杖·魂晶", "酒神杖·魂灵", "酒神杖·新星", "酒神杖·镇魂", "涅槃杖", "涅槃杖·本我", "涅槃杖·本我（复制品）")),
+        new PhantomWeaponJob("blm", "黑魔法师", StageItemsWithReplica("星尘杖", "星尘杖·天极", "星尘杖·魂晶", "星尘杖·魂灵", "星尘杖·新星", "星尘杖·镇魂", "莉莉丝魔杖", "莉莉丝魔杖·本我", "莉莉丝魔杖·本我（复制品）")),
+        new PhantomWeaponJob("smn", "召唤师", StageItemsWithReplica("绿瞳列传", "绿瞳列传·天极", "绿瞳列传·魂晶", "绿瞳列传·魂灵", "绿瞳列传·新星", "绿瞳列传·镇魂", "启示录", "启示录·本我", "启示录·本我（复制品）")),
+        new PhantomWeaponJob("sch", "学者", StageItemsWithReplica("万辞全书", "万辞全书·天极", "万辞全书·魂晶", "万辞全书·魂灵", "万辞全书·新星", "万辞全书·镇魂", "最终宝典", "最终宝典·本我", "最终宝典·本我（复制品）")),
+        new PhantomWeaponJob("nin", "忍者", StageItemsWithReplica("吉光", "吉光·天极", "吉光·魂晶", "吉光·魂灵", "吉光·新星", "吉光·镇魂", "佐助之刀", "佐助之刀·本我", "佐助之刀·本我（复制品）")),
     };
 
     public static readonly IReadOnlyList<PhantomWeaponProgressStage> AnimaProgressStages = new[]
@@ -95,25 +95,26 @@ public static class RelicWeaponGuide
         new PhantomWeaponProgressStage("eureka-pagos", "恒冰", 370, "元素"),
         new PhantomWeaponProgressStage("eureka-pyros", "涌火", 385, "涌火"),
         new PhantomWeaponProgressStage("eureka-hydatos", "丰水", 405, "优雷卡"),
+        new PhantomWeaponProgressStage("eureka-physeos", "补正", 405, "改"),
     };
 
     public static readonly IReadOnlyList<PhantomWeaponJob> EurekaWeaponJobs = new[]
     {
-        new PhantomWeaponJob("pld", "骑士", new[] { new[] { "嘉拉汀·常风", "艾瓦拉克血十字盾·常风" }, new[] { "元素长剑", "元素之盾" }, new[] { "涌火长剑", "涌火之盾" }, new[] { "安忒亚·优雷卡", "柏勒洛丰·优雷卡" } }),
-        new PhantomWeaponJob("war", "战士", StageItems("伐煞斧·常风", "元素战斧", "涌火战斧", "沙玛什·优雷卡")),
-        new PhantomWeaponJob("drk", "暗黑骑士", StageItems("裂斩剑卡拉德博尔格·常风", "元素断头剑", "涌火断头剑", "剑鱼·优雷卡")),
-        new PhantomWeaponJob("whm", "白魔法师", StageItems("驱除之杖·常风", "元素牧杖", "涌火牧杖", "夜蔷薇·优雷卡")),
-        new PhantomWeaponJob("sch", "学者", StageItems("工具论·常风", "元素魔导典", "涌火魔导典", "杰巴特·优雷卡")),
-        new PhantomWeaponJob("ast", "占星术士", StageItems("昴星团天仪·常风", "元素天仪", "涌火天仪", "辇道增七·优雷卡")),
-        new PhantomWeaponJob("mnk", "武僧", StageItems("善见神轮·常风", "元素指虎", "涌火指虎", "杜穆齐德·优雷卡")),
-        new PhantomWeaponJob("drg", "龙骑士", StageItems("龙须·常风", "元素龙枪", "涌火龙枪", "璎珞蛇·优雷卡")),
-        new PhantomWeaponJob("nin", "忍者", StageItems("息风·常风", "元素匕首", "涌火匕首", "鹊·优雷卡")),
-        new PhantomWeaponJob("sam", "武士", StageItems("菊一文字·常风", "元素武士刀", "涌火武士刀", "鸟头太刀·优雷卡")),
-        new PhantomWeaponJob("brd", "吟游诗人", StageItems("必中琴弓·常风", "元素竖琴弓", "涌火竖琴弓", "泽鹰·优雷卡")),
-        new PhantomWeaponJob("mch", "机工士", StageItems("外来者·常风", "元素手炮", "涌火手炮", "玛丽弗里斯·优雷卡")),
-        new PhantomWeaponJob("blm", "黑魔法师", StageItems("破坏之杖·常风", "元素法杖", "涌火法杖", "座头鲸·优雷卡")),
-        new PhantomWeaponJob("smn", "召唤师", StageItems("雷蒙盖顿·常风", "元素魔导书", "涌火魔导书", "图亚·优雷卡")),
-        new PhantomWeaponJob("rdm", "赤魔法师", StageItems("死印剑·常风", "元素刺剑", "涌火刺剑", "布鲁奈罗·优雷卡")),
+        new PhantomWeaponJob("pld", "骑士", new[] { new[] { "嘉拉汀·常风", "艾瓦拉克血十字盾·常风" }, new[] { "元素长剑", "元素之盾" }, new[] { "涌火长剑", "涌火之盾" }, new[] { "安忒亚·优雷卡", "柏勒洛丰·优雷卡" }, new[] { "安忒亚·改", "柏勒洛丰·改" } }),
+        new PhantomWeaponJob("war", "战士", StageItems("伐煞斧·常风", "元素战斧", "涌火战斧", "沙玛什·优雷卡", "沙玛什·改")),
+        new PhantomWeaponJob("drk", "暗黑骑士", StageItems("裂斩剑卡拉德博尔格·常风", "元素断头剑", "涌火断头剑", "剑鱼·优雷卡", "剑鱼·改")),
+        new PhantomWeaponJob("whm", "白魔法师", StageItems("驱除之杖·常风", "元素牧杖", "涌火牧杖", "夜蔷薇·优雷卡", "夜蔷薇·改")),
+        new PhantomWeaponJob("sch", "学者", StageItems("工具论·常风", "元素魔导典", "涌火魔导典", "杰巴特·优雷卡", "杰巴特·改")),
+        new PhantomWeaponJob("ast", "占星术士", StageItems("昴星团天仪·常风", "元素天仪", "涌火天仪", "辇道增七·优雷卡", "辇道增七·改")),
+        new PhantomWeaponJob("mnk", "武僧", StageItems("善见神轮·常风", "元素指虎", "涌火指虎", "杜穆齐德·优雷卡", "杜穆齐德·改")),
+        new PhantomWeaponJob("drg", "龙骑士", StageItems("龙须·常风", "元素龙枪", "涌火龙枪", "璎珞蛇·优雷卡", "璎珞蛇·改")),
+        new PhantomWeaponJob("nin", "忍者", StageItems("息风·常风", "元素匕首", "涌火匕首", "鹊·优雷卡", "鹊·改")),
+        new PhantomWeaponJob("sam", "武士", StageItems("菊一文字·常风", "元素武士刀", "涌火武士刀", "鸟头太刀·优雷卡", "鸟头太刀·改")),
+        new PhantomWeaponJob("brd", "吟游诗人", StageItems("必中琴弓·常风", "元素竖琴弓", "涌火竖琴弓", "泽鹰·优雷卡", "泽鹰·改")),
+        new PhantomWeaponJob("mch", "机工士", StageItems("外来者·常风", "元素手炮", "涌火手炮", "玛丽弗里斯·优雷卡", "玛丽弗里斯·改")),
+        new PhantomWeaponJob("blm", "黑魔法师", StageItems("破坏之杖·常风", "元素法杖", "涌火法杖", "座头鲸·优雷卡", "座头鲸·改")),
+        new PhantomWeaponJob("smn", "召唤师", StageItems("雷蒙盖顿·常风", "元素魔导书", "涌火魔导书", "图亚·优雷卡", "图亚·改")),
+        new PhantomWeaponJob("rdm", "赤魔法师", StageItems("死印剑·常风", "元素刺剑", "涌火刺剑", "布鲁奈罗·优雷卡", "布鲁奈罗·改")),
     };
 
     public static readonly IReadOnlyList<PhantomWeaponProgressStage> ResistanceProgressStages = new[]
@@ -456,4 +457,12 @@ public static class RelicWeaponGuide
 
     private static IReadOnlyList<IReadOnlyList<string>> StageItems(params string[] names)
         => names.Select(name => (IReadOnlyList<string>)new[] { name }).ToArray();
+
+    private static IReadOnlyList<IReadOnlyList<string>> StageItemsWithReplica(params string[] names)
+    {
+        var stages = StageItems(names).ToList();
+        stages[^2] = stages[^2].Append(names[^1]).ToArray();
+        stages.RemoveAt(stages.Count - 1);
+        return stages;
+    }
 }

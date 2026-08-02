@@ -36,6 +36,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool HideOwnedYokaiRewards { get; set; }
     public bool DebugLogSyncedItemLocations { get; set; }
     public bool DebugLogMissingItemLocations { get; set; }
+    public HashSet<uint> BackpackOrganizeItemIds { get; set; } = new();
 
     public void Initialize(IDalamudPluginInterface pluginInterface)
     {

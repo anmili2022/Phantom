@@ -34,6 +34,11 @@ public sealed class SecretKillTracker : IDisposable
         }
 
         var text = ExtractChatMessageText(message);
+        if (TryAutoMarkSecretAllComplete(text))
+        {
+            return;
+        }
+
         if (TryAutoMarkSecretDuty(text))
         {
             return;
@@ -58,6 +63,50 @@ public sealed class SecretKillTracker : IDisposable
             DalamudApi.Log.Information("Auto-marked Secret target complete: {Target}", target.Name);
             return;
         }
+    }
+
+    private bool TryAutoMarkSecretAllComplete(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)
+            || !text.Contains("战斗的记忆", StringComparison.OrdinalIgnoreCase)
+            || !text.Contains("完成", StringComparison.OrdinalIgnoreCase)
+            || !text.Contains("所有项目", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var changed = false;
+
+        foreach (var target in PhantomWeaponGuide.SecretTargets)
+        {
+            changed |= configuration.CompletedTasks.Add(target.Key);
+        }
+
+        foreach (var group in PhantomWeaponGuide.SecretDutyGroups)
+        {
+            foreach (var duty in group.Duties)
+            {
+                changed |= configuration.CompletedTasks.Add(duty.Key);
+            }
+        }
+
+        foreach (var territoryType in PhantomWeaponGuide.SecretTargets.Select(target => target.TerritoryType).Distinct())
+        {
+            var fateKey = GetSecretFateKey(territoryType);
+            if (configuration.Progress.GetValueOrDefault(fateKey) < 5)
+            {
+                configuration.Progress[fateKey] = 5;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            configuration.Save();
+            DalamudApi.Log.Information("Auto-marked all Secret stage items complete.");
+        }
+
+        return true;
     }
 
     private bool TryAutoMarkSecretDuty(string text)

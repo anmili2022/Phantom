@@ -6,6 +6,12 @@ public sealed record PhantomWeaponProgressStage(
     int ItemLevel,
     string ItemNameFragment);
 
+public sealed record PhantomRewardWeapon(
+    string Key,
+    string JobName,
+    string BonusLabel,
+    IReadOnlyList<string> ItemNames);
+
 public sealed record PhantomWeaponJob(
     string Key,
     string Name,
@@ -98,6 +104,11 @@ public static class PhantomWeaponGuide
 
     private static IReadOnlyList<IReadOnlyList<string>> StageItems(params string[] names)
         => names.Select(name => (IReadOnlyList<string>)new[] { name }).ToArray();
+
+    public static readonly IReadOnlyList<PhantomRewardWeapon> RewardWeapons = new[]
+    {
+        new PhantomRewardWeapon("cul-knife", "烹调师", "完成", new[] { "幻境菜刀" }),
+    };
 
     public static readonly IReadOnlyList<PhantomWeaponTarget> SecretTargets = new[]
     {

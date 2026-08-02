@@ -65,6 +65,7 @@ public sealed class PluginUI
     private readonly PluginConfiguration configuration;
     private readonly VnavService vnav;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? weaponItemLookup;
+    private Dictionary<string, IReadOnlyList<Item>>? phantomRewardWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? mandervilleWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? cosmicToolItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? zodiacWeaponItemLookup;
@@ -81,6 +82,22 @@ public sealed class PluginUI
     private bool showWeaponProgressTab = true;
     private string? progressSeriesKey = "phantom";
     private readonly HashSet<string> stageSelectedSeries = new(StringComparer.Ordinal);
+    private string backpackOrganizeSearch = string.Empty;
+    private List<BackpackItemSummary> backpackOrganizeItems = new();
+
+    private sealed record BackpackItemSummary(uint ItemId, string Name, int Quantity);
+
+    private static readonly InventoryType[] BackpackOrganizeSources =
+    {
+        InventoryType.Inventory1, InventoryType.Inventory2,
+        InventoryType.Inventory3, InventoryType.Inventory4,
+    };
+
+    private static readonly InventoryType[] BackpackOrganizeTargets =
+    {
+        InventoryType.SaddleBag1, InventoryType.SaddleBag2,
+        InventoryType.PremiumSaddleBag1, InventoryType.PremiumSaddleBag2,
+    };
 
     public PluginUI(PluginConfiguration configuration, VnavService vnav)
     {
@@ -153,6 +170,14 @@ public sealed class PluginUI
         if (ImGui.Button("前往幻境村##sidebar-occult-village", new Vector2(-1f, 0f)))
         {
             vnav.GoToOccultVillage();
+        }
+
+        if (ImGui.Button("反馈与建议##sidebar-feedback", new Vector2(-1f, 0f)))
+        {
+            OpenUrl(
+                "https://discord.com/channels/1258981591124938762/1533030634623074466",
+                "已打开反馈页面。",
+                "打开反馈页面");
         }
 
         ImGui.TextDisabled($"角色：{GetCurrentCharacterLabel()}");
@@ -938,7 +963,8 @@ public sealed class PluginUI
     }
 
     private void DrawPhantomWeaponProgressPanel()
-        => DrawWeaponProgressPanel(
+    {
+        DrawWeaponProgressPanel(
             "phantom",
             "幻境武器",
             PhantomWeaponGuide.WeaponJobs,
@@ -946,6 +972,37 @@ public sealed class PluginUI
             GetPhantomWeaponItemLookup(),
             stage => stage.Key == "secret",
             completed => $"秘影完成职业 {completed}/{PhantomWeaponGuide.WeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+    }
+
+    private void DrawPhantomRewardWeapons()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        var syncedItems = characterKey.Length > 0 && configuration.WeaponProgressItemsByCharacter.TryGetValue(characterKey, out var stored)
+            ? stored
+            : new Dictionary<string, List<uint>>();
+        var rewardLookup = GetPhantomRewardWeaponItemLookup();
+
+        if (PhantomWeaponGuide.RewardWeapons.Count == 0)
+        {
+            return;
+        }
+
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "达成奖励");
+        var tileWidth = configuration.ShowWeaponProgressIcons ? 120f : 94f;
+        if (!ImGui.BeginTable("phantom-reward-weapons", PhantomWeaponGuide.RewardWeapons.Count, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+        {
+            return;
+        }
+
+        foreach (var reward in PhantomWeaponGuide.RewardWeapons)
+        {
+            ImGui.TableNextColumn();
+            DrawPhantomRewardWeaponTile("phantom", reward, rewardLookup, syncedItems, tileWidth);
+        }
+
+        ImGui.EndTable();
+    }
 
     private void DrawMandervilleWeaponProgressPanel()
         => DrawWeaponProgressPanel(
@@ -1115,6 +1172,12 @@ public sealed class PluginUI
         ImGui.TextDisabled($"上次同步：{syncTime}");
         ImGui.Spacing();
 
+        if (seriesKey == "phantom")
+        {
+            DrawPhantomRewardWeapons();
+            ImGui.Spacing();
+        }
+
         foreach (var job in jobs)
         {
             var highestStage = GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems);
@@ -1210,6 +1273,12 @@ public sealed class PluginUI
         return weaponItemLookup;
     }
 
+    private Dictionary<string, IReadOnlyList<Item>> GetPhantomRewardWeaponItemLookup()
+    {
+        phantomRewardWeaponItemLookup ??= BuildRewardWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), PhantomWeaponGuide.RewardWeapons);
+        return phantomRewardWeaponItemLookup;
+    }
+
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetMandervilleWeaponItemLookup()
     {
         mandervilleWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), MandervilleWeaponGuide.WeaponJobs, MandervilleWeaponGuide.ProgressStages);
@@ -1291,6 +1360,27 @@ public sealed class PluginUI
             }
         }
 
+        if (seriesKey == "phantom")
+        {
+            var rewardLookup = GetPhantomRewardWeaponItemLookup();
+            foreach (var reward in PhantomWeaponGuide.RewardWeapons)
+            {
+                if (!rewardLookup.TryGetValue(reward.Key, out var rewardItems))
+                {
+                    continue;
+                }
+
+                var ownedRewardItems = rewardItems
+                    .Where(item => ownedItemIds.Contains(item.RowId) || ItemFinderHasItem(item))
+                    .Select(item => item.RowId)
+                    .ToList();
+                if (ownedRewardItems.Count > 0)
+                {
+                    synced[GetRewardWeaponProgressKey(seriesKey, reward)] = ownedRewardItems;
+                }
+            }
+        }
+
         foreach (var job in jobs)
         {
             foreach (var stage in stages)
@@ -1314,6 +1404,10 @@ public sealed class PluginUI
         if (configuration.DebugLogSyncedItemLocations)
         {
             LogSyncedWeaponItemLocations(seriesKey, itemLookup, synced, configuration.DebugLogMissingItemLocations);
+            if (seriesKey == "phantom")
+            {
+                LogSyncedRewardWeaponItemLocations(seriesKey, GetPhantomRewardWeaponItemLookup(), synced, configuration.DebugLogMissingItemLocations);
+            }
         }
 
         configuration.WeaponProgressItemsByCharacter[characterKey] = synced;
@@ -1353,10 +1447,65 @@ public sealed class PluginUI
                     continue;
                 }
 
-                PrintChat($"DEBUG [{seriesKey}] {item.Name.ExtractText()}：{status}");
+                PrintChat($"DEBUG [{GetDebugSeriesDisplayName(seriesKey)}] {item.Name.ExtractText()}：{status}");
             }
         }
     }
+
+    private static void LogSyncedRewardWeaponItemLocations(
+        string seriesKey,
+        IReadOnlyDictionary<string, IReadOnlyList<Item>> rewardLookup,
+        IReadOnlyDictionary<string, List<uint>> synced,
+        bool logMissingItems)
+    {
+        foreach (var reward in PhantomWeaponGuide.RewardWeapons)
+        {
+            if (!rewardLookup.TryGetValue(reward.Key, out var items))
+            {
+                if (logMissingItems)
+                {
+                    PrintChat($"DEBUG [{GetDebugSeriesDisplayName(seriesKey)}] {string.Join("/", reward.ItemNames)}：未匹配物品表");
+                }
+
+                continue;
+            }
+
+            var syncedItemIds = synced.TryGetValue(GetRewardWeaponProgressKey(seriesKey, reward), out var itemIds)
+                ? itemIds.ToHashSet()
+                : new HashSet<uint>();
+            foreach (var item in items)
+            {
+                var locations = GetItemStorageLocations(item);
+                var status = locations.Count > 0
+                    ? string.Join("、", locations)
+                    : syncedItemIds.Contains(item.RowId)
+                        ? "已命中，位置缓存不可用"
+                        : "未找到";
+                if (status == "未找到" && !logMissingItems)
+                {
+                    continue;
+                }
+
+                PrintChat($"DEBUG [{GetDebugSeriesDisplayName(seriesKey)}] {item.Name.ExtractText()}：{status}");
+            }
+        }
+    }
+
+    private static string GetDebugSeriesDisplayName(string seriesKey)
+        => seriesKey switch
+        {
+            "phantom" => "幻武",
+            "manderville" => "曼武",
+            "zodiac" => "古武",
+            "anima" => "魂武",
+            "eureka" => "优武",
+            "resistance" => "义武",
+            "skysteel" => "天钢",
+            "splendorous" => "莫雯",
+            "cosmic" => "宇宙",
+            "ultimate" => "绝武",
+            _ => seriesKey,
+        };
 
     private static unsafe IReadOnlyList<string> GetItemStorageLocations(Item item)
     {
@@ -1713,6 +1862,31 @@ public sealed class PluginUI
     private static uint NormalizeItemId(uint itemId)
         => itemId >= 1_000_000 ? itemId % 1_000_000 : itemId;
 
+    private static Dictionary<string, IReadOnlyList<Item>> BuildRewardWeaponItemLookup(
+        Lumina.Excel.ExcelSheet<Item> itemSheet,
+        IReadOnlyList<PhantomRewardWeapon> rewards)
+    {
+        var itemsByName = itemSheet
+            .Where(item => item.RowId > 0)
+            .GroupBy(item => item.Name.ExtractText(), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var lookup = new Dictionary<string, IReadOnlyList<Item>>(StringComparer.Ordinal);
+        foreach (var reward in rewards)
+        {
+            var matchedItems = reward.ItemNames
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Where(itemsByName.ContainsKey)
+                .Select(name => itemsByName[name])
+                .ToArray();
+            if (matchedItems.Length > 0)
+            {
+                lookup[reward.Key] = matchedItems;
+            }
+        }
+
+        return lookup;
+    }
+
     private static Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> BuildWeaponItemLookup(
         Lumina.Excel.ExcelSheet<Item> itemSheet,
         IReadOnlyList<PhantomWeaponJob> jobs,
@@ -1884,6 +2058,67 @@ public sealed class PluginUI
         DrawWeaponTilePopup(seriesKey, job, stages, itemLookup, syncedItems);
     }
 
+    private void DrawPhantomRewardWeaponTile(
+        string seriesKey,
+        PhantomRewardWeapon reward,
+        IReadOnlyDictionary<string, IReadOnlyList<Item>> rewardLookup,
+        IReadOnlyDictionary<string, List<uint>> syncedItems,
+        float width)
+    {
+        var cursor = ImGui.GetCursorScreenPos();
+        var showIcon = configuration.ShowWeaponProgressIcons;
+        var size = new Vector2(width, showIcon ? 104f : 64f);
+        var earned = rewardLookup.TryGetValue(reward.Key, out var lookupItems)
+            && lookupItems.Any(item => syncedItems.TryGetValue(GetRewardWeaponProgressKey(seriesKey, reward), out var ids)
+                && ids.Contains(item.RowId));
+        var ownedItemsForDisplay = rewardLookup.TryGetValue(reward.Key, out var matchedItems)
+            && syncedItems.TryGetValue(GetRewardWeaponProgressKey(seriesKey, reward), out var syncedIds)
+            ? matchedItems.Where(item => syncedIds.Contains(item.RowId)).ToArray()
+            : Array.Empty<Item>();
+        Item? displayItem = null;
+        if (ownedItemsForDisplay.Length > 0)
+        {
+            displayItem = ownedItemsForDisplay[0];
+        }
+        else if (rewardLookup.TryGetValue(reward.Key, out var firstMatch) && firstMatch.Count > 0)
+        {
+            displayItem = firstMatch[0];
+        }
+        var drawList = ImGui.GetWindowDrawList();
+        var bgTop = earned ? new Vector4(0.10f, 0.22f, 0.26f, 0.96f) : new Vector4(0.10f, 0.11f, 0.15f, 0.72f);
+        var bgBottom = earned ? new Vector4(0.07f, 0.12f, 0.16f, 0.96f) : new Vector4(0.07f, 0.08f, 0.11f, 0.72f);
+        var border = earned ? new Vector4(0.30f, 0.84f, 0.78f, 0.92f) : new Vector4(0.25f, 0.27f, 0.34f, 0.9f);
+
+        drawList.AddRectFilledMultiColor(cursor, cursor + size,
+            ImGui.GetColorU32(bgTop), ImGui.GetColorU32(bgTop), ImGui.GetColorU32(bgBottom), ImGui.GetColorU32(bgBottom));
+        drawList.AddRect(cursor, cursor + size, ImGui.GetColorU32(border), 12f, ImDrawFlags.None, earned ? 1.8f : 1f);
+
+        if (showIcon && displayItem.HasValue)
+        {
+            ImGui.SetCursorScreenPos(cursor + new Vector2(10f, 10f));
+            var texture = DalamudApi.TextureProvider.GetFromGameIcon(new GameIconLookup(displayItem.Value.Icon)).GetWrapOrEmpty();
+            ImGui.Image(texture.Handle, new Vector2(40f, 40f));
+        }
+
+        ImGui.SetCursorScreenPos(cursor + new Vector2(10f, showIcon ? 57f : 31f));
+        ImGui.TextUnformatted(displayItem.HasValue ? displayItem.Value.Name.ExtractText() : reward.ItemNames.FirstOrDefault() ?? reward.JobName);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(10f, showIcon ? 73f : 47f));
+        ImGui.TextColored(new Vector4(0.58f, 0.62f, 0.68f, 1f), reward.JobName);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(width - 50f, showIcon ? 8f : 7f));
+        DrawStagePill(earned ? reward.BonusLabel : "未持有", earned ? "manderville-complete" : string.Empty);
+
+        ImGui.SetCursorScreenPos(cursor);
+        ImGui.InvisibleButton($"reward-tile-{seriesKey}-{reward.Key}", size);
+
+        if (ImGui.IsItemHovered())
+        {
+            var names = rewardLookup.TryGetValue(reward.Key, out var rewardItems)
+                ? string.Join("\n", rewardItems.Select(item => item.Name.ExtractText()))
+                : "未能在物品表匹配到武器";
+            ImGui.SetTooltip($"{reward.JobName} / {reward.BonusLabel}\n{names}\n{(earned ? "已获得" : "未获得")}");
+        }
+    }
+
     private static void DrawWeaponTileProgress(
         Vector2 pos,
         float width,
@@ -2005,6 +2240,9 @@ public sealed class PluginUI
 
     private static string GetWeaponProgressKey(string seriesKey, PhantomWeaponJob job, PhantomWeaponProgressStage stage)
         => $"{seriesKey}:{job.Key}:{stage.Key}";
+
+    private static string GetRewardWeaponProgressKey(string seriesKey, PhantomRewardWeapon reward)
+        => $"{seriesKey}:reward:{reward.Key}";
 
     private static void DrawStagePill(string text, string stageKey)
     {
@@ -2266,6 +2504,8 @@ public sealed class PluginUI
             configuration.Save();
         }
 
+        DrawBackpackOrganizer();
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "DEBUG");
@@ -2373,6 +2613,198 @@ public sealed class PluginUI
         }
     }
 
+    private unsafe void DrawBackpackOrganizer()
+    {
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "整理背包");
+        ImGui.TextDisabled("按 itemid 选择物品，将当前背包中的全部数量尽可能放入鞍囊。");
+
+        if (ImGui.Button("选择物品##backpack-organizer-select"))
+        {
+            backpackOrganizeItems = ReadBackpackItemSummaries();
+            backpackOrganizeSearch = string.Empty;
+            ImGui.OpenPopup("backpack-organizer-items");
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("整理背包##backpack-organizer-run"))
+        {
+            OrganizeBackpack();
+        }
+
+        ImGui.SameLine();
+        ImGui.TextDisabled($"已选择 {configuration.BackpackOrganizeItemIds.Count} 种");
+
+        ImGui.SetNextWindowSize(new Vector2(480f, 420f), ImGuiCond.Appearing);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(360f, 260f), new Vector2(560f, 520f));
+        if (!ImGui.BeginPopup("backpack-organizer-items"))
+        {
+            return;
+        }
+
+        ImGui.SetNextItemWidth(300f);
+        ImGui.InputText("搜索名称##backpack-organizer-search", ref backpackOrganizeSearch, 128);
+        ImGui.Separator();
+        if (ImGui.BeginChild("backpack-organizer-item-list", new Vector2(0f, 0f), false))
+        {
+            foreach (var item in backpackOrganizeItems)
+            {
+                if (!string.IsNullOrWhiteSpace(backpackOrganizeSearch)
+                    && !item.Name.Contains(backpackOrganizeSearch, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var selected = configuration.BackpackOrganizeItemIds.Contains(item.ItemId);
+                if (ImGui.Checkbox($"{item.Name} ({item.Quantity})##item-{item.ItemId}", ref selected))
+                {
+                    if (selected)
+                    {
+                        configuration.BackpackOrganizeItemIds.Add(item.ItemId);
+                    }
+                    else
+                    {
+                        configuration.BackpackOrganizeItemIds.Remove(item.ItemId);
+                    }
+
+                    configuration.Save();
+                }
+
+                ImGui.SameLine();
+                ImGui.TextDisabled($"ID: {item.ItemId}");
+            }
+
+            if (backpackOrganizeItems.Count == 0)
+            {
+                ImGui.TextDisabled("当前背包没有物品。");
+            }
+
+            ImGui.EndChild();
+        }
+
+        ImGui.EndPopup();
+    }
+
+    private unsafe List<BackpackItemSummary> ReadBackpackItemSummaries()
+    {
+        var summaries = new Dictionary<uint, (string Name, int Quantity)>();
+        var inventoryManager = InventoryManager.Instance();
+        if (inventoryManager == null)
+        {
+            return new List<BackpackItemSummary>();
+        }
+
+        var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+        foreach (var inventoryType in BackpackOrganizeSources)
+        {
+            var container = inventoryManager->GetInventoryContainer(inventoryType);
+            if (container == null)
+            {
+                continue;
+            }
+
+            for (var index = 0; index < container->Size; index++)
+            {
+                var slot = container->GetInventorySlot(index);
+                var itemId = NormalizeItemId(slot->ItemId);
+                if (itemId == 0 || !items.TryGetRow(itemId, out var item))
+                {
+                    continue;
+                }
+
+                var name = item.Name.ExtractText();
+                summaries.TryGetValue(itemId, out var summary);
+                summaries[itemId] = (name, summary.Quantity + slot->Quantity);
+            }
+        }
+
+        return summaries
+            .OrderBy(entry => entry.Value.Name, StringComparer.Ordinal)
+            .Select(entry => new BackpackItemSummary(entry.Key, entry.Value.Name, entry.Value.Quantity))
+            .ToList();
+    }
+
+    private unsafe void OrganizeBackpack()
+    {
+        if (configuration.BackpackOrganizeItemIds.Count == 0)
+        {
+            PrintChat("请先选择要整理的物品。");
+            return;
+        }
+
+        var inventoryManager = InventoryManager.Instance();
+        if (inventoryManager == null)
+        {
+            PrintChat("无法访问当前背包。");
+            return;
+        }
+
+        var movedByItem = new Dictionary<uint, int>();
+        foreach (var sourceType in BackpackOrganizeSources)
+        {
+            var source = inventoryManager->GetInventoryContainer(sourceType);
+            if (source == null)
+            {
+                continue;
+            }
+
+            for (var sourceSlot = 0; sourceSlot < source->Size; sourceSlot++)
+            {
+                var item = source->GetInventorySlot(sourceSlot);
+                var itemId = NormalizeItemId(item->ItemId);
+                if (itemId == 0 || !configuration.BackpackOrganizeItemIds.Contains(itemId))
+                {
+                    continue;
+                }
+
+                var remaining = item->Quantity;
+                foreach (var targetType in BackpackOrganizeTargets)
+                {
+                    var target = inventoryManager->GetInventoryContainer(targetType);
+                    if (target == null)
+                    {
+                        continue;
+                    }
+
+                    for (var targetSlot = 0; targetSlot < target->Size && remaining > 0; targetSlot++)
+                    {
+                        var before = remaining;
+                        var destination = target->GetInventorySlot(targetSlot);
+                        if (NormalizeItemId(destination->ItemId) != 0 && NormalizeItemId(destination->ItemId) != itemId)
+                        {
+                            continue;
+                        }
+
+                        inventoryManager->MoveItemSlot(
+                            sourceType,
+                            (ushort)sourceSlot,
+                            targetType,
+                            (ushort)targetSlot,
+                            false);
+                        var after = source->GetInventorySlot(sourceSlot)->Quantity;
+                        var moved = before - after;
+                        if (moved > 0)
+                        {
+                            movedByItem[itemId] = movedByItem.GetValueOrDefault(itemId) + moved;
+                            remaining = after;
+                        }
+                    }
+                }
+            }
+        }
+
+        var summaries = ReadBackpackItemSummaries().ToDictionary(item => item.ItemId);
+        foreach (var itemId in configuration.BackpackOrganizeItemIds)
+        {
+            movedByItem.TryGetValue(itemId, out var moved);
+            summaries.TryGetValue(itemId, out var left);
+            var name = left?.Name ?? itemId.ToString();
+            var remaining = left?.Quantity ?? 0;
+            PrintChat($"{name}：已转移 {moved}，剩余 {remaining}");
+        }
+    }
+
     private static unsafe string GetItemFinderDebugText()
     {
         var finder = ItemFinderModule.Instance();
@@ -2428,16 +2860,16 @@ public sealed class PluginUI
         }
     }
 
-    private static void OpenUrl(string url)
+    private static void OpenUrl(string url, string openedMessage = "已打开 Wiki。", string actionName = "打开 Wiki")
     {
         try
         {
             Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-            PrintChat("已打开 Wiki。");
+            PrintChat(openedMessage);
         }
         catch (Exception ex)
         {
-            PrintChat($"打开Wiki失败: {ex.Message}");
+            PrintChat($"{actionName}失败: {ex.Message}");
         }
     }
 
