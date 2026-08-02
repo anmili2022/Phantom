@@ -1051,8 +1051,8 @@ public sealed class PluginUI
             RelicWeaponGuide.EurekaWeaponJobs,
             RelicWeaponGuide.EurekaProgressStages,
             GetEurekaWeaponItemLookup(),
-            stage => stage.Key == "eureka-hydatos",
-            completed => $"丰水完成职业 {completed}/{RelicWeaponGuide.EurekaWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+            stage => stage.Key == "eureka-physeos",
+            completed => $"补正完成职业 {completed}/{RelicWeaponGuide.EurekaWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
 
     private void DrawResistanceWeaponProgressPanel()
         => DrawWeaponProgressPanel(
@@ -1269,7 +1269,7 @@ public sealed class PluginUI
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetPhantomWeaponItemLookup()
     {
-        weaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), PhantomWeaponGuide.WeaponJobs, PhantomWeaponGuide.ProgressStages);
+        weaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), PhantomWeaponGuide.ProgressItemIds);
         return weaponItemLookup;
     }
 
@@ -1918,6 +1918,27 @@ public sealed class PluginUI
         return lookup;
     }
 
+    private static Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> BuildWeaponItemLookupById(
+        Lumina.Excel.ExcelSheet<Item> itemSheet,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<uint>> itemIds)
+    {
+        var lookup = new Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>();
+        foreach (var (key, ids) in itemIds)
+        {
+            var items = ids
+                .Where(itemId => itemSheet.TryGetRow(itemId, out _))
+                .Select(itemId => itemSheet.GetRow(itemId))
+                .Where(item => item.RowId > 0)
+                .ToArray();
+            if (items.Length > 0)
+            {
+                lookup[key] = items;
+            }
+        }
+
+        return lookup;
+    }
+
     private static PhantomWeaponProgressStage? GetHighestSyncedStage(
         string seriesKey,
         PhantomWeaponJob job,
@@ -2538,6 +2559,12 @@ public sealed class PluginUI
         }
 
         ImGui.SameLine();
+        if (ImGui.Button("导出幻武 Item.RowId##debug-export-phantom-item-ids"))
+        {
+            ExportPhantomWeaponItemIds();
+        }
+
+        ImGui.SameLine();
         if (ImGui.Button("读取当前坐标##debug-print-coords"))
         {
             var player = DalamudApi.ObjectTable[0];
@@ -2610,6 +2637,50 @@ public sealed class PluginUI
         if (ImGui.Button("读取战斗记忆（未完成）##debug-read-memory-ui"))
         {
             PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
+        }
+    }
+
+    private static void ExportPhantomWeaponItemIds()
+    {
+        var itemsByName = DalamudApi.DataManager.GetExcelSheet<Item>()
+            .Where(item => item.RowId > 0)
+            .GroupBy(item => item.Name.ExtractText(), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var lines = new List<string> { "# JobKey|StageKey|Item.RowId|ItemName" };
+        var found = 0;
+        var missing = 0;
+
+        for (var stageIndex = 0; stageIndex < PhantomWeaponGuide.ProgressStages.Count; stageIndex++)
+        {
+            var stage = PhantomWeaponGuide.ProgressStages[stageIndex];
+            foreach (var job in PhantomWeaponGuide.WeaponJobs)
+            {
+                foreach (var name in job.StageItemNames[stageIndex].Where(name => !string.IsNullOrWhiteSpace(name)))
+                {
+                    if (itemsByName.TryGetValue(name, out var item))
+                    {
+                        found++;
+                        lines.Add($"{job.Key}|{stage.Key}|{item.RowId}|{name}");
+                    }
+                    else
+                    {
+                        missing++;
+                        lines.Add($"{job.Key}|{stage.Key}|MISSING|{name}");
+                    }
+                }
+            }
+        }
+
+        try
+        {
+            var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "phantom-item-ids.txt");
+            File.WriteAllLines(path, lines);
+            PrintChat($"已导出幻武 Item.RowId：匹配 {found}，未匹配 {missing}。文件：{path}");
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Error(ex, "Failed to export Phantom item IDs.");
+            PrintChat($"导出幻武 Item.RowId 失败：{ex.Message}");
         }
     }
 
@@ -3236,7 +3307,7 @@ public sealed class PluginUI
 
         ImGui.SetNextWindowSize(new Vector2(300, 0), ImGuiCond.FirstUseEver);
         var floatingOpen = configuration.ShowFloatingObjectiveWindow;
-        if (!ImGui.Begin("秘影目标##floating-secret-targets", ref floatingOpen,
+        if (!ImGui.Begin("肝武助手##floating-secret-targets", ref floatingOpen,
                 ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoScrollbar))
         {
             if (configuration.ShowFloatingObjectiveWindow != floatingOpen)
