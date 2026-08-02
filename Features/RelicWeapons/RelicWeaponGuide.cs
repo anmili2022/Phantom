@@ -317,7 +317,7 @@ public static class RelicWeaponGuide
                 Requirements(("eureka-pyros-crystals", "涌火水晶", 650, "涌火武器合计。"), ("eureka-penthesilea-flames", "彭忒西勒亚的火种", 5, "禁地兵装·涌火最终强化。"), ("eureka-logograms", "文理技能图鉴", 30, "涌火武器阶段要求。"))),
             Stage("eureka-hydatos", "丰水武器", "iLvl 390-405", "优雷卡丰水之地", "强化至禁地兵装最终形态。",
                 Requirements(("eureka-hydatos-crystals", "丰水水晶", 350, "丰水武器合计。"), ("eureka-crystalline-scales", "水晶龙之鳞", 5, "禁地兵装最终形态。"))),
-            Stage("eureka-physeos", "禁地兵装·改装", "iLvl 405", "优雷卡专用效果强化", "使用优雷卡断片追加优雷卡专用效果。",
+            Stage("eureka-physeos", "补正", "iLvl 405", "优雷卡专用效果强化", "使用优雷卡断片追加优雷卡专用效果。",
                 Requirements(("eureka-fragments", "优雷卡的断片", 100, "武器改装阶段。"))),
         });
 
