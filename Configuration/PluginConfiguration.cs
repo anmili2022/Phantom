@@ -15,6 +15,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowFloatingObjectiveWindow { get; set; } = true;
     public bool ShowSecretTargetsInFloatingWindow { get; set; } = true;
     public bool ShowSecretDutiesInFloatingWindow { get; set; } = true;
+    public bool ShowAvailableFatesInFloatingWindow { get; set; } = true;
     public bool AutoHideCompletedFloatingItems { get; set; } = true;
     public bool GroupWeaponProgressByRole { get; set; }
     public bool ShowWeaponProgressIcons { get; set; } = true;
@@ -23,6 +24,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public uint FloatingSecretTerritoryType { get; set; }
     public bool FloatingManualMode { get; set; }
     public int SelectedStageIndex { get; set; }
+    public int SelectedMandervilleStageIndex { get; set; }
+    public Dictionary<string, int> SelectedRelicStageIndexes { get; set; } = new();
     public Dictionary<string, int> Progress { get; set; } = new();
     public HashSet<string> CompletedTasks { get; set; } = new();
     public Dictionary<string, Dictionary<string, uint>> WeaponProgressByCharacter { get; set; } = new();

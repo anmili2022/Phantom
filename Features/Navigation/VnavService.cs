@@ -91,6 +91,28 @@ public sealed class VnavService : IDisposable
         }
     }
 
+    public void NavigateToFate(Vector3 targetPos, bool fly)
+    {
+        try
+        {
+            var snapped = SnapToNavmesh(targetPos);
+            if (snapped.HasValue)
+            {
+                StartMove(snapped.Value, fly);
+                return;
+            }
+
+            DalamudApi.Log.Warning("vnavmesh could not snap to FATE position; trying the raw FATE position.");
+            PrintEcho("FATE 目标点不在当前网格范围，尝试直接导航到 FATE 坐标。 ");
+            StartMove(targetPos, fly);
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Warning(ex, "FATE navigation request failed.");
+            PrintEcho($"FATE 导航失败：{ex.Message}");
+        }
+    }
+
     public void TeleportAndNavigate(Vector3 targetPos, bool fly)
     {
         var snapped = SnapToNavmesh(targetPos);

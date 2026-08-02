@@ -1,16 +1,16 @@
 # 肝武助手设计文档
 
-> 当前版本：0.1.6.0（待发布）| 更新日期：2026-08-01
+> 当前版本：0.1.7.0 | 更新日期：2026-08-02
 
 ## 目标
 
-肝武助手是一个 Dalamud/卫月插件，用于辅助《最终幻想 XIV》多系列武器制作流程，当前已接入幻境武器和妖怪手表联动奖励追踪。
+肝武助手是一个 Dalamud/卫月插件，用于辅助《最终幻想 XIV》多系列武器与生产工具制作流程，当前已接入幻境武器、曼德维尔武器、旧资料片肝武、生产采集特殊工具、绝武和妖怪手表联动奖励追踪。
 
 当前目标：
 
-- 以左侧系列导航统一管理幻武、古武、魂武、优武、义武、曼武和妖表联动。
+- 以左侧系列导航统一管理幻武、古武、魂武、优武、义武、曼武、天钢、莫雯、宇宙、绝武和妖表联动。
 - 展示幻境武器各阶段所需材料、一次性流程和可重复来源。
-- 自动同步当前角色的幻境武器持有进度和妖表奖励状态。
+- 自动同步当前角色的幻武、旧肝武、曼武、特殊工具、绝武持有进度和妖表奖励状态。
 - 用醒目标记区分“仅需完成一次”的流程，并为秘影阶段提供目标与 FATE 追踪。
 
 非首版目标：
@@ -22,15 +22,39 @@
 ## 参考资料
 
 - 幻境武器资料：https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8
+- 古武（上古武器）资料：https://ff14.huijiwiki.com/wiki/%E4%B8%8A%E5%8F%A4%E6%AD%A6%E5%99%A8
+- 古武（黄道武器）资料：https://ff14.huijiwiki.com/wiki/%E9%BB%84%E9%81%93%E6%AD%A6%E5%99%A8
+- 魂武（元灵武器）资料：https://ff14.huijiwiki.com/wiki/%E5%85%83%E7%81%B5%E6%AD%A6%E5%99%A8
+- 优武（禁地兵装）资料：https://ff14.huijiwiki.com/wiki/%E7%A6%81%E5%9C%B0%E5%85%B5%E8%A3%85
+- 义武（义军武器）资料：https://ff14.huijiwiki.com/wiki/%E4%B9%89%E5%86%9B%E6%AD%A6%E5%99%A8
+- 曼武（曼德维尔武器）资料：https://ff14.huijiwiki.com/wiki/%E6%9B%BC%E5%BE%B7%E7%BB%B4%E5%B0%94%E6%AD%A6%E5%99%A8
+- 天钢资料：https://ff14.huijiwiki.com/wiki/%E5%A4%A9%E9%92%A2%E5%B7%A5%E5%85%B7
+- 莫雯资料：https://ff14.huijiwiki.com/wiki/%E8%8E%AB%E9%9B%AF%E5%8D%93%E8%B6%8A%E5%B7%A5%E5%85%B7
+- 宇宙资料：https://ff14.huijiwiki.com/wiki/%E5%AE%87%E5%AE%99%E5%B7%A5%E5%85%B7
 - 秘影阶段目标小怪坐标参考：https://www.xivdaily.com/cn/hunts/dt?result
 - Dalamud/卫月 API 文档：https://dalamud.dev/api/
 - Lumina.Excel 文档：https://github.com/NotAdam/Lumina.Excel
 - 导航 IPC 参考项目：`E:\git\Chronicler`
 
+## 系列范围与英文名称
+
+| 系列 | 正式英文名称 | 说明 |
+| --- | --- | --- |
+| 古武 | Zodiac Weapons | 2.x 古代武器系列；上古武器为第一、二阶段，黄道武器为第三至第八阶段。 |
+| 魂武 | Anima Weapons | 3.x 元灵武器系列。 |
+| 优武 | Eureka Weapons | 4.x 禁地兵装系列。 |
+| 义武 | Resistance Weapons | 5.x 南方博兹雅战线相关系列；`Bozja Weapons` 可作为检索别名，不作为正式名称。 |
+| 曼武 | Manderville Weapons | 6.x 曼德维尔武器系列；`Mandervillous Weapons` 可作为检索别名，不作为正式名称。 |
+| 幻武 | Phantom Weapons | 7.x 幻境武器系列。 |
+| 天钢 | Skysteel Tools | 生产采集职业工具系列。 |
+| 莫雯 | Splendorous Tools | 生产采集职业工具系列。 |
+| 宇宙 | Cosmic Tools | 生产采集职业工具系列。 |
+| 绝武 | Ultimate Weapons | 绝境战武器奖励统称，包含绝巴哈、绝神兵、绝亚、绝龙诗、绝欧、绝伊甸和绝妖星。 |
+
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.6.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.6.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.7.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.7.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider）。
@@ -42,6 +66,8 @@
 - `UI/PluginUI.cs`：主窗口、左侧系列导航、自绘阶段页签、武器进度总览、妖表页面、悬浮窗和设置页。
 - `Features/Yokai/YokaiWatchGuide.cs`：妖表联动奖励定义。
 - `Features/Yokai/YokaiProgressService.cs`：背包、装备栏、兵装库和投影台奖励扫描。
+- `Features/Manderville/MandervilleWeaponGuide.cs`：曼德维尔武器四阶段任务与材料资料。
+- `Features/RelicWeapons/RelicWeaponGuide.cs`：古武、魂武、优武、义武、天钢、莫雯、宇宙和绝武的阶段资料。
 - `docs/`：设计文档、使用说明（usage.html）、发布指南（release.md）、幻境村路由移植指南（occult-village-route-porting.md）。
 
 ## 当前进度
@@ -53,8 +79,13 @@
 - 秘影阶段按地图的目标清单、坐标、导航。
 - 悬浮窗口显示当前地图秘影进度。
 - 聊天消息自动标记击杀、讨伐任务组、探索记忆组和金牌 FATE。
-- 武器进度总览页，支持按职业分组和按角色保存。
+- 总览页按当前角色汇总职业收藏、绝武收藏、妖表奖励、雇员缓存覆盖和各系列完成度，支持一键同步全部系列。
+- 各系列武器进度页支持按职业分组、物品图标、角色维度保存和库存自动同步。
 - 妖表联动奖励扫描，支持隐藏已获得奖励、投影台缓存状态和按类别展示。
+- 曼德维尔武器四阶段资料展示，支持任务与材料的手动进度保存。
+- 古武、魂武、优武、义武、天钢、莫雯、宇宙和绝武资料页，复用阶段页签、任务勾选、材料手动进度和职业持有同步。
+- 绝武按七个绝本独立统计，并提供“总进度”页；各绝本不是线性阶段，只有实际持有对应武器时才点亮。
+- 武器扫描读取背包、兵装库、装备栏、当前可用库存和 `ItemFinderModule.RetainerInventories` 雇员缓存。
 - 左侧导航显示当前角色与插件状态，右侧阶段页签使用与武器进度卡片一致的自绘配色。
 - vnavmesh + Lifestream 的两段式导航，以及“前往幻境村”独立入口。
 
@@ -63,7 +94,6 @@
 - 材料进度仍然手填。
 - 任务状态仍然手动勾选。
 - 物品计数进度尚未做成自动汇总显示。
-- 其他肝武系列目前保留入口，专属数据模型尚未接入。
 - 多语言支持仍未开始。
 
 ## 数据模型
@@ -81,15 +111,57 @@
 用户进度保存在 `PluginConfiguration`：
 
 - `SelectedStageIndex`：当前选中的阶段。
+- `SelectedMandervilleStageIndex`：曼德维尔页面当前选中的阶段。
 - `Progress`：键为资料项 Key，值为当前进度。
 - `CompletedTasks`：已完成的一次性流程 Key（含秘影目标、讨伐任务）。
 - `FloatingSecretTerritoryType` / `FloatingManualMode`：悬浮窗当前地图与手动模式。
 - `ShowSecretTargetsInFloatingWindow` / `ShowSecretDutiesInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗显示选项。
+- `ShowAvailableFatesInFloatingWindow`：在悬浮窗显示当前地图可参与的 FATE 及导航按钮。
 - `GroupWeaponProgressByRole` / `ShowWeaponProgressIcons`：武器进度总览选项。
 - `WeaponProgressByCharacter` / `WeaponProgressItemsByCharacter` / `WeaponProgressSyncTimes`：按角色维度的武器进度总览数据。
 - `YokaiOwnedRewardKeysByCharacter` / `YokaiSyncTimesByCharacter`：按角色维度保存妖表奖励和同步时间。
 - `HideOwnedYokaiRewards`：妖表页面是否隐藏已获得奖励。
 - `TuliyollalAetheryteId`：旧配置字段（默认 13），幻境村路由当前使用固定常量 216，不再读取此字段。
+
+## 总览与库存同步
+
+总览页只展示能够由现有配置、Lumina Item 表和游戏库存可靠计算的数据，不生成虚构任务或材料统计。
+
+顶部汇总：
+
+- `职业收藏`：十个自动扫描系列中，至少持有一个阶段物品的职业数量。
+- `绝武收藏`：按“职业 × 绝本”独立计数；骑士同一绝本的剑盾记录在同一阶段。
+- `妖表奖励`：当前角色已保存的妖表奖励数量。
+- `库存覆盖`：本次会话从服务器刷新过的雇员数，以及最近一次武器同步时间。
+
+“刷新扫描”调用 `SyncAllCurrentCharacterProgress()`：
+
+- 依次同步幻武、古武、魂武、优武、义武、曼武、天钢、莫雯、宇宙和绝武。
+- 同步妖表奖励，并按当前角色 ContentId 保存。
+- 系列卡片显示“至少持有一个阶段的职业数 / 该系列职业总数”，点击进入对应栏目。
+
+### 物品匹配
+
+- 静态职业数据保存各阶段中文物品名。
+- `BuildWeaponItemLookup()` 从 Lumina `Item` 表按完整名称构建 lookup，运行时使用 `Item.RowId` 匹配。
+- 空物品名表示该绝本或阶段当时没有对应职业武器，构建 lookup 时跳过。
+- 绝武总进度的每一段独立读取对应绝本的同步结果，不根据最高阶段补亮前段。
+
+### 雇员缓存语义
+
+- `InventoryManager` 提供当前已加载的背包、兵装库、装备栏和库存容器。
+- `ItemFinderModule.RetainerInventories` 保存雇员装备槽与库存槽的客户端缓存；插件直接扫描其中的 `EquippedItemIds` 和 `ItemIds`。
+- `ItemFinderModule.IsRetainerCurrent(retainerId)` 为 `true` 表示该雇员已在本次登录后打开，数据由当前会话从服务器加载。
+- 重登后本地缓存通常仍可读取，但 `IsRetainerCurrent` 会重置，因此缓存可能不是最新数据。
+- `/物品检索 物品` 可临时刷新当前检索物品的 `ItemFinderModule.Result`；该结果参与同步并写入插件角色进度缓存，但不会刷新完整雇员库存。
+- 要确保完整雇员库存最新，仍需通过传唤铃打开对应雇员后再执行同步。
+
+总览显示文本：
+
+```text
+雇员库存：0/7 个已在本次登录后打开并刷新，7/7 个已缓存（可能不是最新数据）
+/物品检索 物品 可临时刷新
+```
 
 ## 秘影阶段需求
 
@@ -235,7 +307,10 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 
 - 左侧固定导航栏分为 `Workspace` 和 `Tools` 两组。
 - 左侧显示品牌、系列入口、数量、当前角色和插件启用状态。
+- 左侧角色状态上方提供“前往幻境村”按钮；启用状态只读显示，插件默认启用且不在幻武页重复提供开关。
 - 右侧显示当前系列内容；幻境武器页面顶部为横向阶段页签。
+- 幻武页面顶部只保留当前阶段进度重置操作，不显示全局导航和悬浮窗选项。
+- 飞行导航、悬浮窗、自动标记击杀等全局开关集中放在设置页。
 - 阶段页签使用自绘按钮，选中项为深青背景、亮青边框和左侧高亮条，未选中项使用更暗的武器进度卡片配色。
 - 阶段页签只使用 `InvisibleButton` 作为布局占位，背景和文字通过窗口 DrawList 绘制，避免 `SameLine` 产生阶梯状错位。
 - 当前角色信息只在左侧导航显示，妖表页面和幻境武器进度页面不再重复显示。
@@ -252,9 +327,12 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 
 已实现的其他 UI 元素：
 
-- 顶栏“前往幻境村”按钮 → `VnavService.GoToOccultVillage()`。
+- 左侧角色状态上方“前往幻境村”按钮 → `VnavService.GoToOccultVillage()`。
 - 武器进度总览（按职业/阶段/角色维度，含物品名片段匹配与图标）。
 - 悬浮窗显示选项：是否显示秘影目标、是否显示讨伐任务、自动隐藏已完成项。
+- 设置页提供“悬浮窗显示可参与 FATE”开关；开启后悬浮窗按距离列出当前地图处于准备/进行中的未完成 FATE，每项提供导航按钮。
+- 悬浮窗最上方显示“当前可参与 FATE”，按距离列出当前地图处于准备/进行中的未完成 FATE，每项提供导航按钮。
+- FATE 导航复用 `VnavService`：目标较远时先前往附近以太水晶，再使用 vnavmesh 导航；目标较近时直接导航；找不到附近网格点时尝试直接使用 FATE 原始坐标。
 
 ### 妖表联动页面
 
@@ -265,6 +343,17 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 3. 注意：不同宠物掉落的材料不一样。该行使用红色强调。
 
 奖励按妖怪手表、坐骑、肖像、宠物和武器分类展示。同步扫描背包、关键道具、装备栏、兵装库和投影台缓存，结果按角色 ContentId 保存。
+
+### 曼德维尔武器页面
+
+曼德维尔页面复用幻武的阶段资料展示组件，但使用独立的阶段选择配置和资料 Key：
+
+- 曼德维尔武器：iLvl 615，稀少陨石 ×3，1500 亚拉戈诗学神典石。
+- 曼德维尔武器·惊异：iLvl 630，稀少球粒陨石 ×3，1500 亚拉戈诗学神典石。
+- 曼德维尔武器·威严：iLvl 645，稀少无球粒陨石 ×3，1500 亚拉戈诗学神典石。
+- 曼德维尔武器·盈满：iLvl 665，雏晶 ×3，1500 亚拉戈诗学神典石。
+
+当前版本只提供 Wiki 资料、一次性任务勾选和材料手动进度，不执行曼武物品自动扫描。资料来源：<https://ff14.huijiwiki.com/wiki/%E6%9B%BC%E5%BE%B7%E7%BB%B4%E5%B0%94%E6%AD%A6%E5%99%A8>。
 
 ## 战斗记忆界面读取（未完成）
 
@@ -291,7 +380,8 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 
 ### 击杀小怪
 
-- 匹配关键词：打倒、击倒、讨伐、消灭、defeat、defeated、slay、slain。
+- 消息必须同时包含“战斗的记忆”“讨伐”“只”和目标名，例如“战斗的记忆：讨伐1只图拉尔蜜獾”。
+- 不再使用“打倒/击倒/消灭/defeat/slay”等泛关键词，避免普通击杀聊天误判。
 - 匹配当前 `TerritoryType` 下未完成的秘影目标名，命中即加入 `CompletedTasks`。
 
 ### 讨伐任务分组完成

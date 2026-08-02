@@ -1,13 +1,13 @@
-# 幻境武器助手 — 项目交接文档
+# 肝武助手 — 项目交接文档
 
-> 生成日期：2026-08-01 | 版本：0.1.6.0 | Git: `main`（待发布版本）
+> 更新日期：2026-08-02 | 版本：0.1.7.0 | Git: `main`
 > 远程仓库：https://github.com/anmili2022/Phantom
 
 ---
 
 ## 一、项目概况
 
-幻境武器助手是一个 Dalamud（卫月）API 15 插件，用于在《最终幻想 XIV》中追踪幻境武器制作进度。参考代码库 `Chronicler`（新月岛史官）的结构和 IPC 调用方式。
+肝武助手是一个 Dalamud（卫月）API 15 插件，用于在《最终幻想 XIV》中追踪幻武、旧肝武、曼武、生产采集特殊工具、绝武和妖表联动收藏。参考代码库 `Chronicler`（新月岛史官）的结构和 IPC 调用方式。
 
 ### 技术栈
 
@@ -27,7 +27,12 @@
 - 阶段页展示、材料与进度手填、一次性流程勾选。
 - 秘影目标列表、坐标展示、导航按钮、悬浮追踪窗。
 - 聊天事件自动标记：击杀小怪、讨伐任务组、探索记忆组、金牌 FATE。
-- 武器进度总览：按职业/角色同步并展示已持有阶段。
+- 总览页：汇总职业收藏、绝武收藏、妖表奖励、各系列完成度和雇员缓存覆盖；“刷新扫描”同步全部系列。
+- 武器进度页：按职业/角色同步并展示已持有阶段，支持按职能分组和武器图标。
+- 曼德维尔武器四阶段资料页：任务链和材料支持手动勾选/录入。
+- 古武、魂武、优武、义武、天钢工具、莫雯工具、宇宙工具、绝本武器资料页：复用阶段页签、任务勾选、材料手动进度和职业持有同步。
+- 绝武覆盖绝巴哈、绝神兵、绝亚、绝龙诗、绝欧米茄、绝伊甸和绝妖星；每个绝本有独立页签，并提供七阶段总进度。
+- 雇员武器通过 `ItemFinderModule.RetainerInventories` 客户端缓存扫描。
 - 前往幻境村的独立导航入口。
 
 ### 目录结构
@@ -40,7 +45,7 @@ E:\git\Phantom\
 ├── .gitignore
 ├── packages.lock.json
 ├── images/
-│   └── icon.png            # 插件图标（64×64，占位，待替换）
+│   └── icon.png            # 插件图标
 ├── Plugin/
 │   └── PhantomPlugin.cs    # 插件入口
 ├── Infrastructure/
@@ -54,10 +59,15 @@ E:\git\Phantom\
 │       ├── PhantomWeaponGuide.cs  # 武器阶段静态资料
 │       ├── SecretKillTracker.cs   # 聊天击杀自动标记
 │       └── FateTracker.cs         # 金牌 FATE 自动检测
+│   └── Manderville/
+│       └── MandervilleWeaponGuide.cs # 曼德维尔武器四阶段资料
+│   └── RelicWeapons/
+│       └── RelicWeaponGuide.cs # 旧肝武、工具、绝本资料
 ├── UI/
-│   └── PluginUI.cs         # 主窗口 + 悬浮窗 + DEBUF 页
+│   └── PluginUI.cs         # 主窗口、总览、各系列进度、悬浮窗和设置页
 ├── docs/
 │   ├── design.md           # 设计文档（原始）
+│   ├── overview-ui-preview.html # 总览 HTML 原型
 │   ├── usage.html          # 使用说明 HTML
 │   └── AI_HANDOVER.md      # 本文件
 └── output/                 # 构建产物（gitignored）
@@ -95,12 +105,18 @@ PhantomWeaponTarget  // 秘影目标
 - Enabled                   // 全局开关
 - UseFlightNavigation       // 飞行导航
 - ShowFloatingObjectiveWindow  // 悬浮窗显示
+- ShowAvailableFatesInFloatingWindow // 悬浮窗显示当前可参与 FATE
 - AutoMarkSecretKills       // 自动标记击杀
 - FloatingSecretTerritoryType // 悬浮窗当前地图
 - FloatingManualMode        // 悬浮窗手动模式
 - SelectedStageIndex        // 选中 Tab
+- SelectedMandervilleStageIndex // 曼德维尔选中阶段
 - Progress                  // Dictionary<string, int> 进度
 - CompletedTasks            // HashSet<string> 一次性任务完成
+- SelectedRelicStageIndexes // 各资料系列当前阶段
+- WeaponProgressItemsByCharacter // 按角色保存各系列同步到的 Item RowId
+- WeaponProgressSyncTimes   // 按角色保存最近同步时间
+- YokaiOwnedRewardKeysByCharacter // 按角色保存妖表奖励
 ```
 
 ---
@@ -172,7 +188,8 @@ NavigateTo(PhantomWeaponTarget)
 
 ### SecretKillTracker
 - 监听 `ChatGui.ChatMessage`
-- 匹配关键词：打倒、击倒、讨伐、消灭、defeat、defeated、slay、slain
+- 小怪消息要求同时包含“战斗的记忆”“讨伐”“只”和当前地图目标名，避免泛击杀文本误判
+- 先匹配秘影副本/探索记忆任务文本，命中后直接标记对应任务组
 - 匹配当前 TerritoryType 的秘影目标名
 - 命中后加入 `CompletedTasks` 并保存
 
@@ -188,9 +205,16 @@ NavigateTo(PhantomWeaponTarget)
 
 ### 主窗口（`Draw`）
 ```
-header (启用/飞行/悬浮/自动标记/重置)
+左侧导航
+├── Workspace / Tools 系列入口
+├── 前往幻境村
+└── 当前角色 + 插件状态
+右侧内容
+├── 总览：全系列汇总、系列收藏卡片、库存覆盖、快捷入口
+├── 各武器/工具系列：阶段页签 + 职业进度
+└── 幻武页仅显示当前阶段进度重置
 Separator
-TabBar
+自绘阶段页签
 ├── 半影 Tab → DrawStage()
 ├── 本影 Tab → DrawStage()
 ├── 黯影 Tab → DrawStage()
@@ -201,7 +225,12 @@ TabBar
 │       ├── 每地图 CollapsingHeader
 │       ├── 进度条 + FATE +/- 计数器
 │       └── 表格（勾选/名称/坐标/导航）
-└── DEBUG Tab
+└── 设置页
+    ├── 飞行导航
+    ├── 悬浮窗
+    ├── 自动标记击杀
+    ├── 悬浮窗自动隐藏已完成项目
+    ├── 悬浮窗显示可参与 FATE
     ├── 读取当前坐标
     ├── 测试坐标换算
     └── 解析地图参数
@@ -210,14 +239,16 @@ TabBar
 ### 悬浮窗（`DrawFloatingObjectiveWindow`）
 ```
 header (地图名 + 停止导航 + < > 当)
+可参与 FATE 列表（最上方，名称/状态/进度/剩余时间/导航）
 进度条 (完成数/9)
 金牌 FATE 行 (+/- 计数器 + 最近FATE)
 Separator
 目标列表 (未完成: 名称, 坐标, 导航)
 ```
-- 右键菜单：打开主窗口/飞行/自动标记/关闭
+- 右键菜单：打开主窗口/飞行/自动标记/关闭；正式设置入口在设置页。
 - 手动模式用 `FloatingManualMode` 标志切换
 - 切换到手动后，`<`/`>`循环 6 张地图
+- FATE 导航调用 `VnavService.NavigateToFate()`；vnavmesh 近邻网格查询失败时回退到原始 FATE 坐标。
 
 ---
 
@@ -281,7 +312,10 @@ A: 确保已安装 vnavmesh 和 Lifestream。检查悬浮窗的「停止导航�
 A: 使用 DEBUG 页「解析地图参数」+「测试坐标换算」验证当前地图的 SizeFactor 和 Offset 是否已知。需要手动更新 `PhantomWeaponGuide.cs` 中的坐标。
 
 ### Q: 自动标记没生效？
-A: 检查工具栏的「自动标记击杀」是否勾选，以及聊天语言是否和关键词匹配（中文客户端用中文关键词）。
+A: 检查设置页的「自动标记击杀」是否勾选，以及聊天语言是否和关键词匹配（中文客户端用中文关键词）。
+
+### Q: FATE 导航提示找不到可走网格点？
+A: Phantom 会先查询 FATE 附近的 vnavmesh 网格点；查询失败时会回退到 FATE 原始坐标继续尝试导航。仍然失败时，确认 vnavmesh 已加载且角色位于对应地图。
 
 ### Q: 如何给新地图添加目标？
 A: 在 `PhantomWeaponGuide.cs` 的 `SecretTargets` 数组中添加 `new PhantomWeaponTarget(...)`，需提供正确的 TerritoryType 和已验证的地图坐标。

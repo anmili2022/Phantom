@@ -2,7 +2,7 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 
   <PropertyGroup>
-    <AssemblyVersion>0.1.6.0</AssemblyVersion>
+    <AssemblyVersion>0.1.7.0</AssemblyVersion>
     <InternalName>Phantom</InternalName>
     <RootNamespace>Phantom</RootNamespace>
     <Description>A Dalamud plugin.</Description>

@@ -2,17 +2,6 @@ namespace Phantom;
 
 public sealed class SecretKillTracker : IDisposable
 {
-    private static readonly string[] KillKeywords =
-    {
-        "打倒",
-        "击倒",
-        "讨伐",
-        "消灭",
-        "defeat",
-        "defeated",
-        "slay",
-        "slain",
-    };
     private static readonly (string MemoryName, IReadOnlyList<string> Zones)[] ExplorationMemoryGroups =
     {
         ("场景探索：尤卡图拉尔", new[] { "奥阔帕恰山", "克扎玛乌卡湿地", "亚克特尔树海" }),
@@ -50,7 +39,7 @@ public sealed class SecretKillTracker : IDisposable
             return;
         }
 
-        if (!LooksLikeKillMessage(text))
+        if (!LooksLikeSecretTargetMessage(text))
         {
             return;
         }
@@ -196,14 +185,16 @@ public sealed class SecretKillTracker : IDisposable
                && text.Contains(shortName, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool LooksLikeKillMessage(string text)
+    private static bool LooksLikeSecretTargetMessage(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             return false;
         }
 
-        return KillKeywords.Any(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        return text.Contains("战斗的记忆", StringComparison.OrdinalIgnoreCase)
+               && text.Contains("讨伐", StringComparison.OrdinalIgnoreCase)
+               && text.Contains("只", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ExtractChatMessageText(object message)

@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>肝武助手 - 总览设计预览</title>
+  <style>
+    :root {
+      --bg: #0b1015;
+      --sidebar: #10171d;
+      --panel: #151d24;
+      --panel-soft: #19242c;
+      --line: #2a3943;
+      --line-bright: #3d5961;
+      --text: #e7eef0;
+      --muted: #84959d;
+      --dim: #52636b;
+      --cyan: #68d5cb;
+      --cyan-soft: #18383a;
+      --gold: #e4b767;
+      --green: #7fd19a;
+      --blue: #79ace0;
+      --purple: #a998e8;
+      --orange: #df9365;
+      --danger: #e57e79;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body {
+      margin: 0;
+      min-width: 1020px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 76% -10%, rgba(72, 144, 148, .11), transparent 32%),
+        var(--bg);
+      font: 13px/1.45 "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    button { color: inherit; font: inherit; }
+    .app { display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: 100vh; }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: hidden;
+      border-right: 1px solid var(--line);
+      background: rgba(16, 23, 29, .98);
+      padding: 18px 12px 14px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 2px 9px 17px; }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid #467b79;
+      border-radius: 7px;
+      color: #bafff7;
+      background: linear-gradient(145deg, #224044, #14272c);
+      font-weight: 800;
+    }
+    .brand strong { display: block; font-size: 15px; letter-spacing: .5px; }
+    .brand small { color: var(--muted); font-size: 10px; letter-spacing: .7px; }
+    .nav-group { margin: 9px 9px 5px; color: var(--dim); font-size: 10px; letter-spacing: 1.4px; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      height: 34px;
+      margin: 1px 0;
+      padding: 0 10px;
+      border: 0;
+      border-left: 2px solid transparent;
+      border-radius: 0 6px 6px 0;
+      color: #b6c1c6;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .nav-item:hover { background: #182229; }
+    .nav-item.active { border-left-color: var(--cyan); color: #c4fff8; background: #1a3033; }
+    .nav-icon { width: 17px; color: #70848c; text-align: center; }
+    .nav-item.active .nav-icon { color: var(--cyan); }
+    .nav-count { margin-left: auto; color: #6f828a; font-size: 11px; }
+    .sidebar-foot {
+      position: absolute;
+      right: 12px;
+      bottom: 14px;
+      left: 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #131c22;
+      padding: 10px 11px;
+    }
+    .character { display: flex; align-items: center; gap: 9px; }
+    .avatar { display: grid; place-items: center; width: 29px; height: 29px; border-radius: 50%; background: #284044; color: var(--cyan); font-weight: 700; }
+    .character strong { display: block; font-size: 12px; }
+    .character small { color: var(--muted); font-size: 10px; }
+
+    .workspace { min-width: 0; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 58px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(15, 22, 28, .91);
+      padding: 0 26px;
+    }
+    .breadcrumb { color: var(--muted); }
+    .breadcrumb b { color: var(--text); font-weight: 500; }
+    .toolbar { display: flex; align-items: center; gap: 8px; }
+    .sync-state { margin-right: 6px; color: var(--muted); font-size: 11px; }
+    .sync-state i { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--green); }
+    .button {
+      border: 1px solid var(--line-bright);
+      border-radius: 5px;
+      background: #182229;
+      padding: 7px 11px;
+      cursor: pointer;
+    }
+    .button:hover { border-color: var(--cyan); background: #203238; }
+    .button.primary { border-color: #4c8985; color: #c5fff8; background: #23413f; }
+
+    main { max-width: 1440px; padding: 25px 27px 38px; }
+    h1, h2, h3, p { margin: 0; }
+    .hero { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 19px; }
+    .hero h1 { font-size: 23px; font-weight: 620; letter-spacing: .3px; }
+    .hero p { margin-top: 4px; color: var(--muted); }
+    .view-tabs { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: #111920; }
+    .view-tabs button { border: 0; border-radius: 4px; background: transparent; padding: 6px 11px; color: var(--muted); cursor: pointer; }
+    .view-tabs button.active { color: #c8fff9; background: #274644; }
+
+    .metrics { display: grid; grid-template-columns: 1.35fr repeat(3, 1fr); gap: 11px; margin-bottom: 15px; }
+    .metric {
+      position: relative;
+      min-height: 104px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(145deg, #172129, #121a20);
+      padding: 15px 16px;
+    }
+    .metric.primary { border-color: #3e6e6d; background: linear-gradient(145deg, #1c3436, #142428); }
+    .metric.primary:after { content: ""; position: absolute; top: -58px; right: -35px; width: 150px; height: 150px; border: 23px solid rgba(104, 213, 203, .05); border-radius: 50%; }
+    .metric-label { color: var(--muted); font-size: 10px; letter-spacing: .9px; }
+    .metric-value { margin-top: 8px; font-size: 27px; font-weight: 650; line-height: 1; }
+    .metric-value span { color: var(--muted); font-size: 12px; font-weight: 400; }
+    .metric-note { margin-top: 9px; color: var(--muted); font-size: 11px; }
+    .bar { height: 5px; margin-top: 12px; overflow: hidden; border-radius: 3px; background: #2a363c; }
+    .bar i { display: block; height: 100%; border-radius: inherit; background: var(--cyan); }
+    .metric-warning { color: var(--gold); }
+
+    .layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(310px, .72fr); gap: 14px; }
+    .panel { border: 1px solid var(--line); border-radius: 8px; background: rgba(20, 29, 36, .94); }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; min-height: 51px; border-bottom: 1px solid var(--line); padding: 0 15px; }
+    .panel-head h2 { font-size: 14px; font-weight: 600; }
+    .panel-head small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .link { border: 0; color: var(--cyan); background: transparent; cursor: pointer; font-size: 11px; }
+
+    .series-filters { display: flex; gap: 6px; padding: 11px 14px 0; }
+    .chip { border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: transparent; padding: 3px 9px; cursor: pointer; font-size: 10px; }
+    .chip.active { border-color: #4c7d7a; color: #bafff7; background: #203638; }
+    .series-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding: 11px 14px 15px; }
+    .series-card {
+      position: relative;
+      min-height: 112px;
+      overflow: hidden;
+      border: 1px solid #2b3b44;
+      border-radius: 7px;
+      background: #172129;
+      padding: 12px 13px;
+      cursor: pointer;
+      transition: transform .12s ease, border-color .12s ease;
+    }
+    .series-card:hover { transform: translateY(-1px); border-color: #507179; }
+    .series-top { display: flex; align-items: center; justify-content: space-between; }
+    .series-name { display: flex; align-items: center; gap: 9px; }
+    .series-icon { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid currentColor; border-radius: 6px; font-size: 11px; }
+    .series-name strong { display: block; font-size: 12px; font-weight: 600; }
+    .series-name small { display: block; color: var(--muted); font-size: 9px; }
+    .owned { color: var(--text); font-size: 17px; font-weight: 650; }
+    .owned span { color: var(--muted); font-size: 10px; font-weight: 400; }
+    .series-card .bar { margin-top: 12px; }
+    .series-foot { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted); font-size: 10px; }
+    .phantom { color: var(--cyan); }
+    .legacy { color: var(--gold); }
+    .field { color: var(--green); }
+    .modern { color: var(--blue); }
+    .tool { color: var(--orange); }
+    .ultimate { color: var(--purple); }
+    .series-card.legacy .bar i { background: var(--gold); }
+    .series-card.field .bar i { background: var(--green); }
+    .series-card.modern .bar i { background: var(--blue); }
+    .series-card.tool .bar i { background: var(--orange); }
+    .series-card.ultimate .bar i { background: var(--purple); }
+
+    .side-stack { display: grid; align-content: start; gap: 14px; }
+    .coverage { padding: 7px 14px 12px; }
+    .coverage-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; min-height: 46px; border-bottom: 1px solid #26343c; }
+    .coverage-row:last-child { border-bottom: 0; }
+    .coverage-row strong { display: block; font-size: 11px; font-weight: 500; }
+    .coverage-row small { color: var(--muted); font-size: 9px; }
+    .badge { border: 1px solid #3f6856; border-radius: 10px; color: var(--green); background: #182c25; padding: 2px 7px; font-size: 9px; }
+    .badge.cache { border-color: #77613b; color: var(--gold); background: #2a2419; }
+    .coverage-alert { margin: 0 14px 14px; border-left: 2px solid var(--gold); background: #28231a; padding: 10px 11px; color: #cbb991; font-size: 10px; }
+
+    .shortcuts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; padding: 12px 14px 14px; }
+    .shortcut { border: 1px solid var(--line); border-radius: 6px; background: #172129; padding: 10px; text-align: left; cursor: pointer; }
+    .shortcut:hover { border-color: #55767d; background: #1b2931; }
+    .shortcut b { display: block; font-size: 11px; font-weight: 500; }
+    .shortcut small { color: var(--muted); font-size: 9px; }
+
+    .collection { grid-column: 1 / -1; margin-top: 14px; }
+    .legend { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 9px; }
+    .legend i { display: inline-block; width: 8px; height: 8px; margin-right: 3px; border-radius: 2px; }
+    .heatmap { padding: 11px 15px 15px; overflow: hidden; }
+    .heat-row { display: grid; grid-template-columns: 82px repeat(7, minmax(45px, 1fr)); gap: 5px; align-items: center; min-height: 29px; }
+    .heat-row.header { color: var(--muted); font-size: 9px; text-align: center; }
+    .job { color: #bdc8cc; font-size: 10px; }
+    .cell { height: 19px; border: 1px solid #2c3a42; border-radius: 3px; background: #1b252c; }
+    .cell.owned { border-color: #477772; background: #28514e; }
+    .cell.partial { border-color: #78623d; background: #4a3d28; }
+    .cell.na { opacity: .32; background: repeating-linear-gradient(135deg, #202a30 0 3px, #182127 3px 6px); }
+    .heat-note { margin-top: 9px; color: var(--muted); font-size: 9px; }
+
+    @media (max-width: 1160px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .layout { grid-template-columns: 1fr; }
+      .side-stack { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">肝</div><div><strong>肝武助手</strong><small>WEAPON ARCHIVE</small></div></div>
+      <div class="nav-group">WORKSPACE</div>
+      <button class="nav-item active"><span class="nav-icon">▦</span>总览</button>
+      <button class="nav-item"><span class="nav-icon">◆</span>幻武 · 幻境武器<span class="nav-count">4</span></button>
+      <button class="nav-item"><span class="nav-icon">◇</span>古武 · Zodiac<span class="nav-count">7</span></button>
+      <button class="nav-item"><span class="nav-icon">◈</span>魂武 · Anima<span class="nav-count">11</span></button>
+      <button class="nav-item"><span class="nav-icon">◉</span>优武 · Eurekan<span class="nav-count">8</span></button>
+      <button class="nav-item"><span class="nav-icon">✦</span>义武 · Resistance<span class="nav-count">13</span></button>
+      <button class="nav-item"><span class="nav-icon">✧</span>曼武 · Manderville<span class="nav-count">19</span></button>
+      <button class="nav-item"><span class="nav-icon">⌁</span>天钢 · Skysteel<span class="nav-count">5</span></button>
+      <button class="nav-item"><span class="nav-icon">⌘</span>莫雯 · Splendorous<span class="nav-count">8</span></button>
+      <button class="nav-item"><span class="nav-icon">△</span>宇宙 · Cosmic<span class="nav-count">3</span></button>
+      <button class="nav-item"><span class="nav-icon">♜</span>绝武 · Ultimate<span class="nav-count">16</span></button>
+      <button class="nav-item"><span class="nav-icon">◎</span>妖表联动<span class="nav-count">24</span></button>
+      <div class="nav-group">TOOLS</div>
+      <button class="nav-item"><span class="nav-icon">⚙</span>设置</button>
+      <div class="sidebar-foot"><div class="character"><div class="avatar">A</div><div><strong>Anmi</strong><small>幻影群岛 · 当前角色</small></div></div></div>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div class="breadcrumb">肝武助手&nbsp; / &nbsp;<b>总览</b></div>
+        <div class="toolbar"><span class="sync-state"><i></i>上次同步 14:26</span><button class="button">缓存状态</button><button class="button primary">↻ 同步全部系列</button></div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div><h1>武器收藏总览</h1><p>盘点当前角色持有的肝武、特殊工具与绝境战武器。</p></div>
+          <div class="view-tabs"><button class="active">当前角色</button><button>全部角色</button></div>
+        </section>
+
+        <section class="metrics">
+          <article class="metric primary"><div class="metric-label">已识别收藏</div><div class="metric-value">94 <span>件物品</span></div><div class="bar"><i style="width:61%"></i></div><div class="metric-note">覆盖 10 个武器系列与 3 个工具系列</div></article>
+          <article class="metric"><div class="metric-label">职业完成度</div><div class="metric-value">47 <span>/ 84 个终阶</span></div><div class="metric-note">本周新增 3 个终阶收藏</div></article>
+          <article class="metric"><div class="metric-label">绝武收藏</div><div class="metric-value">16 <span>把 · 7 个绝本</span></div><div class="metric-note">绝亚 5 · 绝龙诗 4 · 其他 7</div></article>
+          <article class="metric"><div class="metric-label">库存覆盖</div><div class="metric-value">6 <span>/ 10 个雇员已刷新</span></div><div class="metric-note metric-warning">4 个雇员使用登录缓存</div></article>
+        </section>
+
+        <div class="layout">
+          <section class="panel">
+            <div class="panel-head"><div><h2>系列收藏</h2><small>点击卡片进入对应进度页</small></div><button class="link">查看全部数据</button></div>
+            <div class="series-filters"><button class="chip active">全部</button><button class="chip">战斗武器</button><button class="chip">生产采集</button><button class="chip">活动收藏</button></div>
+            <div class="series-grid">
+              <article class="series-card phantom"><div class="series-top"><div class="series-name"><span class="series-icon">幻</span><div><strong>幻境武器</strong><small>PHANTOM</small></div></div><div class="owned">4<span>/21</span></div></div><div class="bar"><i style="width:19%"></i></div><div class="series-foot"><span>最高阶段：秘影</span><span>19%</span></div></article>
+              <article class="series-card legacy"><div class="series-top"><div class="series-name"><span class="series-icon">古</span><div><strong>古武</strong><small>ZODIAC</small></div></div><div class="owned">7<span>/10</span></div></div><div class="bar"><i style="width:70%"></i></div><div class="series-foot"><span>本我完成 3 职业</span><span>70%</span></div></article>
+              <article class="series-card legacy"><div class="series-top"><div class="series-name"><span class="series-icon">魂</span><div><strong>魂武</strong><small>ANIMA</small></div></div><div class="owned">11<span>/13</span></div></div><div class="bar"><i style="width:85%"></i></div><div class="series-foot"><span>灵光完成 8 职业</span><span>85%</span></div></article>
+              <article class="series-card field"><div class="series-top"><div class="series-name"><span class="series-icon">优</span><div><strong>优武</strong><small>EUREKAN</small></div></div><div class="owned">8<span>/15</span></div></div><div class="bar"><i style="width:53%"></i></div><div class="series-foot"><span>丰水完成 5 职业</span><span>53%</span></div></article>
+              <article class="series-card modern"><div class="series-top"><div class="series-name"><span class="series-icon">义</span><div><strong>义武</strong><small>RESISTANCE</small></div></div><div class="owned">13<span>/17</span></div></div><div class="bar"><i style="width:76%"></i></div><div class="series-foot"><span>女王完成 9 职业</span><span>76%</span></div></article>
+              <article class="series-card modern"><div class="series-top"><div class="series-name"><span class="series-icon">曼</span><div><strong>曼德维尔武器</strong><small>MANDERVILLE</small></div></div><div class="owned">19<span>/19</span></div></div><div class="bar"><i style="width:100%"></i></div><div class="series-foot"><span>全部职业完成</span><span>100%</span></div></article>
+              <article class="series-card tool"><div class="series-top"><div class="series-name"><span class="series-icon">工</span><div><strong>特殊工具</strong><small>SKYSTEEL · SPLENDOROUS · COSMIC</small></div></div><div class="owned">16<span>/33</span></div></div><div class="bar"><i style="width:48%"></i></div><div class="series-foot"><span>3 个工具系列</span><span>48%</span></div></article>
+              <article class="series-card ultimate"><div class="series-top"><div class="series-name"><span class="series-icon">绝</span><div><strong>绝境战武器</strong><small>ULTIMATE</small></div></div><div class="owned">16<span>/127</span></div></div><div class="bar"><i style="width:13%"></i></div><div class="series-foot"><span>覆盖 7 个绝本</span><span>13%</span></div></article>
+            </div>
+          </section>
+
+          <aside class="side-stack">
+            <section class="panel">
+              <div class="panel-head"><div><h2>同步覆盖</h2><small>本次结果的数据来源</small></div><button class="link">刷新说明</button></div>
+              <div class="coverage">
+                <div class="coverage-row"><div><strong>角色库存</strong><small>背包、兵装库、装备栏</small></div><span class="badge">实时</span></div>
+                <div class="coverage-row"><div><strong>雇员：风妹等 6 位</strong><small>本次登录后已打开</small></div><span class="badge">已刷新</span></div>
+                <div class="coverage-row"><div><strong>雇员：猫猫糖等 4 位</strong><small>来自客户端本地记录</small></div><span class="badge cache">缓存</span></div>
+                <div class="coverage-row"><div><strong>投影台与鞍囊</strong><small>读取 ItemFinder 缓存</small></div><span class="badge cache">缓存</span></div>
+              </div>
+              <div class="coverage-alert">要获得准确的雇员库存，请在本次登录后分别打开对应雇员，再执行同步。</div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head"><div><h2>快捷入口</h2><small>常用功能</small></div></div>
+              <div class="shortcuts">
+                <button class="shortcut"><b>前往幻境村</b><small>使用传送导航</small></button>
+                <button class="shortcut"><b>幻武秘影</b><small>当前地图目标</small></button>
+                <button class="shortcut"><b>绝武总进度</b><small>七个绝本收藏</small></button>
+                <button class="shortcut"><b>妖表联动</b><small>24 / 37 奖励</small></button>
+              </div>
+            </section>
+          </aside>
+
+          <section class="panel collection">
+            <div class="panel-head"><div><h2>绝武职业收藏矩阵</h2><small>每个绝本独立统计，不按线性阶段补全</small></div><div class="legend"><span><i style="background:#28514e"></i>已持有</span><span><i style="background:#4a3d28"></i>仅持有骑士单件</span><span><i style="background:#1b252c"></i>未持有</span></div></div>
+            <div class="heatmap">
+              <div class="heat-row header"><span></span><span>绝巴哈</span><span>绝神兵</span><span>绝亚</span><span>绝龙诗</span><span>绝欧米茄</span><span>绝伊甸</span><span>绝妖星</span></div>
+              <div class="heat-row"><span class="job">骑士</span><span class="cell"></span><span class="cell"></span><span class="cell partial"></span><span class="cell owned"></span><span class="cell"></span><span class="cell owned"></span><span class="cell"></span></div>
+              <div class="heat-row"><span class="job">吟游诗人</span><span class="cell"></span><span class="cell"></span><span class="cell owned"></span><span class="cell"></span><span class="cell owned"></span><span class="cell"></span><span class="cell"></span></div>
+              <div class="heat-row"><span class="job">黑魔法师</span><span class="cell owned"></span><span class="cell"></span><span class="cell owned"></span><span class="cell owned"></span><span class="cell"></span><span class="cell"></span><span class="cell"></span></div>
+              <div class="heat-row"><span class="job">贤者</span><span class="cell na"></span><span class="cell na"></span><span class="cell na"></span><span class="cell owned"></span><span class="cell"></span><span class="cell owned"></span><span class="cell"></span></div>
+              <div class="heat-row"><span class="job">蝰蛇剑士</span><span class="cell na"></span><span class="cell na"></span><span class="cell na"></span><span class="cell na"></span><span class="cell owned"></span><span class="cell"></span><span class="cell"></span></div>
+              <div class="heat-note">预览仅展示部分职业。正式界面可按职能分组，并通过悬浮提示显示具体武器名称。</div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </section>
+  </div>
+
+  <script>
+    document.querySelectorAll('.view-tabs button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        document.querySelectorAll('.view-tabs button').forEach(function (item) { item.classList.remove('active'); });
+        button.classList.add('active');
+      });
+    });
+    document.querySelectorAll('.chip').forEach(function (button) {
+      button.addEventListener('click', function () {
+        document.querySelectorAll('.chip').forEach(function (item) { item.classList.remove('active'); });
+        button.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

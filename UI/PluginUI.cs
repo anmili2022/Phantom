@@ -13,17 +13,30 @@ namespace Phantom;
 
 public sealed class PluginUI
 {
+    private sealed record OverviewSeries(
+        string SectionKey,
+        string SeriesKey,
+        string Name,
+        string Note,
+        IReadOnlyList<PhantomWeaponJob> Jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> Stages,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> ItemLookup);
+
     private static readonly string WindowTitle = $"肝武助手 v{typeof(PluginUI).Assembly.GetName().Version?.ToString(4) ?? "0.0.0.0"}";
     private static readonly string IconPath = Path.Combine(Path.GetDirectoryName(typeof(PluginUI).Assembly.Location) ?? string.Empty, "icon.png");
     private static readonly (string Key, string Label, string Count)[] MainSections =
     {
-        ("overview", "总览", "6"),
+        ("overview", "总览", ""),
         ("phantom", "幻武 · 幻境武器", "5"),
         ("zodiac", "古武 · Zodiac", "-"),
         ("anima", "魂武 · Anima", "-"),
         ("eureka", "优武 · Eurekan", "-"),
         ("resistance", "义武 · Resistance", "-"),
         ("manderville", "曼武 · Manderville", "-"),
+        ("skysteel", "天钢 · Skysteel", "-"),
+        ("splendorous", "莫雯 · Splendorous", "-"),
+        ("cosmic", "宇宙 · Cosmic", "-"),
+        ("ultimate", "绝武 · Ultimate", "-"),
         ("yokai", "妖表联动", "37"),
         ("settings", "设置", "-"),
     };
@@ -52,11 +65,22 @@ public sealed class PluginUI
     private readonly PluginConfiguration configuration;
     private readonly VnavService vnav;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? weaponItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? mandervilleWeaponItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? cosmicToolItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? zodiacWeaponItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? animaWeaponItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? eurekaWeaponItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? resistanceWeaponItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? skysteelToolItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? splendorousToolItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? ultimateWeaponItemLookup;
     private IReadOnlyList<YokaiRewardProgress> yokaiResults = Array.Empty<YokaiRewardProgress>();
     private readonly YokaiProgressService yokaiProgress = new();
     private bool isMainWindowOpen;
     private int selectedMainSection;
-    private bool showWeaponProgressTab;
+    private bool showWeaponProgressTab = true;
+    private string? progressSeriesKey = "phantom";
+    private readonly HashSet<string> stageSelectedSeries = new(StringComparer.Ordinal);
 
     public PluginUI(PluginConfiguration configuration, VnavService vnav)
     {
@@ -115,17 +139,22 @@ public sealed class PluginUI
         DrawSidebarLabel("Workspace");
         foreach (var section in WorkspaceSections)
         {
-            DrawSidebarButton(GetMainSectionIndex(section.Key), section.Label, section.Count, GetSidebarIcon(section.Key));
+            DrawSidebarButton(GetMainSectionIndex(section.Key), section.Label, GetSidebarCount(section), GetSidebarIcon(section.Key));
         }
 
         ImGui.Separator();
         DrawSidebarLabel("Tools");
         foreach (var section in ToolSections)
         {
-            DrawSidebarButton(GetMainSectionIndex(section.Key), section.Label, section.Count, GetSidebarIcon(section.Key));
+            DrawSidebarButton(GetMainSectionIndex(section.Key), section.Label, GetSidebarCount(section), GetSidebarIcon(section.Key));
         }
 
         ImGui.Separator();
+        if (ImGui.Button("前往幻境村##sidebar-occult-village", new Vector2(-1f, 0f)))
+        {
+            vnav.GoToOccultVillage();
+        }
+
         ImGui.TextDisabled($"角色：{GetCurrentCharacterLabel()}");
         ImGui.TextDisabled(configuration.Enabled ? "状态：已启用" : "状态：已停用");
     }
@@ -164,6 +193,81 @@ public sealed class PluginUI
         return 0;
     }
 
+    private string GetSidebarCount((string Key, string Label, string Count) section)
+    {
+        if (section.Key == "phantom")
+        {
+            return GetOwnedWeaponCount("phantom", PhantomWeaponGuide.WeaponJobs, PhantomWeaponGuide.ProgressStages, GetPhantomWeaponItemLookup()).ToString();
+        }
+
+        if (section.Key == "manderville")
+        {
+            return GetOwnedWeaponCount("manderville", MandervilleWeaponGuide.WeaponJobs, MandervilleWeaponGuide.ProgressStages, GetMandervilleWeaponItemLookup()).ToString();
+        }
+
+        if (section.Key == "cosmic")
+        {
+            return GetOwnedWeaponCount("cosmic", RelicWeaponGuide.CosmicToolJobs, RelicWeaponGuide.CosmicProgressStages, GetCosmicToolItemLookup()).ToString();
+        }
+
+        if (section.Key == "zodiac")
+        {
+            return GetOwnedWeaponCount("zodiac", RelicWeaponGuide.ZodiacWeaponJobs, RelicWeaponGuide.ZodiacProgressStages, GetZodiacWeaponItemLookup()).ToString();
+        }
+
+        if (section.Key == "anima")
+        {
+            return GetOwnedWeaponCount("anima", RelicWeaponGuide.AnimaWeaponJobs, RelicWeaponGuide.AnimaProgressStages, GetAnimaWeaponItemLookup()).ToString();
+        }
+
+        if (section.Key == "eureka")
+        {
+            return GetOwnedWeaponCount("eureka", RelicWeaponGuide.EurekaWeaponJobs, RelicWeaponGuide.EurekaProgressStages, GetEurekaWeaponItemLookup()).ToString();
+        }
+
+        if (section.Key == "resistance")
+        {
+            return GetOwnedWeaponCount("resistance", RelicWeaponGuide.ResistanceWeaponJobs, RelicWeaponGuide.ResistanceProgressStages, GetResistanceWeaponItemLookup()).ToString();
+        }
+
+        if (section.Key == "skysteel")
+        {
+            return GetOwnedWeaponCount("skysteel", RelicWeaponGuide.SkysteelToolJobs, RelicWeaponGuide.SkysteelProgressStages, GetSkysteelToolItemLookup()).ToString();
+        }
+
+        if (section.Key == "splendorous")
+        {
+            return GetOwnedWeaponCount("splendorous", RelicWeaponGuide.SplendorousToolJobs, RelicWeaponGuide.SplendorousProgressStages, GetSplendorousToolItemLookup()).ToString();
+        }
+
+        if (section.Key == "ultimate")
+        {
+            return GetOwnedWeaponCount("ultimate", RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages, GetUltimateWeaponItemLookup()).ToString();
+        }
+
+        if (RelicWeaponGuide.Series.ContainsKey(section.Key))
+        {
+            return "-";
+        }
+
+        return section.Count;
+    }
+
+    private int GetOwnedWeaponCount(
+        string seriesKey,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup)
+    {
+        var characterKey = GetCurrentCharacterKey();
+        if (characterKey.Length == 0 || !configuration.WeaponProgressItemsByCharacter.TryGetValue(characterKey, out var syncedItems))
+        {
+            return 0;
+        }
+
+        return jobs.Count(job => GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems) != null);
+    }
+
     private static FontAwesomeIcon GetSidebarIcon(string key)
         => key switch
         {
@@ -174,6 +278,10 @@ public sealed class PluginUI
             "eureka" => FontAwesomeIcon.Bolt,
             "resistance" => FontAwesomeIcon.ShieldAlt,
             "manderville" => FontAwesomeIcon.Music,
+            "skysteel" => FontAwesomeIcon.Hammer,
+            "splendorous" => FontAwesomeIcon.Wrench,
+            "cosmic" => FontAwesomeIcon.Rocket,
+            "ultimate" => FontAwesomeIcon.Trophy,
             "yokai" => FontAwesomeIcon.Paw,
             "settings" => FontAwesomeIcon.Cog,
             _ => FontAwesomeIcon.Circle,
@@ -236,11 +344,22 @@ public sealed class PluginUI
             case "yokai":
                 DrawYokaiWorkspace();
                 break;
+            case "manderville":
+                DrawMandervilleWorkspace();
+                break;
             case "settings":
                 DrawSettingsWorkspace();
                 break;
             default:
-                DrawWeaponSeriesPlaceholder(section.Label);
+                if (RelicWeaponGuide.Series.TryGetValue(section.Key, out var series))
+                {
+                    DrawRelicSeriesWorkspace(series);
+                }
+                else
+                {
+                    DrawWeaponSeriesPlaceholder(section.Label);
+                }
+
                 break;
         }
     }
@@ -253,43 +372,76 @@ public sealed class PluginUI
         ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 124f);
         if (ImGui.Button("刷新扫描##hub-sync"))
         {
-            var characterKey = GetCurrentCharacterKey();
-            if (characterKey.Length > 0)
-            {
-                SyncCurrentCharacterWeaponProgress(characterKey, GetPhantomWeaponItemLookup());
-            }
+            SyncAllCurrentCharacterProgress();
         }
     }
 
     private void DrawWeaponHubOverview()
     {
         var characterKey = GetCurrentCharacterKey();
-        var itemLookup = GetPhantomWeaponItemLookup();
         var syncedItems = characterKey.Length > 0 && configuration.WeaponProgressItemsByCharacter.TryGetValue(characterKey, out var stored)
             ? stored
             : new Dictionary<string, List<uint>>();
-        var secretJobs = PhantomWeaponGuide.WeaponJobs.Count(job => GetHighestSyncedStage(job, itemLookup, syncedItems)?.Key == "secret");
-        var activeJobs = PhantomWeaponGuide.WeaponJobs.Count(job => GetHighestSyncedStage(job, itemLookup, syncedItems) != null);
+        var series = GetOverviewSeries();
+        var ownedJobs = series.Sum(entry => CountOwnedJobs(entry.SeriesKey, entry.Jobs, entry.Stages, entry.ItemLookup, syncedItems));
+        var totalJobs = series.Sum(entry => entry.Jobs.Count);
+        var ultimateOwned = CountOwnedStages("ultimate", RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages, GetUltimateWeaponItemLookup(), syncedItems);
+        var ultimateTotal = RelicWeaponGuide.UltimateWeaponJobs.Sum(job => RelicWeaponGuide.UltimateProgressStages.Count(stage => GetUltimateWeaponItemLookup().ContainsKey((job.Key, stage.Key))));
+        var yokaiOwned = characterKey.Length > 0 && configuration.YokaiOwnedRewardKeysByCharacter.TryGetValue(characterKey, out var yokaiKeys) ? yokaiKeys.Count : 0;
+        var retainerCoverage = GetRetainerCacheCoverage();
 
         if (ImGui.BeginTable("weapon-hub-summary", 4, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
         {
-            DrawSummaryCard("所有系列", "幻武已接入", "其他肝武系列待接入数据");
-            DrawSummaryCard("当前进行中", $"{activeJobs} 把", "按当前角色同步结果统计");
-            DrawSummaryCard("秘影完成", $"{secretJobs}/{PhantomWeaponGuide.WeaponJobs.Count}", "保留原幻武进度统计");
+            DrawSummaryCard("职业收藏", $"{ownedJobs}/{totalJobs}", "各系列至少持有一个阶段");
+            DrawSummaryCard("绝武收藏", $"{ultimateOwned}/{ultimateTotal}", "七个绝本独立统计");
+            DrawSummaryCard("妖表奖励", $"{yokaiOwned}/{YokaiWatchGuide.Rewards.Count}", "宠物、武器与坐骑");
             var syncTime = characterKey.Length > 0 && configuration.WeaponProgressSyncTimes.TryGetValue(characterKey, out var time) ? time : "未同步";
-            DrawSummaryCard("最近同步", syncTime, "背包/兵装库/ItemFinder");
+            DrawSummaryCard("库存覆盖", $"{retainerCoverage.Current}/{retainerCoverage.Total} 雇员", $"最近同步：{syncTime}");
             ImGui.EndTable();
         }
 
         ImGui.Spacing();
-        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "今日清单");
-        ImGui.BulletText("幻武：同步当前角色，确认已持有的最高阶段。");
-        ImGui.BulletText("秘影：继续完成当前地图的 4 个目标和 5 个金牌 FATE。");
-        ImGui.BulletText("古武/魂武/优武/义武/曼武：数据模型待接入，界面入口已预留。");
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "系列收藏");
+        if (ImGui.BeginTable("overview-series-grid", 2, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
+        {
+            foreach (var entry in series)
+            {
+                var owned = CountOwnedJobs(entry.SeriesKey, entry.Jobs, entry.Stages, entry.ItemLookup, syncedItems);
+                DrawOverviewSeriesCard(entry, owned);
+            }
 
-        ImGui.Separator();
-        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "幻武进度");
-        DrawPhantomWeaponProgressPanel();
+            ImGui.EndTable();
+        }
+
+        ImGui.Spacing();
+        if (ImGui.BeginTable("overview-bottom-grid", 2, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
+        {
+            ImGui.TableNextColumn();
+            ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "同步覆盖");
+            ImGui.TextDisabled("角色背包、兵装库与装备栏：实时读取");
+            ImGui.TextDisabled($"雇员库存：{retainerCoverage.Current}/{retainerCoverage.Total} 个已在本次登录后打开并刷新，{retainerCoverage.Cached}/{retainerCoverage.Total} 个已缓存（可能不是最新数据）");
+            if (retainerCoverage.Total > retainerCoverage.Current)
+            {
+                ImGui.TextColored(new Vector4(0.92f, 0.72f, 0.38f, 1f), "未打开的雇员可能使用旧缓存。");
+            }
+
+            ImGui.TextDisabled("/物品检索 物品 可临时刷新");
+
+            ImGui.TableNextColumn();
+            ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "快捷入口");
+            if (ImGui.Button("幻武进度##overview-phantom", new Vector2(120f, 0f))) selectedMainSection = GetMainSectionIndex("phantom");
+            ImGui.SameLine();
+            if (ImGui.Button("绝武总进度##overview-ultimate", new Vector2(120f, 0f)))
+            {
+                selectedMainSection = GetMainSectionIndex("ultimate");
+                stageSelectedSeries.Remove("ultimate");
+                progressSeriesKey = "ultimate";
+            }
+            if (ImGui.Button("前往幻境村##overview-village", new Vector2(120f, 0f))) vnav.GoToOccultVillage();
+            ImGui.SameLine();
+            if (ImGui.Button("妖表联动##overview-yokai", new Vector2(120f, 0f))) selectedMainSection = GetMainSectionIndex("yokai");
+            ImGui.EndTable();
+        }
     }
 
     private static void DrawSummaryCard(string title, string value, string note)
@@ -310,6 +462,122 @@ public sealed class PluginUI
         ImGui.SetCursorScreenPos(cursor + new Vector2(0f, size.Y + 8f));
     }
 
+    private IReadOnlyList<OverviewSeries> GetOverviewSeries() => new[]
+    {
+        new OverviewSeries("phantom", "phantom", "幻境武器", "5 个阶段", PhantomWeaponGuide.WeaponJobs, PhantomWeaponGuide.ProgressStages, GetPhantomWeaponItemLookup()),
+        new OverviewSeries("zodiac", "zodiac", "古武", "Zodiac", RelicWeaponGuide.ZodiacWeaponJobs, RelicWeaponGuide.ZodiacProgressStages, GetZodiacWeaponItemLookup()),
+        new OverviewSeries("anima", "anima", "魂武", "Anima", RelicWeaponGuide.AnimaWeaponJobs, RelicWeaponGuide.AnimaProgressStages, GetAnimaWeaponItemLookup()),
+        new OverviewSeries("eureka", "eureka", "优武", "Eurekan", RelicWeaponGuide.EurekaWeaponJobs, RelicWeaponGuide.EurekaProgressStages, GetEurekaWeaponItemLookup()),
+        new OverviewSeries("resistance", "resistance", "义武", "Resistance", RelicWeaponGuide.ResistanceWeaponJobs, RelicWeaponGuide.ResistanceProgressStages, GetResistanceWeaponItemLookup()),
+        new OverviewSeries("manderville", "manderville", "曼德维尔武器", "Manderville", MandervilleWeaponGuide.WeaponJobs, MandervilleWeaponGuide.ProgressStages, GetMandervilleWeaponItemLookup()),
+        new OverviewSeries("skysteel", "skysteel", "天钢工具", "Skysteel", RelicWeaponGuide.SkysteelToolJobs, RelicWeaponGuide.SkysteelProgressStages, GetSkysteelToolItemLookup()),
+        new OverviewSeries("splendorous", "splendorous", "莫雯工具", "Splendorous", RelicWeaponGuide.SplendorousToolJobs, RelicWeaponGuide.SplendorousProgressStages, GetSplendorousToolItemLookup()),
+        new OverviewSeries("cosmic", "cosmic", "宇宙工具", "Cosmic", RelicWeaponGuide.CosmicToolJobs, RelicWeaponGuide.CosmicProgressStages, GetCosmicToolItemLookup()),
+        new OverviewSeries("ultimate", "ultimate", "绝境战武器", "7 个绝本", RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages, GetUltimateWeaponItemLookup()),
+    };
+
+    private static int CountOwnedJobs(
+        string seriesKey,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
+        IReadOnlyDictionary<string, List<uint>> syncedItems)
+        => jobs.Count(job => GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems) != null);
+
+    private static int CountOwnedStages(
+        string seriesKey,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
+        IReadOnlyDictionary<string, List<uint>> syncedItems)
+        => jobs.Sum(job => stages.Count(stage => GetSyncedStageItems(seriesKey, job, stage, itemLookup, syncedItems).Any()));
+
+    private void DrawOverviewSeriesCard(OverviewSeries entry, int owned)
+    {
+        ImGui.TableNextColumn();
+        var cursor = ImGui.GetCursorScreenPos();
+        var width = Math.Max(220f, ImGui.GetColumnWidth() - 8f);
+        var size = new Vector2(width, 82f);
+        var drawList = ImGui.GetWindowDrawList();
+        var ratio = entry.Jobs.Count == 0 ? 0f : owned / (float)entry.Jobs.Count;
+        var accent = entry.SeriesKey == "ultimate"
+            ? new Vector4(0.66f, 0.58f, 0.91f, 1f)
+            : IsToolSeries(entry.SeriesKey)
+                ? new Vector4(0.87f, 0.58f, 0.38f, 1f)
+                : new Vector4(0.40f, 0.83f, 0.79f, 1f);
+
+        drawList.AddRectFilled(cursor, cursor + size, ImGui.GetColorU32(new Vector4(0.09f, 0.13f, 0.16f, 0.94f)), 8f);
+        drawList.AddRect(cursor, cursor + size, ImGui.GetColorU32(new Vector4(0.19f, 0.27f, 0.31f, 1f)), 8f);
+        drawList.AddRectFilled(cursor + new Vector2(12f, 60f), cursor + new Vector2(width - 12f, 66f), ImGui.GetColorU32(new Vector4(0.16f, 0.21f, 0.23f, 1f)), 3f);
+        drawList.AddRectFilled(cursor + new Vector2(12f, 60f), cursor + new Vector2(12f + (width - 24f) * ratio, 66f), ImGui.GetColorU32(accent), 3f);
+
+        ImGui.SetCursorScreenPos(cursor + new Vector2(12f, 10f));
+        ImGui.TextUnformatted(entry.Name);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(12f, 32f));
+        ImGui.TextDisabled(entry.Note);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(width - 60f, 12f));
+        ImGui.TextColored(accent, $"{owned}/{entry.Jobs.Count}");
+        ImGui.SetCursorScreenPos(cursor);
+        if (ImGui.InvisibleButton($"overview-series-{entry.SeriesKey}", size))
+        {
+            selectedMainSection = GetMainSectionIndex(entry.SectionKey);
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip($"{entry.Name}\n已持有职业 {owned}/{entry.Jobs.Count}\n点击进入系列页面");
+        }
+
+        ImGui.SetCursorScreenPos(cursor + new Vector2(0f, size.Y + 6f));
+    }
+
+    private void SyncAllCurrentCharacterProgress()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        if (characterKey.Length == 0)
+        {
+            return;
+        }
+
+        foreach (var entry in GetOverviewSeries())
+        {
+            SyncCurrentCharacterWeaponProgress(characterKey, entry.SeriesKey, entry.Jobs, entry.Stages, entry.ItemLookup);
+        }
+
+        yokaiResults = yokaiProgress.ScanCurrentCharacter();
+        configuration.YokaiOwnedRewardKeysByCharacter[characterKey] = yokaiResults.Where(reward => reward.Owned).Select(reward => reward.Key).ToList();
+        configuration.YokaiSyncTimesByCharacter[characterKey] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        configuration.Save();
+    }
+
+    private static unsafe (int Current, int Cached, int Total) GetRetainerCacheCoverage()
+    {
+        var finder = ItemFinderModule.Instance();
+        if (finder == null)
+        {
+            return (0, 0, 0);
+        }
+
+        var current = 0;
+        var cached = 0;
+        var total = 0;
+        foreach (var entry in finder->RetainerInventories)
+        {
+            total++;
+            if (!entry.Item2.IsNull)
+            {
+                cached++;
+            }
+
+            if (finder->IsRetainerCurrent(entry.Item1))
+            {
+                current++;
+            }
+        }
+
+        return (current, cached, total);
+    }
+
     private void DrawPhantomWeaponWorkspace()
     {
         DrawPhantomToolbar();
@@ -319,47 +587,9 @@ public sealed class PluginUI
 
     private void DrawPhantomToolbar()
     {
-        var enabled = configuration.Enabled;
-        if (ImGui.Checkbox("启用插件", ref enabled))
-        {
-            configuration.Enabled = enabled;
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        var useFlight = configuration.UseFlightNavigation;
-        if (ImGui.Checkbox("飞行导航", ref useFlight))
-        {
-            configuration.UseFlightNavigation = useFlight;
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        var showFloating = configuration.ShowFloatingObjectiveWindow;
-        if (ImGui.Checkbox("悬浮目标", ref showFloating))
-        {
-            configuration.ShowFloatingObjectiveWindow = showFloating;
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        var autoMarkKills = configuration.AutoMarkSecretKills;
-        if (ImGui.Checkbox("自动标记击杀", ref autoMarkKills))
-        {
-            configuration.AutoMarkSecretKills = autoMarkKills;
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
         if (ImGui.Button("重置当前阶段进度"))
         {
             ResetCurrentStage();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("前往幻境村"))
-        {
-            vnav.GoToOccultVillage();
         }
     }
 
@@ -370,6 +600,205 @@ public sealed class PluginUI
         ImGui.TextWrapped("该武器系列入口已预留。后续接入时复用幻武进度页的职业卡片、阶段胶囊、图标和按角色同步逻辑，只替换阶段资料、物品 RowId/名称和系列专属任务面板。 ");
         ImGui.BulletText("通用层：职业、阶段、物品持有、材料进度、任务勾选。");
         ImGui.BulletText("专属层：古武书籍/魂武水晶砂/优武禁地等级/义武战线/曼武任务货币等。 ");
+    }
+
+    private void DrawRelicSeriesWorkspace(RelicWeaponSeries series)
+    {
+        var stages = series.Stages;
+        if (!configuration.SelectedRelicStageIndexes.TryGetValue(series.Key, out var selectedIndex) || selectedIndex < 0 || selectedIndex >= stages.Count)
+        {
+            selectedIndex = 0;
+            configuration.SelectedRelicStageIndexes[series.Key] = selectedIndex;
+        }
+
+        ImGui.TextWrapped(series.Summary);
+        ImGui.TextDisabled(series.EnglishName);
+        ImGui.SameLine();
+        ImGui.TextDisabled(series.SourceUrl);
+        if (!string.IsNullOrWhiteSpace(series.SecondarySourceUrl))
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled(series.SecondarySourceUrl);
+        }
+        ImGui.Separator();
+
+        ImGui.BeginGroup();
+        var showSeriesProgress = IsSeriesProgressActive(series.Key);
+        for (var i = 0; i < stages.Count; i++)
+        {
+            var stage = stages[i];
+            var tabLabel = stage.Name
+                .Replace("上古武器·", string.Empty, StringComparison.Ordinal)
+                .Replace("黄道武器·", string.Empty, StringComparison.Ordinal)
+                .Replace("元灵武器·", string.Empty, StringComparison.Ordinal)
+                .Replace("义军武器·", string.Empty, StringComparison.Ordinal)
+                .Replace("禁地兵装·", string.Empty, StringComparison.Ordinal)
+                .Replace("工具", string.Empty, StringComparison.Ordinal);
+            if (DrawContentTabButton($"{series.Key}-stage-{stage.Key}", tabLabel, !showSeriesProgress && selectedIndex == i))
+            {
+                stageSelectedSeries.Add(series.Key);
+                progressSeriesKey = null;
+                selectedIndex = i;
+                configuration.SelectedRelicStageIndexes[series.Key] = selectedIndex;
+                configuration.Save();
+            }
+
+            if (i < stages.Count - 1)
+            {
+                ImGui.SameLine(0f, 4f);
+            }
+        }
+
+        if (stages.Count > 0)
+        {
+            ImGui.SameLine(0f, 4f);
+        }
+
+        var progressLabel = IsToolSeries(series.Key) ? "工具进度" : "武器进度";
+        if (series.Key == "ultimate")
+        {
+            progressLabel = "总进度";
+        }
+
+        if (DrawContentTabButton($"{series.Key}-weapon-progress", progressLabel, showSeriesProgress))
+        {
+            stageSelectedSeries.Remove(series.Key);
+            progressSeriesKey = series.Key;
+        }
+
+        ImGui.EndGroup();
+        ImGui.Separator();
+        if (series.Key == "ultimate")
+        {
+            if (showSeriesProgress)
+            {
+                DrawUltimateTotalProgressPanel();
+            }
+            else
+            {
+                DrawUltimateWeaponProgressPanel(stages[selectedIndex].Key);
+            }
+        }
+        else if (showSeriesProgress)
+        {
+            if (series.Key == "cosmic")
+            {
+                DrawCosmicToolProgressPanel();
+            }
+            else if (series.Key == "skysteel")
+            {
+                DrawSkysteelToolProgressPanel();
+            }
+            else if (series.Key == "splendorous")
+            {
+                DrawSplendorousToolProgressPanel();
+            }
+            else if (series.Key == "zodiac")
+            {
+                DrawZodiacWeaponProgressPanel();
+            }
+            else if (series.Key == "anima")
+            {
+                DrawAnimaWeaponProgressPanel();
+            }
+            else if (series.Key == "eureka")
+            {
+                DrawEurekaWeaponProgressPanel();
+            }
+            else if (series.Key == "resistance")
+            {
+                DrawResistanceWeaponProgressPanel();
+            }
+            else
+            {
+                DrawPendingWeaponProgressPanel(series.Name);
+            }
+        }
+        else
+        {
+            DrawStage(stages[selectedIndex]);
+        }
+    }
+
+    private void DrawMandervilleWorkspace()
+    {
+        var stages = MandervilleWeaponGuide.Stages;
+        if (configuration.SelectedMandervilleStageIndex < 0 || configuration.SelectedMandervilleStageIndex >= stages.Count)
+        {
+            configuration.SelectedMandervilleStageIndex = 0;
+        }
+
+        ImGui.BeginGroup();
+        var showMandervilleProgress = IsSeriesProgressActive("manderville");
+        for (var i = 0; i < stages.Count; i++)
+        {
+            var stage = stages[i];
+            if (DrawContentTabButton($"manderville-stage-{stage.Key}", stage.Name.Replace("曼德维尔武器·", string.Empty, StringComparison.Ordinal), !showMandervilleProgress && configuration.SelectedMandervilleStageIndex == i))
+            {
+                stageSelectedSeries.Add("manderville");
+                progressSeriesKey = null;
+                configuration.SelectedMandervilleStageIndex = i;
+                configuration.Save();
+            }
+
+            if (i < stages.Count - 1)
+            {
+                ImGui.SameLine(0f, 4f);
+            }
+        }
+
+        if (stages.Count > 0)
+        {
+            ImGui.SameLine(0f, 4f);
+        }
+
+        if (DrawContentTabButton("manderville-weapon-progress", "武器进度", showMandervilleProgress))
+        {
+            stageSelectedSeries.Remove("manderville");
+            progressSeriesKey = "manderville";
+        }
+
+        ImGui.EndGroup();
+        ImGui.Separator();
+        if (showMandervilleProgress)
+        {
+            DrawMandervilleWeaponProgressPanel();
+        }
+        else
+        {
+            DrawStage(stages[configuration.SelectedMandervilleStageIndex]);
+        }
+    }
+
+    private bool IsSeriesProgressActive(string seriesKey)
+        => progressSeriesKey == seriesKey || (seriesKey != "ultimate" && !stageSelectedSeries.Contains(seriesKey));
+
+    private static void DrawPendingWeaponProgressPanel(string seriesName)
+    {
+        ImGui.TextDisabled($"{seriesName}武器进度按当前角色保存。逐职业武器名称与 Item RowId 尚未录入，暂不执行背包或 ItemFinder 扫描。 ");
+        ImGui.Spacing();
+
+        if (!ImGui.BeginTable($"{seriesName}-weapon-progress-placeholder", 5, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+        {
+            return;
+        }
+
+        foreach (var job in PhantomWeaponGuide.WeaponJobs)
+        {
+            ImGui.TableNextColumn();
+            var cursor = ImGui.GetCursorScreenPos();
+            var size = new Vector2(112f, 54f);
+            var drawList = ImGui.GetWindowDrawList();
+            drawList.AddRectFilled(cursor, cursor + size, ImGui.GetColorU32(new Vector4(0.10f, 0.13f, 0.16f, 0.92f)), 6f);
+            drawList.AddRect(cursor, cursor + size, ImGui.GetColorU32(new Vector4(0.22f, 0.31f, 0.36f, 1f)), 6f);
+            ImGui.SetCursorScreenPos(cursor + new Vector2(10f, 8f));
+            ImGui.TextUnformatted(job.Name);
+            ImGui.SetCursorScreenPos(cursor + new Vector2(10f, 29f));
+            ImGui.TextDisabled("待补充数据");
+            ImGui.SetCursorScreenPos(cursor + new Vector2(0f, size.Y + 6f));
+        }
+
+        ImGui.EndTable();
     }
 
     private static void DrawDependencyStatus()
@@ -501,24 +930,156 @@ public sealed class PluginUI
     }
 
     private void DrawPhantomWeaponProgressPanel()
+        => DrawWeaponProgressPanel(
+            "phantom",
+            "幻境武器",
+            PhantomWeaponGuide.WeaponJobs,
+            PhantomWeaponGuide.ProgressStages,
+            GetPhantomWeaponItemLookup(),
+            stage => stage.Key == "secret",
+            completed => $"秘影完成职业 {completed}/{PhantomWeaponGuide.WeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawMandervilleWeaponProgressPanel()
+        => DrawWeaponProgressPanel(
+            "manderville",
+            "曼德维尔武器",
+            MandervilleWeaponGuide.WeaponJobs,
+            MandervilleWeaponGuide.ProgressStages,
+            GetMandervilleWeaponItemLookup(),
+            stage => stage.Key == "manderville-complete",
+            completed => $"盈满完成职业 {completed}/{MandervilleWeaponGuide.WeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawCosmicToolProgressPanel()
+        => DrawWeaponProgressPanel(
+            "cosmic",
+            "宇宙工具",
+            RelicWeaponGuide.CosmicToolJobs,
+            RelicWeaponGuide.CosmicProgressStages,
+            GetCosmicToolItemLookup(),
+            stage => stage.Key == "cosmic-stellar",
+            completed => $"群星完成职业 {completed}/{RelicWeaponGuide.CosmicToolJobs.Count}。未显示的工具通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawZodiacWeaponProgressPanel()
+        => DrawWeaponProgressPanel(
+            "zodiac",
+            "古武",
+            RelicWeaponGuide.ZodiacWeaponJobs,
+            RelicWeaponGuide.ZodiacProgressStages,
+            GetZodiacWeaponItemLookup(),
+            stage => stage.Key == "zodiac-zeta",
+            completed => $"本我完成职业 {completed}/{RelicWeaponGuide.ZodiacWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawAnimaWeaponProgressPanel()
+        => DrawWeaponProgressPanel(
+            "anima",
+            "魂武",
+            RelicWeaponGuide.AnimaWeaponJobs,
+            RelicWeaponGuide.AnimaProgressStages,
+            GetAnimaWeaponItemLookup(),
+            stage => stage.Key == "anima-lux",
+            completed => $"灵光完成职业 {completed}/{RelicWeaponGuide.AnimaWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawEurekaWeaponProgressPanel()
+        => DrawWeaponProgressPanel(
+            "eureka",
+            "优武",
+            RelicWeaponGuide.EurekaWeaponJobs,
+            RelicWeaponGuide.EurekaProgressStages,
+            GetEurekaWeaponItemLookup(),
+            stage => stage.Key == "eureka-hydatos",
+            completed => $"丰水完成职业 {completed}/{RelicWeaponGuide.EurekaWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawResistanceWeaponProgressPanel()
+        => DrawWeaponProgressPanel(
+            "resistance",
+            "义武",
+            RelicWeaponGuide.ResistanceWeaponJobs,
+            RelicWeaponGuide.ResistanceProgressStages,
+            GetResistanceWeaponItemLookup(),
+            stage => stage.Key == "resistance-blades",
+            completed => $"女王完成职业 {completed}/{RelicWeaponGuide.ResistanceWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawSkysteelToolProgressPanel()
+        => DrawWeaponProgressPanel(
+            "skysteel",
+            "天钢工具",
+            RelicWeaponGuide.SkysteelToolJobs,
+            RelicWeaponGuide.SkysteelProgressStages,
+            GetSkysteelToolItemLookup(),
+            stage => stage.Key == "skysteel-skybuilders",
+            completed => $"天工完成职业 {completed}/{RelicWeaponGuide.SkysteelToolJobs.Count}。未显示的工具通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawSplendorousToolProgressPanel()
+        => DrawWeaponProgressPanel(
+            "splendorous",
+            "莫雯工具",
+            RelicWeaponGuide.SplendorousToolJobs,
+            RelicWeaponGuide.SplendorousProgressStages,
+            GetSplendorousToolItemLookup(),
+            stage => stage.Key == "splendorous-lodestar",
+            completed => $"领航星完成职业 {completed}/{RelicWeaponGuide.SplendorousToolJobs.Count}。未显示的工具通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawUltimateWeaponProgressPanel(string stageKey)
+    {
+        var stageIndex = RelicWeaponGuide.UltimateProgressStages
+            .Select((stage, index) => (stage, index))
+            .FirstOrDefault(pair => pair.stage.Key == stageKey)
+            .index;
+        var selectedStage = RelicWeaponGuide.UltimateProgressStages[stageIndex];
+        var displayJobs = RelicWeaponGuide.UltimateWeaponJobs
+            .Where(job => job.StageItemNames.Count > stageIndex && job.StageItemNames[stageIndex].Any(name => !string.IsNullOrWhiteSpace(name)))
+            .Select(job => new PhantomWeaponJob(job.Key, job.Name, new[] { job.StageItemNames[stageIndex] }))
+            .ToArray();
+
+        DrawWeaponProgressPanel(
+            "ultimate",
+            selectedStage.Name,
+            displayJobs,
+            new[] { selectedStage },
+            GetUltimateWeaponItemLookup(),
+            stage => stage.Key == selectedStage.Key,
+            completed => $"{selectedStage.Name} 已持有职业 {completed}/{displayJobs.Length}。未显示的武器通常表示该职业当时未开放，或上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ",
+            RelicWeaponGuide.UltimateWeaponJobs,
+            RelicWeaponGuide.UltimateProgressStages);
+    }
+
+    private void DrawUltimateTotalProgressPanel()
+        => DrawWeaponProgressPanel(
+            "ultimate",
+            "绝武总进度",
+            RelicWeaponGuide.UltimateWeaponJobs,
+            RelicWeaponGuide.UltimateProgressStages,
+            GetUltimateWeaponItemLookup(),
+            stage => stage.Key == RelicWeaponGuide.UltimateProgressStages[^1].Key,
+            completed => $"七个绝本分别作为一个阶段展示；绝妖星已持有职业 {completed}/{RelicWeaponGuide.UltimateWeaponJobs.Count}。未显示的武器通常表示上次同步时不在可读取的库存或雇员缓存中。 ");
+
+    private void DrawWeaponProgressPanel(
+        string seriesKey,
+        string seriesName,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
+        Func<PhantomWeaponProgressStage, bool> isCompleteStage,
+        Func<int, string> footerText,
+        IReadOnlyList<PhantomWeaponJob>? syncJobs = null,
+        IReadOnlyList<PhantomWeaponProgressStage>? syncStages = null)
     {
         var characterKey = GetCurrentCharacterKey();
         var canSync = characterKey.Length > 0;
-        var itemLookup = GetPhantomWeaponItemLookup();
         var syncedItems = canSync && configuration.WeaponProgressItemsByCharacter.TryGetValue(characterKey, out var stored)
             ? stored
             : new Dictionary<string, List<uint>>();
         var completedJobs = 0;
 
-        ImGui.TextDisabled("点击同步时先扫描当前角色背包/兵装库/装备栏，再调用游戏 ItemFinder（/isearch 同源）补查雇员、鞍囊、投影台等缓存位置；多角色按角色 ID 分开保存。 ");
+        ImGui.TextDisabled("点击同步时先扫描当前角色背包/兵装库/装备栏；若游戏 ItemFinder 已有当前道具检索结果，则读取雇员、鞍囊、投影台等缓存位置，不主动弹出持有情况窗口。 ");
         if (!canSync)
         {
             ImGui.TextColored(new Vector4(1f, 0.72f, 0.28f, 1f), "未登录角色，无法同步。");
         }
 
-        if (ImGui.Button("同步当前角色##sync-weapon-progress") && canSync)
+        if (ImGui.Button($"同步当前角色##sync-weapon-progress-{seriesKey}") && canSync)
         {
-            syncedItems = SyncCurrentCharacterWeaponProgress(characterKey, itemLookup);
+            syncedItems = SyncCurrentCharacterWeaponProgress(characterKey, seriesKey, syncJobs ?? jobs, syncStages ?? stages, itemLookup);
         }
 
         ImGui.SameLine();
@@ -542,78 +1103,90 @@ public sealed class PluginUI
         ImGui.TextDisabled($"上次同步：{syncTime}");
         ImGui.Spacing();
 
-        foreach (var job in PhantomWeaponGuide.WeaponJobs)
+        foreach (var job in jobs)
         {
-            if (GetHighestSyncedStage(job, itemLookup, syncedItems)?.Key == "secret")
+            var highestStage = GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems);
+            if (highestStage != null && isCompleteStage(highestStage))
             {
                 completedJobs++;
             }
         }
 
-        if (configuration.GroupWeaponProgressByRole)
+        if (configuration.GroupWeaponProgressByRole && IsToolSeries(seriesKey))
         {
-            DrawWeaponCollectionRow("防护职能", new[] { "pld", "war", "drk", "gnb" }, itemLookup, syncedItems);
-            DrawWeaponCollectionRow("治疗职能", new[] { "whm", "sch", "ast", "sge" }, itemLookup, syncedItems);
-            DrawWeaponCollectionRow("近战职能 1", new[] { "mnk", "drg", "nin" }, itemLookup, syncedItems);
-            DrawWeaponCollectionRow("近战职能 2", new[] { "sam", "rpr", "vpr" }, itemLookup, syncedItems);
-            DrawWeaponCollectionRow("远程物理", new[] { "brd", "mch", "dnc" }, itemLookup, syncedItems);
-            DrawWeaponCollectionRow("远程魔法", new[] { "blm", "smn", "rdm", "pct" }, itemLookup, syncedItems);
+            DrawWeaponCollectionRow(seriesKey, "制作职业", new[] { "crp", "bsm", "arm", "gsm", "ltw", "wvr", "alc", "cul" }, jobs, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionRow(seriesKey, "采集职业", new[] { "min", "btn", "fsh" }, jobs, stages, itemLookup, syncedItems);
+        }
+        else if (configuration.GroupWeaponProgressByRole)
+        {
+            DrawWeaponCollectionRow(seriesKey, "防护职能", new[] { "pld", "war", "drk", "gnb" }, jobs, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionRow(seriesKey, "治疗职能", new[] { "whm", "sch", "ast", "sge" }, jobs, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionRow(seriesKey, "近战职能 1", new[] { "mnk", "drg", "nin" }, jobs, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionRow(seriesKey, "近战职能 2", new[] { "sam", "rpr", "vpr" }, jobs, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionRow(seriesKey, "远程物理", new[] { "brd", "mch", "dnc" }, jobs, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionRow(seriesKey, "远程魔法", new[] { "blm", "smn", "rdm", "pct" }, jobs, stages, itemLookup, syncedItems);
         }
         else
         {
-            DrawWeaponCollectionGrid(itemLookup, syncedItems);
+            DrawWeaponCollectionGrid(seriesKey, jobs, stages, itemLookup, syncedItems);
         }
 
-        ImGui.TextDisabled($"秘影完成职业 {completedJobs}/{PhantomWeaponGuide.WeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+        ImGui.TextDisabled(footerText(completedJobs));
     }
 
     private void DrawWeaponCollectionGrid(
+        string seriesKey,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
         IReadOnlyDictionary<string, List<uint>> syncedItems)
     {
         ImGui.Spacing();
         var tileWidth = configuration.ShowWeaponProgressIcons ? 120f : 94f;
         const int columns = 5;
-        if (!ImGui.BeginTable("phantom-weapon-collection-grid", columns, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+        if (!ImGui.BeginTable($"{seriesKey}-weapon-collection-grid", columns, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
         {
             return;
         }
 
-        foreach (var job in PhantomWeaponGuide.WeaponJobs)
+        foreach (var job in jobs)
         {
             ImGui.TableNextColumn();
-            var highestStage = GetHighestSyncedStage(job, itemLookup, syncedItems);
-            DrawWeaponCollectionTile(job, highestStage, itemLookup, syncedItems, tileWidth);
+            var highestStage = GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionTile(seriesKey, job, highestStage, stages, itemLookup, syncedItems, tileWidth);
         }
 
         ImGui.EndTable();
     }
 
     private void DrawWeaponCollectionRow(
+        string seriesKey,
         string label,
         IReadOnlyList<string> jobKeys,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
         IReadOnlyDictionary<string, List<uint>> syncedItems)
     {
         ImGui.Spacing();
         ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), label);
         var tileWidth = configuration.ShowWeaponProgressIcons ? 120f : 94f;
-        if (!ImGui.BeginTable($"phantom-weapon-row-{label}", jobKeys.Count, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+        if (!ImGui.BeginTable($"{seriesKey}-weapon-row-{label}", jobKeys.Count, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
         {
             return;
         }
 
         foreach (var key in jobKeys)
         {
-            var job = PhantomWeaponGuide.WeaponJobs.FirstOrDefault(job => job.Key == key);
+            var job = jobs.FirstOrDefault(job => job.Key == key);
             if (job == null)
             {
                 continue;
             }
 
             ImGui.TableNextColumn();
-            var highestStage = GetHighestSyncedStage(job, itemLookup, syncedItems);
-            DrawWeaponCollectionTile(job, highestStage, itemLookup, syncedItems, tileWidth);
+            var highestStage = GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionTile(seriesKey, job, highestStage, stages, itemLookup, syncedItems, tileWidth);
         }
 
         ImGui.EndTable();
@@ -621,19 +1194,94 @@ public sealed class PluginUI
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetPhantomWeaponItemLookup()
     {
-        weaponItemLookup ??= BuildPhantomWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>());
+        weaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), PhantomWeaponGuide.WeaponJobs, PhantomWeaponGuide.ProgressStages);
         return weaponItemLookup;
     }
 
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetMandervilleWeaponItemLookup()
+    {
+        mandervilleWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), MandervilleWeaponGuide.WeaponJobs, MandervilleWeaponGuide.ProgressStages);
+        return mandervilleWeaponItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetCosmicToolItemLookup()
+    {
+        cosmicToolItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.CosmicToolJobs, RelicWeaponGuide.CosmicProgressStages);
+        return cosmicToolItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetZodiacWeaponItemLookup()
+    {
+        zodiacWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.ZodiacWeaponJobs, RelicWeaponGuide.ZodiacProgressStages);
+        return zodiacWeaponItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetAnimaWeaponItemLookup()
+    {
+        animaWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.AnimaWeaponJobs, RelicWeaponGuide.AnimaProgressStages);
+        return animaWeaponItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetEurekaWeaponItemLookup()
+    {
+        eurekaWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.EurekaWeaponJobs, RelicWeaponGuide.EurekaProgressStages);
+        return eurekaWeaponItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetResistanceWeaponItemLookup()
+    {
+        resistanceWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.ResistanceWeaponJobs, RelicWeaponGuide.ResistanceProgressStages);
+        return resistanceWeaponItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetSkysteelToolItemLookup()
+    {
+        skysteelToolItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.SkysteelToolJobs, RelicWeaponGuide.SkysteelProgressStages);
+        return skysteelToolItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetSplendorousToolItemLookup()
+    {
+        splendorousToolItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.SplendorousToolJobs, RelicWeaponGuide.SplendorousProgressStages);
+        return splendorousToolItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetUltimateWeaponItemLookup()
+    {
+        ultimateWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages);
+        return ultimateWeaponItemLookup;
+    }
+
+    private static bool IsToolSeries(string seriesKey)
+        => seriesKey is "cosmic" or "skysteel" or "splendorous";
+
     private unsafe Dictionary<string, List<uint>> SyncCurrentCharacterWeaponProgress(
         string characterKey,
+        string seriesKey,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup)
     {
         var ownedItemIds = GetOwnedWeaponItemIds();
-        var synced = new Dictionary<string, List<uint>>();
-        foreach (var job in PhantomWeaponGuide.WeaponJobs)
+        var synced = configuration.WeaponProgressItemsByCharacter.TryGetValue(characterKey, out var stored)
+            ? new Dictionary<string, List<uint>>(stored)
+            : new Dictionary<string, List<uint>>();
+        foreach (var key in synced.Keys.Where(key => key.StartsWith($"{seriesKey}:", StringComparison.Ordinal)).ToArray())
         {
-            foreach (var stage in PhantomWeaponGuide.ProgressStages)
+            synced.Remove(key);
+        }
+
+        if (seriesKey == "phantom")
+        {
+            foreach (var key in synced.Keys.Where(key => key.Count(ch => ch == ':') == 1).ToArray())
+            {
+                synced.Remove(key);
+            }
+        }
+
+        foreach (var job in jobs)
+        {
+            foreach (var stage in stages)
             {
                 if (!itemLookup.TryGetValue((job.Key, stage.Key), out var items))
                 {
@@ -641,12 +1289,12 @@ public sealed class PluginUI
                 }
 
                 var ownedStageItems = items
-                    .Where(item => ownedItemIds.Contains(item.RowId) || ItemFinderHasItem(item.RowId))
+                    .Where(item => ownedItemIds.Contains(item.RowId) || ItemFinderHasItem(item))
                     .Select(item => item.RowId)
                     .ToList();
                 if (ownedStageItems.Count > 0)
                 {
-                    synced[GetWeaponProgressKey(job, stage)] = ownedStageItems;
+                    synced[GetWeaponProgressKey(seriesKey, job, stage)] = ownedStageItems;
                 }
             }
         }
@@ -657,20 +1305,38 @@ public sealed class PluginUI
         return synced;
     }
 
-    private static unsafe bool ItemFinderHasItem(uint itemId)
+    private static unsafe bool ItemFinderHasItem(Item item)
     {
         var finder = ItemFinderModule.Instance();
-        if (finder == null)
+        if (finder == null || finder->Result == null)
         {
             return false;
         }
 
-        finder->SearchForItem(itemId, false);
-        var result = finder->Result;
-        if (result == null)
+        var itemId = item.RowId;
+        var normalizedItemId = NormalizeItemId(itemId);
+        var currentResultMatchesItem = false;
+        foreach (var requestItemId in finder->RequestItemIds)
+        {
+            if (NormalizeItemId(requestItemId) == normalizedItemId)
+            {
+                currentResultMatchesItem = true;
+                break;
+            }
+        }
+
+        if (!currentResultMatchesItem)
+        {
+            var resultItemName = finder->Result->ItemName.ToString().Trim();
+            currentResultMatchesItem = string.Equals(resultItemName, item.Name.ExtractText(), StringComparison.Ordinal);
+        }
+
+        if (!currentResultMatchesItem)
         {
             return false;
         }
+
+        var result = finder->Result;
 
         if (result->EquipmentSlot >= 0
             || result->ArmouryChestCount > 0
@@ -743,25 +1409,56 @@ public sealed class PluginUI
     {
         var result = new HashSet<uint>();
         var inventoryManager = InventoryManager.Instance();
-        if (inventoryManager == null)
+        if (inventoryManager != null)
+        {
+            foreach (var inventoryType in WeaponInventoryTypes)
+            {
+                var container = inventoryManager->GetInventoryContainer(inventoryType);
+                if (container == null)
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < container->Size; i++)
+                {
+                    var itemId = NormalizeItemId(container->GetInventorySlot(i)->ItemId);
+                    if (itemId > 0)
+                    {
+                        result.Add(itemId);
+                    }
+                }
+            }
+        }
+
+        var finder = ItemFinderModule.Instance();
+        if (finder == null)
         {
             return result;
         }
 
-        foreach (var inventoryType in WeaponInventoryTypes)
+        foreach (var retainerPointer in finder->RetainerInventories.Values)
         {
-            var container = inventoryManager->GetInventoryContainer(inventoryType);
-            if (container == null)
+            var retainer = retainerPointer.Value;
+            if (retainer == null)
             {
                 continue;
             }
 
-            for (var i = 0; i < container->Size; i++)
+            foreach (var itemId in retainer->EquippedItemIds)
             {
-                var itemId = NormalizeItemId(container->GetInventorySlot(i)->ItemId);
-                if (itemId > 0)
+                var normalizedItemId = NormalizeItemId(itemId);
+                if (normalizedItemId > 0)
                 {
-                    result.Add(itemId);
+                    result.Add(normalizedItemId);
+                }
+            }
+
+            foreach (var itemId in retainer->ItemIds)
+            {
+                var normalizedItemId = NormalizeItemId(itemId);
+                if (normalizedItemId > 0)
+                {
+                    result.Add(normalizedItemId);
                 }
             }
         }
@@ -772,22 +1469,23 @@ public sealed class PluginUI
     private static uint NormalizeItemId(uint itemId)
         => itemId >= 1_000_000 ? itemId % 1_000_000 : itemId;
 
-    private static Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> BuildPhantomWeaponItemLookup(Lumina.Excel.ExcelSheet<Item> itemSheet)
+    private static Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> BuildWeaponItemLookup(
+        Lumina.Excel.ExcelSheet<Item> itemSheet,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages)
     {
         var itemsByName = itemSheet
             .Where(item => item.RowId > 0)
             .GroupBy(item => item.Name.ExtractText(), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var lookup = new Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>();
-        var stages = PhantomWeaponGuide.ProgressStages;
-        var jobs = PhantomWeaponGuide.WeaponJobs;
-
         for (var stageIndex = 0; stageIndex < stages.Count; stageIndex++)
         {
             var stage = stages[stageIndex];
             foreach (var job in jobs)
             {
                 var matchedItems = job.StageItemNames[stageIndex]
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
                     .Where(itemsByName.ContainsKey)
                     .Select(name => itemsByName[name])
                     .ToArray();
@@ -803,18 +1501,21 @@ public sealed class PluginUI
     }
 
     private static PhantomWeaponProgressStage? GetHighestSyncedStage(
+        string seriesKey,
         PhantomWeaponJob job,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
         IReadOnlyDictionary<string, List<uint>> syncedItems)
     {
-        return PhantomWeaponGuide.ProgressStages
+        return stages
             .Where(stage => itemLookup.TryGetValue((job.Key, stage.Key), out var items)
-                && syncedItems.TryGetValue(GetWeaponProgressKey(job, stage), out var itemIds)
+                && TryGetSyncedItemIds(seriesKey, job, stage, syncedItems, out var itemIds)
                 && items.Any(item => itemIds.Contains(item.RowId)))
             .LastOrDefault();
     }
 
     private void DrawWeaponProgressCell(
+        string seriesKey,
         PhantomWeaponJob job,
         PhantomWeaponProgressStage stage,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
@@ -826,7 +1527,7 @@ public sealed class PluginUI
         var items = itemLookup.TryGetValue((job.Key, stage.Key), out var matchedItems) ? matchedItems : Array.Empty<Item>();
         var itemAvailable = items.Count > 0;
         var owned = itemAvailable
-            && syncedItems.TryGetValue(GetWeaponProgressKey(job, stage), out var itemIds)
+            && TryGetSyncedItemIds(seriesKey, job, stage, syncedItems, out var itemIds)
             && items.Any(item => itemIds.Contains(item.RowId));
         var drawList = ImGui.GetWindowDrawList();
         var bgColor = owned
@@ -854,7 +1555,7 @@ public sealed class PluginUI
         ImGui.SetCursorScreenPos(cursor + new Vector2(7, 42));
         ImGui.TextColored(owned ? new Vector4(0.78f, 0.96f, 0.94f, 1f) : new Vector4(0.45f, 0.45f, 0.50f, 1f), stage.Name);
         ImGui.SetCursorScreenPos(cursor);
-        ImGui.InvisibleButton($"weapon-progress-{job.Key}-{stage.Key}", size);
+        ImGui.InvisibleButton($"weapon-progress-{seriesKey}-{job.Key}-{stage.Key}", size);
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip(itemAvailable
@@ -864,8 +1565,10 @@ public sealed class PluginUI
     }
 
     private void DrawWeaponCollectionTile(
+        string seriesKey,
         PhantomWeaponJob job,
         PhantomWeaponProgressStage? highestStage,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
         IReadOnlyDictionary<string, List<uint>> syncedItems,
         float width)
@@ -876,7 +1579,7 @@ public sealed class PluginUI
         var stageKey = highestStage?.Key ?? string.Empty;
         var ownedItems = highestStage == null
             ? Array.Empty<Item>()
-            : GetSyncedStageItems(job, highestStage, itemLookup, syncedItems).ToArray();
+            : GetSyncedStageItems(seriesKey, job, highestStage, itemLookup, syncedItems).ToArray();
         var hasWeapon = ownedItems.Length > 0;
         var drawList = ImGui.GetWindowDrawList();
         var bgTop = hasWeapon ? new Vector4(0.10f, 0.18f, 0.24f, 0.96f) : new Vector4(0.10f, 0.11f, 0.15f, 0.72f);
@@ -908,63 +1611,84 @@ public sealed class PluginUI
         ImGui.SetCursorScreenPos(cursor + new Vector2(10f, showIcon ? 57f : 31f));
         ImGui.TextUnformatted(job.Name);
 
-        DrawWeaponTileProgress(cursor + new Vector2(10f, showIcon ? 88f : 52f), width - 20f, stageKey);
+        DrawWeaponTileProgress(
+            cursor + new Vector2(10f, showIcon ? 88f : 52f),
+            width - 20f,
+            seriesKey,
+            job,
+            stageKey,
+            stages,
+            itemLookup,
+            syncedItems);
 
         ImGui.SetCursorScreenPos(cursor + new Vector2(width - 50f, showIcon ? 8f : 7f));
         DrawStagePill(highestStage?.Name ?? "未持有", stageKey);
 
         ImGui.SetCursorScreenPos(cursor);
-        if (ImGui.InvisibleButton($"weapon-tile-{job.Key}", size))
+        if (ImGui.InvisibleButton($"weapon-tile-{seriesKey}-{job.Key}", size))
         {
-            ImGui.OpenPopup($"weapon-detail-{job.Key}");
+            ImGui.OpenPopup($"weapon-detail-{seriesKey}-{job.Key}");
         }
 
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip(hasWeapon
                 ? $"{job.Name} / {highestStage!.Name}\n{string.Join("\n", ownedItems.Select(item => item.Name.ExtractText()))}\n点击查看全部阶段"
-                : $"{job.Name}\n上次同步未找到幻境武器\n点击查看全部阶段");
+                : $"{job.Name}\n上次同步未找到该系列武器\n点击查看全部阶段");
         }
 
-        DrawWeaponTilePopup(job, itemLookup, syncedItems);
+        DrawWeaponTilePopup(seriesKey, job, stages, itemLookup, syncedItems);
     }
 
-    private static void DrawWeaponTileProgress(Vector2 pos, float width, string stageKey)
+    private static void DrawWeaponTileProgress(
+        Vector2 pos,
+        float width,
+        string seriesKey,
+        PhantomWeaponJob job,
+        string stageKey,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
+        IReadOnlyDictionary<string, List<uint>> syncedItems)
     {
-        var stageIndex = PhantomWeaponGuide.ProgressStages
+        var stageIndex = stages
             .Select((stage, index) => (stage.Key, index))
             .FirstOrDefault(pair => pair.Key == stageKey).index;
         var filled = string.IsNullOrEmpty(stageKey) ? 0 : stageIndex + 1;
         var drawList = ImGui.GetWindowDrawList();
         var gap = 3f;
-        var segmentWidth = (width - gap * 4f) / 5f;
-        for (var i = 0; i < 5; i++)
+        var segmentWidth = (width - gap * (stages.Count - 1)) / stages.Count;
+        for (var i = 0; i < stages.Count; i++)
         {
             var start = pos + new Vector2(i * (segmentWidth + gap), 0f);
             var end = start + new Vector2(segmentWidth, 6f);
-            var color = i < filled
-                ? GetStageColor(PhantomWeaponGuide.ProgressStages[i].Key, 0.92f)
-                : new Vector4(0.24f, 0.25f, 0.30f, 0.72f);
+            var isFilled = seriesKey == "ultimate"
+                ? GetSyncedStageItems(seriesKey, job, stages[i], itemLookup, syncedItems).Any()
+                : i < filled;
+            var color = isFilled
+                ? GetStageColor(stages[i].Key, 0.92f)
+                : GetStageColor(stages[i].Key, 0.24f);
             drawList.AddRectFilled(start, end, ImGui.GetColorU32(color), 2f);
         }
     }
 
     private void DrawWeaponTilePopup(
+        string seriesKey,
         PhantomWeaponJob job,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
         IReadOnlyDictionary<string, List<uint>> syncedItems)
     {
-        if (!ImGui.BeginPopup($"weapon-detail-{job.Key}"))
+        if (!ImGui.BeginPopup($"weapon-detail-{seriesKey}-{job.Key}"))
         {
             return;
         }
 
         ImGui.TextUnformatted(job.Name);
         ImGui.Separator();
-        for (var i = 0; i < PhantomWeaponGuide.ProgressStages.Count; i++)
+        for (var i = 0; i < stages.Count; i++)
         {
-            var stage = PhantomWeaponGuide.ProgressStages[i];
-            var ownedItems = GetSyncedStageItems(job, stage, itemLookup, syncedItems).ToArray();
+            var stage = stages[i];
+            var ownedItems = GetSyncedStageItems(seriesKey, job, stage, itemLookup, syncedItems).ToArray();
             var stageNames = job.StageItemNames[i];
             var hasStage = ownedItems.Length > 0;
             ImGui.TextColored(hasStage ? GetStageColor(stage.Key, 1f) : new Vector4(0.48f, 0.50f, 0.57f, 1f), stage.Name);
@@ -983,13 +1707,14 @@ public sealed class PluginUI
     }
 
     private static IEnumerable<Item> GetSyncedStageItems(
+        string seriesKey,
         PhantomWeaponJob job,
         PhantomWeaponProgressStage stage,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
         IReadOnlyDictionary<string, List<uint>> syncedItems)
     {
         if (!itemLookup.TryGetValue((job.Key, stage.Key), out var items)
-            || !syncedItems.TryGetValue(GetWeaponProgressKey(job, stage), out var itemIds))
+            || !TryGetSyncedItemIds(seriesKey, job, stage, syncedItems, out var itemIds))
         {
             return Array.Empty<Item>();
         }
@@ -997,36 +1722,93 @@ public sealed class PluginUI
         return items.Where(item => itemIds.Contains(item.RowId));
     }
 
+    private static bool TryGetSyncedItemIds(
+        string seriesKey,
+        PhantomWeaponJob job,
+        PhantomWeaponProgressStage stage,
+        IReadOnlyDictionary<string, List<uint>> syncedItems,
+        out List<uint> itemIds)
+    {
+        if (syncedItems.TryGetValue(GetWeaponProgressKey(seriesKey, job, stage), out itemIds!))
+        {
+            return true;
+        }
+
+        return seriesKey == "phantom" && syncedItems.TryGetValue($"{job.Key}:{stage.Key}", out itemIds!);
+    }
+
     private static Vector4 GetStageColor(string stageKey, float alpha)
     {
         var color = stageKey switch
         {
             "secret" => new Vector4(0.30f, 0.84f, 0.78f, alpha),
+            "manderville-complete" => new Vector4(0.30f, 0.84f, 0.78f, alpha),
+            "manderville-majestic" => new Vector4(0.67f, 0.56f, 0.94f, alpha),
+            "manderville-amazing" => new Vector4(0.45f, 0.58f, 0.88f, alpha),
+            "manderville-base" => new Vector4(0.72f, 0.72f, 0.78f, alpha),
+            "cosmic-stellar" => new Vector4(0.30f, 0.84f, 0.78f, alpha),
+            "cosmic-hyperspatial" => new Vector4(0.67f, 0.56f, 0.94f, alpha),
+            "cosmic-spacious" => new Vector4(0.45f, 0.58f, 0.88f, alpha),
+            "cosmic-base" => new Vector4(0.72f, 0.72f, 0.78f, alpha),
             "eclipse" => new Vector4(0.67f, 0.56f, 0.94f, alpha),
             "darkness" => new Vector4(0.54f, 0.48f, 0.82f, alpha),
             "umbra" => new Vector4(0.45f, 0.58f, 0.88f, alpha),
             "penumbra" => new Vector4(0.72f, 0.72f, 0.78f, alpha),
-            _ => new Vector4(0.48f, 0.48f, 0.52f, alpha),
+            _ => GetFallbackStageColor(stageKey, alpha),
         };
         return color;
     }
 
-    private static string GetWeaponProgressKey(PhantomWeaponJob job, PhantomWeaponProgressStage stage)
-        => $"{job.Key}:{stage.Key}";
+    private static string GetWeaponProgressKey(string seriesKey, PhantomWeaponJob job, PhantomWeaponProgressStage stage)
+        => $"{seriesKey}:{job.Key}:{stage.Key}";
 
     private static void DrawStagePill(string text, string stageKey)
     {
         var color = stageKey switch
         {
             "secret" => new Vector4(0.30f, 0.84f, 0.78f, 1f),
+            "manderville-complete" => new Vector4(0.30f, 0.84f, 0.78f, 1f),
+            "manderville-majestic" => new Vector4(0.76f, 0.70f, 0.95f, 1f),
+            "manderville-amazing" => new Vector4(0.56f, 0.66f, 0.90f, 1f),
+            "manderville-base" => new Vector4(0.72f, 0.72f, 0.78f, 1f),
+            "cosmic-stellar" => new Vector4(0.30f, 0.84f, 0.78f, 1f),
+            "cosmic-hyperspatial" => new Vector4(0.76f, 0.70f, 0.95f, 1f),
+            "cosmic-spacious" => new Vector4(0.56f, 0.66f, 0.90f, 1f),
+            "cosmic-base" => new Vector4(0.72f, 0.72f, 0.78f, 1f),
             "eclipse" => new Vector4(0.76f, 0.70f, 0.95f, 1f),
             "darkness" => new Vector4(0.70f, 0.58f, 0.90f, 1f),
             "umbra" => new Vector4(0.56f, 0.66f, 0.90f, 1f),
             "penumbra" => new Vector4(0.72f, 0.72f, 0.78f, 1f),
-            _ => new Vector4(0.48f, 0.48f, 0.52f, 1f),
+            _ => GetFallbackStageColor(stageKey, 1f),
         };
 
         ImGui.TextColored(color, text);
+    }
+
+    private static Vector4 GetFallbackStageColor(string stageKey, float alpha)
+    {
+        if (string.IsNullOrWhiteSpace(stageKey))
+        {
+            return new Vector4(0.48f, 0.48f, 0.52f, alpha);
+        }
+
+        var hash = 0;
+        foreach (var ch in stageKey)
+        {
+            hash = unchecked(hash * 31 + ch);
+        }
+
+        var palette = new[]
+        {
+            new Vector3(0.30f, 0.84f, 0.78f),
+            new Vector3(0.67f, 0.56f, 0.94f),
+            new Vector3(0.45f, 0.58f, 0.88f),
+            new Vector3(0.90f, 0.66f, 0.35f),
+            new Vector3(0.82f, 0.46f, 0.66f),
+            new Vector3(0.48f, 0.74f, 0.44f),
+        };
+        var color = palette[Math.Abs(hash) % palette.Length];
+        return new Vector4(color.X, color.Y, color.Z, alpha);
     }
 
     private void DrawYokaiWorkspace()
@@ -1164,6 +1946,28 @@ public sealed class PluginUI
     {
         DrawDependencyStatus();
 
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "常用设置");
+        var useFlight = configuration.UseFlightNavigation;
+        if (ImGui.Checkbox("飞行导航", ref useFlight))
+        {
+            configuration.UseFlightNavigation = useFlight;
+            configuration.Save();
+        }
+
+        var showFloating = configuration.ShowFloatingObjectiveWindow;
+        if (ImGui.Checkbox("悬浮窗", ref showFloating))
+        {
+            configuration.ShowFloatingObjectiveWindow = showFloating;
+            configuration.Save();
+        }
+
+        var autoMarkKills = configuration.AutoMarkSecretKills;
+        if (ImGui.Checkbox("自动标记击杀", ref autoMarkKills))
+        {
+            configuration.AutoMarkSecretKills = autoMarkKills;
+            configuration.Save();
+        }
+
         var autoHideCompletedFloatingItems = configuration.AutoHideCompletedFloatingItems;
         if (ImGui.Checkbox("悬浮窗自动隐藏已完成项目", ref autoHideCompletedFloatingItems))
         {
@@ -1171,10 +1975,25 @@ public sealed class PluginUI
             configuration.Save();
         }
 
+        var showAvailableFates = configuration.ShowAvailableFatesInFloatingWindow;
+        if (ImGui.Checkbox("悬浮窗显示可参与 FATE", ref showAvailableFates))
+        {
+            configuration.ShowAvailableFatesInFloatingWindow = showAvailableFates;
+            configuration.Save();
+        }
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "DEBUG");
+        var itemFinderText = GetItemFinderDebugText();
+        ImGui.TextDisabled(itemFinderText);
 
+        if (ImGui.Button("读取道具检索##debug-item-finder"))
+        {
+            PrintChat($"DEBUG: {itemFinderText}");
+        }
+
+        ImGui.SameLine();
         if (ImGui.Button("读取当前坐标##debug-print-coords"))
         {
             var player = DalamudApi.ObjectTable[0];
@@ -1248,6 +2067,53 @@ public sealed class PluginUI
         {
             PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
         }
+    }
+
+    private static unsafe string GetItemFinderDebugText()
+    {
+        var finder = ItemFinderModule.Instance();
+        if (finder == null)
+        {
+            return "道具检索：不可用（ItemFinderModule.Instance() == null）";
+        }
+
+        var result = finder->Result;
+        if (result == null)
+        {
+            return "道具检索：无结果（Result == null）";
+        }
+
+        var equipped = result->EquipmentSlot >= 0 ? 1 : 0;
+        var inventory = result->InventoryPage1Count
+            + result->InventoryPage2Count
+            + result->InventoryPage3Count
+            + result->InventoryPage4Count;
+        var armoury = result->ArmouryChestCount;
+        var saddle = result->SaddleBagPage1Count
+            + result->SaddleBagPage2Count
+            + result->PremiumSaddleBagPage1Count
+            + result->PremiumSaddleBagPage2Count;
+        var storage = result->ArmoireCount + result->GlamourDresserCount;
+        var retainer = 0;
+        for (var i = 0; i < result->RetainerCount; i++)
+        {
+            var retainerResult = result->Retainer[i];
+            if (retainerResult == null)
+            {
+                continue;
+            }
+
+            retainer += retainerResult->EquipmentSlot >= 0 ? 1 : 0;
+            retainer += retainerResult->Page1Count
+                + retainerResult->Page2Count
+                + retainerResult->Page3Count
+                + retainerResult->Page4Count
+                + retainerResult->Page5Count;
+        }
+
+        var total = equipped + inventory + armoury + saddle + storage + retainer;
+        var state = total > 0 ? "有数据" : "无命中";
+        return $"道具检索：{state}，总数 {total}（装备 {equipped}，背包 {inventory}，兵装库 {armoury}，雇员 {retainer}/{result->RetainerCount}，鞍囊 {saddle}，投影/收藏 {storage}）";
     }
 
     private static void OpenUrl(string url)
@@ -1647,6 +2513,12 @@ public sealed class PluginUI
 
         DrawFloatingContextMenu();
 
+        if (configuration.ShowAvailableFatesInFloatingWindow)
+        {
+            DrawFloatingAvailableFates();
+            ImGui.Separator();
+        }
+
         if (configuration.ShowSecretTargetsInFloatingWindow)
         {
             var zone = targets[0].Zone;
@@ -1710,54 +2582,17 @@ public sealed class PluginUI
         ImGui.SameLine();
         if (ImGui.SmallButton("最近FATE##float-nav-fate"))
         {
-            var player = DalamudApi.ObjectTable[0];
-            if (player != null)
+            var nearest = GetAvailableFates().FirstOrDefault();
+            if (nearest != null)
             {
-                var nearest = DalamudApi.FateTable
-                    .Where(f => f != null && DalamudApi.FateTable.IsValid(f))
-                    .Where(f => f!.State is FateState.Preparing or FateState.Running or FateState.Ending)
-                    .Select(f => f!)
-                    .OrderBy(f => Vector3.Distance(player.Position, f.Position))
-                    .FirstOrDefault();
-
-                if (nearest != null)
-                {
-                    var fatePos = nearest.Position;
-                    var playerDist = Vector2.Distance(new Vector2(player.Position.X, player.Position.Z), new Vector2(fatePos.X, fatePos.Z));
-                    var aetherytePos = vnav.GetNearestCurrentTerritoryAetherytePosition(fatePos);
-                    if (aetherytePos.HasValue)
-                    {
-                        var aetheryteDist = Vector2.Distance(new Vector2(aetherytePos.Value.X, aetherytePos.Value.Z), new Vector2(fatePos.X, fatePos.Z));
-                        if (playerDist <= aetheryteDist)
-                        {
-                            vnav.NavigateTo(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
-                            PrintChat($"导航到最近FATE: {nearest.Name}（自身距FATE {playerDist:F0} ≤ 水晶距FATE {aetheryteDist:F0}，直接前往）。");
-                        }
-                        else
-                        {
-                            vnav.TeleportAndNavigate(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
-                            PrintChat($"导航到最近FATE: {nearest.Name}（自身距FATE {playerDist:F0} > 水晶距FATE {aetheryteDist:F0}，先传送）。");
-                        }
-                    }
-                    else if (playerDist > 200f)
-                    {
-                        vnav.TeleportAndNavigate(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
-                        PrintChat($"导航到最近FATE: {nearest.Name}（未找到水晶坐标，距离{playerDist:F0}，先传送再前往）。");
-                    }
-                    else
-                    {
-                        vnav.NavigateTo(new Vector3(fatePos.X, fatePos.Y, fatePos.Z), configuration.UseFlightNavigation);
-                        PrintChat($"导航到最近FATE: {nearest.Name}（未找到水晶坐标，距离{playerDist:F0}，直接前往）。");
-                    }
-                }
-                else
-                {
-                    PrintChat("当前地图没有活跃的FATE。");
-                }
+                NavigateToFate(nearest);
+            }
+            else
+            {
+                PrintChat("当前地图没有可参与的 FATE。");
             }
         }
 
-        ImGui.Separator();
         foreach (var target in targets)
         {
             var done = configuration.CompletedTasks.Contains(target.Key);
@@ -1804,6 +2639,89 @@ public sealed class PluginUI
         }
 
         ImGui.End();
+    }
+
+    private void DrawFloatingAvailableFates()
+    {
+        ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "当前可参与 FATE");
+        var fates = GetAvailableFates();
+        if (fates.Length == 0)
+        {
+            ImGui.TextDisabled("当前地图没有可参与的 FATE。");
+            return;
+        }
+
+        foreach (var fate in fates)
+        {
+            ImGui.TextUnformatted($"{fate.Name}  {FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"导航##floating-available-fate-{fate.FateId}"))
+            {
+                NavigateToFate(fate);
+            }
+        }
+    }
+
+    private IFate[] GetAvailableFates()
+    {
+        var territory = DalamudApi.ClientState.TerritoryType;
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        return DalamudApi.FateTable
+            .Where(fate => fate != null && DalamudApi.FateTable.IsValid(fate))
+            .Where(fate => fate!.TerritoryType.RowId == territory)
+            .Where(fate => fate!.State is FateState.Preparing or FateState.Running)
+            .Where(fate => fate!.Progress < 100)
+            .Select(fate => fate!)
+            .OrderBy(fate => player == null ? float.MaxValue : Vector3.Distance(player.Position, fate.Position))
+            .ThenBy(fate => fate.TimeRemaining < 0 ? long.MaxValue : fate.TimeRemaining)
+            .Take(8)
+            .ToArray();
+    }
+
+    private void NavigateToFate(IFate fate)
+    {
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        if (player == null)
+        {
+            PrintChat("导航失败：当前没有本地角色。");
+            return;
+        }
+
+        var target = fate.Position;
+        var playerDistance = Vector2.Distance(new Vector2(player.Position.X, player.Position.Z), new Vector2(target.X, target.Z));
+        var aetherytePosition = vnav.GetNearestCurrentTerritoryAetherytePosition(target);
+        if (aetherytePosition.HasValue)
+        {
+            var aetheryteDistance = Vector2.Distance(new Vector2(aetherytePosition.Value.X, aetherytePosition.Value.Z), new Vector2(target.X, target.Z));
+            if (playerDistance > aetheryteDistance)
+            {
+                vnav.NavigateToFate(target, configuration.UseFlightNavigation);
+                PrintChat($"导航到 FATE：{fate.Name}。");
+                return;
+            }
+        }
+
+        vnav.NavigateToFate(target, configuration.UseFlightNavigation);
+        PrintChat($"导航到 FATE：{fate.Name}。");
+    }
+
+    private static string FormatFateState(FateState state)
+        => state switch
+        {
+            FateState.Preparing => "准备",
+            FateState.Running => "进行中",
+            FateState.Ending => "即将结束",
+            _ => state.ToString(),
+        };
+
+    private static string FormatFateTime(FateState state, long seconds)
+    {
+        if (seconds < 0)
+        {
+            return state == FateState.Preparing ? "等待开始" : "时间未知";
+        }
+
+        return $"{seconds / 60}:{seconds % 60:00}";
     }
 
     private void DrawFloatingSecretDuties()
