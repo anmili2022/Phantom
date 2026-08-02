@@ -98,6 +98,8 @@ public sealed class PluginUI
         InventoryType.SaddleBag1, InventoryType.SaddleBag2,
         InventoryType.PremiumSaddleBag1, InventoryType.PremiumSaddleBag2,
     };
+    private static readonly HashSet<uint> ChroniclerFateTerritories = new() { 1252, 1346 };
+    private static readonly HashSet<uint> UnsupportedFateTerritories = new() { 732, 763, 795, 827, 920, 975 };
 
     public PluginUI(PluginConfiguration configuration, VnavService vnav)
     {
@@ -1281,55 +1283,55 @@ public sealed class PluginUI
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetMandervilleWeaponItemLookup()
     {
-        mandervilleWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), MandervilleWeaponGuide.WeaponJobs, MandervilleWeaponGuide.ProgressStages);
+        mandervilleWeaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("manderville"));
         return mandervilleWeaponItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetCosmicToolItemLookup()
     {
-        cosmicToolItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.CosmicToolJobs, RelicWeaponGuide.CosmicProgressStages);
+        cosmicToolItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("cosmic"));
         return cosmicToolItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetZodiacWeaponItemLookup()
     {
-        zodiacWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.ZodiacWeaponJobs, RelicWeaponGuide.ZodiacProgressStages);
+        zodiacWeaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("zodiac"));
         return zodiacWeaponItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetAnimaWeaponItemLookup()
     {
-        animaWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.AnimaWeaponJobs, RelicWeaponGuide.AnimaProgressStages);
+        animaWeaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("anima"));
         return animaWeaponItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetEurekaWeaponItemLookup()
     {
-        eurekaWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.EurekaWeaponJobs, RelicWeaponGuide.EurekaProgressStages);
+        eurekaWeaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("eureka"));
         return eurekaWeaponItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetResistanceWeaponItemLookup()
     {
-        resistanceWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.ResistanceWeaponJobs, RelicWeaponGuide.ResistanceProgressStages);
+        resistanceWeaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("resistance"));
         return resistanceWeaponItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetSkysteelToolItemLookup()
     {
-        skysteelToolItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.SkysteelToolJobs, RelicWeaponGuide.SkysteelProgressStages);
+        skysteelToolItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("skysteel"));
         return skysteelToolItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetSplendorousToolItemLookup()
     {
-        splendorousToolItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.SplendorousToolJobs, RelicWeaponGuide.SplendorousProgressStages);
+        splendorousToolItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("splendorous"));
         return splendorousToolItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetUltimateWeaponItemLookup()
     {
-        ultimateWeaponItemLookup ??= BuildWeaponItemLookup(DalamudApi.DataManager.GetExcelSheet<Item>(), RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages);
+        ultimateWeaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("ultimate"));
         return ultimateWeaponItemLookup;
     }
 
@@ -1881,37 +1883,6 @@ public sealed class PluginUI
             if (matchedItems.Length > 0)
             {
                 lookup[reward.Key] = matchedItems;
-            }
-        }
-
-        return lookup;
-    }
-
-    private static Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> BuildWeaponItemLookup(
-        Lumina.Excel.ExcelSheet<Item> itemSheet,
-        IReadOnlyList<PhantomWeaponJob> jobs,
-        IReadOnlyList<PhantomWeaponProgressStage> stages)
-    {
-        var itemsByName = itemSheet
-            .Where(item => item.RowId > 0)
-            .GroupBy(item => item.Name.ExtractText(), StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        var lookup = new Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>();
-        for (var stageIndex = 0; stageIndex < stages.Count; stageIndex++)
-        {
-            var stage = stages[stageIndex];
-            foreach (var job in jobs)
-            {
-                var matchedItems = job.StageItemNames[stageIndex]
-                    .Where(name => !string.IsNullOrWhiteSpace(name))
-                    .Where(itemsByName.ContainsKey)
-                    .Select(name => itemsByName[name])
-                    .ToArray();
-
-                if (matchedItems.Length > 0)
-                {
-                    lookup[(job.Key, stage.Key)] = matchedItems;
-                }
             }
         }
 
@@ -3397,14 +3368,25 @@ public sealed class PluginUI
         ImGui.SameLine();
         if (ImGui.SmallButton("最近FATE##float-nav-fate"))
         {
-            var nearest = GetAvailableFates().FirstOrDefault();
-            if (nearest != null)
+            if (IsChroniclerFateTerritory())
             {
-                NavigateToFate(nearest);
+                PrintChat("【新月岛地图】请使用【新月岛史官】插件。");
+            }
+            else if (IsUnsupportedFateTerritory())
+            {
+                PrintChat("【博兹雅/优雷卡】暂不支持该地图。");
             }
             else
             {
-                PrintChat("当前地图没有可参与的 FATE。");
+                var nearest = GetAvailableFates().FirstOrDefault();
+                if (nearest != null)
+                {
+                    NavigateToFate(nearest);
+                }
+                else
+                {
+                    PrintChat("当前地图没有可参与的 FATE。");
+                }
             }
         }
 
@@ -3495,6 +3477,18 @@ public sealed class PluginUI
 
     private void NavigateToFate(IFate fate)
     {
+        if (IsChroniclerFateTerritory())
+        {
+            PrintChat("【新月岛地图】请使用【新月岛史官】插件。");
+            return;
+        }
+
+        if (IsUnsupportedFateTerritory())
+        {
+            PrintChat("【博兹雅/优雷卡】暂不支持该地图。");
+            return;
+        }
+
         var player = DalamudApi.ObjectTable.LocalPlayer;
         if (player == null)
         {
@@ -3519,6 +3513,12 @@ public sealed class PluginUI
         vnav.NavigateToFate(target, configuration.UseFlightNavigation);
         PrintChat($"导航到 FATE：{fate.Name}。");
     }
+
+    private static bool IsChroniclerFateTerritory()
+        => ChroniclerFateTerritories.Contains(DalamudApi.ClientState.TerritoryType);
+
+    private static bool IsUnsupportedFateTerritory()
+        => UnsupportedFateTerritories.Contains(DalamudApi.ClientState.TerritoryType);
 
     private static string FormatFateState(FateState state)
         => state switch
