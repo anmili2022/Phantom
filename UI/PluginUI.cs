@@ -27,7 +27,7 @@ public sealed class PluginUI
     private static readonly (string Key, string Label, string Count)[] MainSections =
     {
         ("overview", "总览", ""),
-        ("phantom", "幻武 · 幻境武器", "5"),
+        ("phantom", "幻武 · Phantom", "5"),
         ("zodiac", "古武 · Zodiac", "-"),
         ("anima", "魂武 · Anima", "-"),
         ("eureka", "优武 · Eurekan", "-"),
@@ -136,7 +136,7 @@ public sealed class PluginUI
         DrawSidebarBrand();
         ImGui.Separator();
 
-        DrawSidebarLabel("Workspace");
+        DrawSidebarLabel("武器工坊");
         foreach (var section in WorkspaceSections)
         {
             DrawSidebarButton(GetMainSectionIndex(section.Key), section.Label, GetSidebarCount(section), GetSidebarIcon(section.Key));
@@ -418,14 +418,15 @@ public sealed class PluginUI
         {
             ImGui.TableNextColumn();
             ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "同步覆盖");
-            ImGui.TextDisabled("角色背包、兵装库与装备栏：实时读取");
+            ImGui.TextDisabled("背包、兵装库与装备中：实时读取");
+            ImGui.TextDisabled("鞍囊、收藏柜与投影台：读取游戏缓存（可能不是最新数据）");
             ImGui.TextDisabled($"雇员库存：{retainerCoverage.Current}/{retainerCoverage.Total} 个已在本次登录后打开并刷新，{retainerCoverage.Cached}/{retainerCoverage.Total} 个已缓存（可能不是最新数据）");
             if (retainerCoverage.Total > retainerCoverage.Current)
             {
                 ImGui.TextColored(new Vector4(0.92f, 0.72f, 0.38f, 1f), "未打开的雇员可能使用旧缓存。");
             }
 
-            ImGui.TextDisabled("/物品检索 物品 可临时刷新");
+            ImGui.TextDisabled("/道具检索 物品 可刷新投影台");
 
             ImGui.TableNextColumn();
             ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "快捷入口");
@@ -591,6 +592,9 @@ public sealed class PluginUI
         {
             ResetCurrentStage();
         }
+
+        ImGui.SameLine();
+        DrawWikiButton("打开幻境武器 Wiki", "phantom", "https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
     }
 
     private static void DrawWeaponSeriesPlaceholder(string name)
@@ -614,11 +618,13 @@ public sealed class PluginUI
         ImGui.TextWrapped(series.Summary);
         ImGui.TextDisabled(series.EnglishName);
         ImGui.SameLine();
-        ImGui.TextDisabled(series.SourceUrl);
+        var sourceLabel = series.Key == "zodiac" ? "打开上古武器Wiki" : $"打开{series.Name} Wiki";
+        DrawWikiButton(sourceLabel, series.Key, series.SourceUrl);
         if (!string.IsNullOrWhiteSpace(series.SecondarySourceUrl))
         {
             ImGui.SameLine();
-            ImGui.TextDisabled(series.SecondarySourceUrl);
+            var secondaryLabel = series.Key == "zodiac" ? "打开黄道武器Wiki" : $"打开{series.Name} Wiki 2";
+            DrawWikiButton(secondaryLabel, $"{series.Key}-secondary", series.SecondarySourceUrl);
         }
         ImGui.Separator();
 
@@ -759,6 +765,8 @@ public sealed class PluginUI
         }
 
         ImGui.EndGroup();
+        ImGui.SameLine();
+        DrawWikiButton("打开曼德维尔武器 Wiki", "manderville", "https://ff14.huijiwiki.com/wiki/%E6%9B%BC%E5%BE%B7%E7%BB%B4%E5%B0%94%E6%AD%A6%E5%99%A8");
         ImGui.Separator();
         if (showMandervilleProgress)
         {
@@ -1071,7 +1079,6 @@ public sealed class PluginUI
             : new Dictionary<string, List<uint>>();
         var completedJobs = 0;
 
-        ImGui.TextDisabled("点击同步时先扫描当前角色背包/兵装库/装备栏；若游戏 ItemFinder 已有当前道具检索结果，则读取雇员、鞍囊、投影台等缓存位置，不主动弹出持有情况窗口。 ");
         if (!canSync)
         {
             ImGui.TextColored(new Vector4(1f, 0.72f, 0.28f, 1f), "未登录角色，无法同步。");
@@ -1080,6 +1087,11 @@ public sealed class PluginUI
         if (ImGui.Button($"同步当前角色##sync-weapon-progress-{seriesKey}") && canSync)
         {
             syncedItems = SyncCurrentCharacterWeaponProgress(characterKey, seriesKey, syncJobs ?? jobs, syncStages ?? stages, itemLookup);
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("点击同步时先扫描当前角色背包、兵装库和装备栏；若游戏 ItemFinder 已有当前道具检索结果，则读取雇员、鞍囊、投影台等缓存位置，不主动弹出持有情况窗口。");
         }
 
         ImGui.SameLine();
@@ -1299,10 +1311,185 @@ public sealed class PluginUI
             }
         }
 
+        if (configuration.DebugLogSyncedItemLocations)
+        {
+            LogSyncedWeaponItemLocations(seriesKey, itemLookup, synced, configuration.DebugLogMissingItemLocations);
+        }
+
         configuration.WeaponProgressItemsByCharacter[characterKey] = synced;
         configuration.WeaponProgressSyncTimes[characterKey] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         configuration.Save();
         return synced;
+    }
+
+    private static void LogSyncedWeaponItemLocations(
+        string seriesKey,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
+        IReadOnlyDictionary<string, List<uint>> synced,
+        bool logMissingItems)
+    {
+        var loggedItemIds = new HashSet<uint>();
+        var syncedItemIds = synced
+            .Where(entry => entry.Key.StartsWith($"{seriesKey}:", StringComparison.Ordinal))
+            .SelectMany(entry => entry.Value)
+            .ToHashSet();
+        foreach (var items in itemLookup.Values)
+        {
+            foreach (var item in items)
+            {
+                if (!loggedItemIds.Add(item.RowId))
+                {
+                    continue;
+                }
+
+                var locations = GetItemStorageLocations(item);
+                var status = locations.Count > 0
+                    ? string.Join("、", locations)
+                    : syncedItemIds.Contains(item.RowId)
+                        ? "已命中，位置缓存不可用"
+                        : "未找到";
+                if (status == "未找到" && !logMissingItems)
+                {
+                    continue;
+                }
+
+                PrintChat($"DEBUG [{seriesKey}] {item.Name.ExtractText()}：{status}");
+            }
+        }
+    }
+
+    private static unsafe IReadOnlyList<string> GetItemStorageLocations(Item item)
+    {
+        var locations = new HashSet<string>(StringComparer.Ordinal);
+        var itemId = NormalizeItemId(item.RowId);
+        var inventoryManager = InventoryManager.Instance();
+        if (inventoryManager != null)
+        {
+            AddInventoryLocation(inventoryManager, InventoryType.Inventory1, itemId, "背包", locations);
+            AddInventoryLocation(inventoryManager, InventoryType.Inventory2, itemId, "背包", locations);
+            AddInventoryLocation(inventoryManager, InventoryType.Inventory3, itemId, "背包", locations);
+            AddInventoryLocation(inventoryManager, InventoryType.Inventory4, itemId, "背包", locations);
+            AddInventoryLocation(inventoryManager, InventoryType.ArmoryMainHand, itemId, "兵装库", locations);
+            AddInventoryLocation(inventoryManager, InventoryType.ArmoryOffHand, itemId, "兵装库", locations);
+            AddInventoryLocation(inventoryManager, InventoryType.EquippedItems, itemId, "装备中", locations);
+        }
+
+        var finder = ItemFinderModule.Instance();
+        if (finder == null)
+        {
+            return locations.ToArray();
+        }
+
+        if (ContainsItemId(finder->SaddleBagItemIds, itemId)
+            || ContainsItemId(finder->PremiumSaddleBagItemIds, itemId))
+        {
+            locations.Add("鞍囊");
+        }
+
+        if (ContainsItemId(finder->GlamourDresserItemIds, itemId))
+        {
+            locations.Add("投影台");
+        }
+
+        var cabinetRow = DalamudApi.DataManager.GetExcelSheet<Cabinet>()
+            .FirstOrDefault(row => row.Item.RowId == itemId);
+        if (cabinetRow.RowId > 0 && IsCabinetItemOwned(cabinetRow.RowId, finder))
+        {
+            locations.Add("收藏柜");
+        }
+
+        foreach (var retainerPointer in finder->RetainerInventories.Values)
+        {
+            var retainer = retainerPointer.Value;
+            if (retainer != null
+                && (ContainsItemId(retainer->EquippedItemIds, itemId)
+                    || ContainsItemId(retainer->ItemIds, itemId)))
+            {
+                locations.Add("雇员");
+                break;
+            }
+        }
+
+        AddCurrentItemFinderLocations(item, finder, locations);
+        return locations.ToArray();
+    }
+
+    private static unsafe void AddInventoryLocation(
+        InventoryManager* inventoryManager,
+        InventoryType inventoryType,
+        uint itemId,
+        string location,
+        HashSet<string> locations)
+    {
+        var container = inventoryManager->GetInventoryContainer(inventoryType);
+        if (container == null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < container->Size; index++)
+        {
+            if (NormalizeItemId(container->GetInventorySlot(index)->ItemId) == itemId)
+            {
+                locations.Add(location);
+                return;
+            }
+        }
+    }
+
+    private static bool ContainsItemId(Span<uint> itemIds, uint itemId)
+    {
+        foreach (var candidateId in itemIds)
+        {
+            if (NormalizeItemId(candidateId) == itemId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static unsafe bool IsCabinetItemOwned(uint cabinetRowId, ItemFinderModule* finder)
+    {
+        var uiState = FFXIVClientStructs.FFXIV.Client.Game.UI.UIState.Instance();
+        if (uiState != null && uiState->Cabinet.IsCabinetLoaded() && uiState->Cabinet.IsItemInCabinet(cabinetRowId))
+        {
+            return true;
+        }
+
+        if (finder->CabinetState != (byte)FFXIVClientStructs.FFXIV.Client.Game.UI.Cabinet.CabinetState.Loaded)
+        {
+            return false;
+        }
+
+        var bits = finder->CabinetItemUnlockBits;
+        var wordIndex = (int)(cabinetRowId >> 5);
+        var bitIndex = (int)(cabinetRowId & 31);
+        return (uint)wordIndex < (uint)bits.Length && (bits[wordIndex] & (1u << bitIndex)) != 0;
+    }
+
+    private static unsafe void AddCurrentItemFinderLocations(Item item, ItemFinderModule* finder, HashSet<string> locations)
+    {
+        if (finder->Result == null
+            || !ContainsItemId(finder->RequestItemIds, NormalizeItemId(item.RowId)))
+        {
+            return;
+        }
+
+        var result = finder->Result;
+        if (result->SaddleBagPage1Count + result->SaddleBagPage2Count + result->PremiumSaddleBagPage1Count + result->PremiumSaddleBagPage2Count > 0) locations.Add("鞍囊");
+        if (result->ArmoireCount > 0) locations.Add("收藏柜");
+        if (result->GlamourDresserCount > 0) locations.Add("投影台");
+        for (var index = 0L; index < result->RetainerCount; index++)
+        {
+            var retainer = result->Retainer[index];
+            if (retainer != null && (retainer->EquipmentSlot >= 0 || retainer->Page1Count + retainer->Page2Count + retainer->Page3Count + retainer->Page4Count + retainer->Page5Count > 0))
+            {
+                locations.Add("雇员");
+                break;
+            }
+        }
     }
 
     private static unsafe bool ItemFinderHasItem(Item item)
@@ -1436,6 +1623,35 @@ public sealed class PluginUI
             return result;
         }
 
+        foreach (var itemId in finder->SaddleBagItemIds)
+        {
+            var normalizedItemId = NormalizeItemId(itemId);
+            if (normalizedItemId > 0)
+            {
+                result.Add(normalizedItemId);
+            }
+        }
+
+        foreach (var itemId in finder->PremiumSaddleBagItemIds)
+        {
+            var normalizedItemId = NormalizeItemId(itemId);
+            if (normalizedItemId > 0)
+            {
+                result.Add(normalizedItemId);
+            }
+        }
+
+        foreach (var itemId in finder->GlamourDresserItemIds)
+        {
+            var normalizedItemId = NormalizeItemId(itemId);
+            if (normalizedItemId > 0)
+            {
+                result.Add(normalizedItemId);
+            }
+        }
+
+        AddCabinetItemIds(result, finder);
+
         foreach (var retainerPointer in finder->RetainerInventories.Values)
         {
             var retainer = retainerPointer.Value;
@@ -1464,6 +1680,34 @@ public sealed class PluginUI
         }
 
         return result;
+    }
+
+    private static unsafe void AddCabinetItemIds(HashSet<uint> result, ItemFinderModule* finder)
+    {
+        var cabinet = FFXIVClientStructs.FFXIV.Client.Game.UI.UIState.Instance();
+        var liveCabinetLoaded = cabinet != null && cabinet->Cabinet.IsCabinetLoaded();
+        var cachedCabinetLoaded = finder->CabinetState == (byte)FFXIVClientStructs.FFXIV.Client.Game.UI.Cabinet.CabinetState.Loaded;
+        if (!liveCabinetLoaded && !cachedCabinetLoaded)
+        {
+            return;
+        }
+
+        var cachedBits = finder->CabinetItemUnlockBits;
+        foreach (var cabinetRow in DalamudApi.DataManager.GetExcelSheet<Cabinet>())
+        {
+            var owned = liveCabinetLoaded && cabinet->Cabinet.IsItemInCabinet(cabinetRow.RowId);
+            if (!owned && cachedCabinetLoaded)
+            {
+                var wordIndex = (int)(cabinetRow.RowId >> 5);
+                var bitIndex = (int)(cabinetRow.RowId & 31);
+                owned = (uint)wordIndex < (uint)cachedBits.Length && (cachedBits[wordIndex] & (1u << bitIndex)) != 0;
+            }
+
+            if (owned && cabinetRow.Item.RowId > 0)
+            {
+                result.Add(cabinetRow.Item.RowId);
+            }
+        }
     }
 
     private static uint NormalizeItemId(uint itemId)
@@ -1813,7 +2057,6 @@ public sealed class PluginUI
 
     private void DrawYokaiWorkspace()
     {
-        ImGui.TextDisabled("扫描当前角色已加载的背包、关键道具、装备栏和完整兵装库，统计妖怪手表联动奖励。已同步结果按角色 ContentId 保存。");
         ImGui.Spacing();
         ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "一句话攻略：");
         ImGui.TextWrapped("找 NPC 开启活动后，带上妖怪手表，先去刷 FATE，拿奖励兑换宠物；");
@@ -1836,6 +2079,16 @@ public sealed class PluginUI
                 .ToList();
             configuration.YokaiSyncTimesByCharacter[characterKey] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             configuration.Save();
+
+            if (configuration.DebugLogSyncedItemLocations)
+            {
+                LogSyncedYokaiItemLocations(yokaiResults, configuration.DebugLogMissingItemLocations);
+            }
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("扫描当前角色已加载的背包、关键道具、装备栏和完整兵装库，统计妖怪手表联动奖励。已同步结果按角色 ContentId 保存。");
         }
 
         ImGui.SameLine();
@@ -1919,6 +2172,37 @@ public sealed class PluginUI
         ImGui.Spacing();
     }
 
+    private static void LogSyncedYokaiItemLocations(IEnumerable<YokaiRewardProgress> results, bool logMissingItems)
+    {
+        var itemSheet = DalamudApi.DataManager.GetExcelSheet<Item>();
+        var loggedItemIds = new HashSet<uint>();
+        foreach (var reward in results)
+        {
+            if (reward.Category != YokaiWatchGuide.WeaponCategory)
+            {
+                var status = reward.Owned ? "已解锁" : "未解锁";
+                PrintChat($"DEBUG [妖表] {reward.Name}：{reward.Category}，{status}");
+                continue;
+            }
+
+            foreach (var itemId in reward.MatchedItemIds)
+            {
+                if (!loggedItemIds.Add(itemId) || !itemSheet.TryGetRow(itemId, out var item))
+                {
+                    continue;
+                }
+
+                var locations = GetItemStorageLocations(item);
+                if (locations.Count == 0 && !logMissingItems)
+                {
+                    continue;
+                }
+
+                PrintChat($"DEBUG [妖表] {item.Name.ExtractText()}：{(locations.Count > 0 ? string.Join("、", locations) : "未找到")}");
+            }
+        }
+    }
+
     private static void DrawYokaiRewardTile(YokaiRewardProgress reward)
     {
         var cursor = ImGui.GetCursorScreenPos();
@@ -1985,6 +2269,26 @@ public sealed class PluginUI
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "DEBUG");
+        var debugLogSyncedItemLocations = configuration.DebugLogSyncedItemLocations;
+        if (ImGui.Checkbox("同步时输出物品位置##debug-log-synced-item-locations", ref debugLogSyncedItemLocations))
+        {
+            configuration.DebugLogSyncedItemLocations = debugLogSyncedItemLocations;
+            configuration.Save();
+        }
+
+        if (configuration.DebugLogSyncedItemLocations)
+        {
+            ImGui.Indent();
+            var debugLogMissingItemLocations = configuration.DebugLogMissingItemLocations;
+            if (ImGui.Checkbox("输出未找到物品##debug-log-missing-item-locations", ref debugLogMissingItemLocations))
+            {
+                configuration.DebugLogMissingItemLocations = debugLogMissingItemLocations;
+                configuration.Save();
+            }
+
+            ImGui.Unindent();
+        }
+
         var itemFinderText = GetItemFinderDebugText();
         ImGui.TextDisabled(itemFinderText);
 
@@ -2116,12 +2420,20 @@ public sealed class PluginUI
         return $"道具检索：{state}，总数 {total}（装备 {equipped}，背包 {inventory}，兵装库 {armoury}，雇员 {retainer}/{result->RetainerCount}，鞍囊 {saddle}，投影/收藏 {storage}）";
     }
 
+    private static void DrawWikiButton(string label, string key, string url)
+    {
+        if (ImGui.Button($"{label}##open-wiki-{key}"))
+        {
+            OpenUrl(url);
+        }
+    }
+
     private static void OpenUrl(string url)
     {
         try
         {
             Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-            PrintChat("已打开幻境武器 Wiki。");
+            PrintChat("已打开 Wiki。");
         }
         catch (Exception ex)
         {

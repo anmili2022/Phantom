@@ -39,7 +39,7 @@ public sealed class YokaiProgressService
     public IReadOnlyList<YokaiRewardProgress> ScanCurrentCharacter()
     {
         var ownedIds = GetOwnedItemIds();
-        ownedIds.UnionWith(GetGlamourDresserItemIds());
+        ownedIds.UnionWith(GetCachedStorageItemIds());
         var glamourSearchNames = GetGlamourDresserSearchNames();
         var items = DalamudApi.DataManager.GetExcelSheet<Item>().ToArray();
 
@@ -141,7 +141,7 @@ public sealed class YokaiProgressService
         return result;
     }
 
-    private static unsafe HashSet<uint> GetGlamourDresserItemIds()
+    private static unsafe HashSet<uint> GetCachedStorageItemIds()
     {
         var result = new HashSet<uint>();
         var finder = ItemFinderModule.Instance();
@@ -158,18 +158,83 @@ public sealed class YokaiProgressService
             }
         }
 
-        if (finder->Result != null && finder->Result->GlamourDresserCount > 0)
+        foreach (var itemId in finder->SaddleBagItemIds)
+        {
+            AddItemId(result, itemId);
+        }
+
+        foreach (var itemId in finder->PremiumSaddleBagItemIds)
+        {
+            AddItemId(result, itemId);
+        }
+
+        foreach (var retainerPointer in finder->RetainerInventories.Values)
+        {
+            var retainer = retainerPointer.Value;
+            if (retainer == null)
+            {
+                continue;
+            }
+
+            foreach (var itemId in retainer->EquippedItemIds)
+            {
+                AddItemId(result, itemId);
+            }
+
+            foreach (var itemId in retainer->ItemIds)
+            {
+                AddItemId(result, itemId);
+            }
+        }
+
+        AddCabinetItemIds(result, finder);
+
+        if (finder->Result != null && (finder->Result->GlamourDresserCount > 0 || finder->Result->ArmoireCount > 0))
         {
             foreach (var itemId in finder->RequestItemIds)
             {
-                if (itemId > 0)
-                {
-                    result.Add(NormalizeItemId(itemId));
-                }
+                AddItemId(result, itemId);
             }
         }
 
         return result;
+    }
+
+    private static void AddItemId(HashSet<uint> result, uint itemId)
+    {
+        var normalizedItemId = NormalizeItemId(itemId);
+        if (normalizedItemId > 0)
+        {
+            result.Add(normalizedItemId);
+        }
+    }
+
+    private static unsafe void AddCabinetItemIds(HashSet<uint> result, ItemFinderModule* finder)
+    {
+        var uiState = UIState.Instance();
+        var liveCabinetLoaded = uiState != null && uiState->Cabinet.IsCabinetLoaded();
+        var cachedCabinetLoaded = finder->CabinetState == (byte)FFXIVClientStructs.FFXIV.Client.Game.UI.Cabinet.CabinetState.Loaded;
+        if (!liveCabinetLoaded && !cachedCabinetLoaded)
+        {
+            return;
+        }
+
+        var cachedBits = finder->CabinetItemUnlockBits;
+        foreach (var cabinetRow in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Cabinet>())
+        {
+            var owned = liveCabinetLoaded && uiState->Cabinet.IsItemInCabinet(cabinetRow.RowId);
+            if (!owned && cachedCabinetLoaded)
+            {
+                var wordIndex = (int)(cabinetRow.RowId >> 5);
+                var bitIndex = (int)(cabinetRow.RowId & 31);
+                owned = (uint)wordIndex < (uint)cachedBits.Length && (cachedBits[wordIndex] & (1u << bitIndex)) != 0;
+            }
+
+            if (owned && cabinetRow.Item.RowId > 0)
+            {
+                result.Add(cabinetRow.Item.RowId);
+            }
+        }
     }
 
     private static unsafe HashSet<string> GetGlamourDresserSearchNames()

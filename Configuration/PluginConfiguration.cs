@@ -34,6 +34,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public Dictionary<string, List<string>> YokaiOwnedRewardKeysByCharacter { get; set; } = new();
     public Dictionary<string, string> YokaiSyncTimesByCharacter { get; set; } = new();
     public bool HideOwnedYokaiRewards { get; set; }
+    public bool DebugLogSyncedItemLocations { get; set; }
+    public bool DebugLogMissingItemLocations { get; set; }
 
     public void Initialize(IDalamudPluginInterface pluginInterface)
     {

@@ -65,7 +65,7 @@
 - `Features/Navigation/VnavService.cs`：导航 IPC 服务，含幻境村路线状态机。
 - `UI/PluginUI.cs`：主窗口、左侧系列导航、自绘阶段页签、武器进度总览、妖表页面、悬浮窗和设置页。
 - `Features/Yokai/YokaiWatchGuide.cs`：妖表联动奖励定义。
-- `Features/Yokai/YokaiProgressService.cs`：背包、装备栏、兵装库和投影台奖励扫描。
+- `Features/Yokai/YokaiProgressService.cs`：妖表奖励扫描，支持背包、关键道具、装备栏、兵装库、鞍囊、收藏柜、投影台和雇员缓存。
 - `Features/Manderville/MandervilleWeaponGuide.cs`：曼德维尔武器四阶段任务与材料资料。
 - `Features/RelicWeapons/RelicWeaponGuide.cs`：古武、魂武、优武、义武、天钢、莫雯、宇宙和绝武的阶段资料。
 - `docs/`：设计文档、使用说明（usage.html）、发布指南（release.md）、幻境村路由移植指南（occult-village-route-porting.md）。
@@ -85,7 +85,9 @@
 - 曼德维尔武器四阶段资料展示，支持任务与材料的手动进度保存。
 - 古武、魂武、优武、义武、天钢、莫雯、宇宙和绝武资料页，复用阶段页签、任务勾选、材料手动进度和职业持有同步。
 - 绝武按七个绝本独立统计，并提供“总进度”页；各绝本不是线性阶段，只有实际持有对应武器时才点亮。
-- 武器扫描读取背包、兵装库、装备栏、当前可用库存和 `ItemFinderModule.RetainerInventories` 雇员缓存。
+- 武器扫描读取背包、兵装库、装备栏、鞍囊、收藏柜、投影台和 `ItemFinderModule.RetainerInventories` 雇员缓存。
+- 武器和妖表同步按钮使用悬浮提示说明扫描范围；每个系列页面提供对应 Wiki 按钮，古武页面分别提供上古武器和黄道武器 Wiki 按钮。
+- DEBUG 设置提供“同步时输出物品位置”开关。开启后，同步会输出每个候选物品的具体位置；未命中时输出“未找到”。妖表的特殊物品、坐骑、肖像和宠物按解锁状态输出，武器按库存位置输出。
 - 左侧导航显示当前角色与插件状态，右侧阶段页签使用与武器进度卡片一致的自绘配色。
 - vnavmesh + Lifestream 的两段式导航，以及“前往幻境村”独立入口。
 
@@ -121,6 +123,8 @@
 - `WeaponProgressByCharacter` / `WeaponProgressItemsByCharacter` / `WeaponProgressSyncTimes`：按角色维度的武器进度总览数据。
 - `YokaiOwnedRewardKeysByCharacter` / `YokaiSyncTimesByCharacter`：按角色维度保存妖表奖励和同步时间。
 - `HideOwnedYokaiRewards`：妖表页面是否隐藏已获得奖励。
+- `DebugLogSyncedItemLocations`：同步时是否在聊天栏输出候选物品的库存位置或“未找到”状态。
+- `DebugLogMissingItemLocations`：是否输出未找到的候选物品；仅在 `DebugLogSyncedItemLocations` 开启时显示和生效。
 - `TuliyollalAetheryteId`：旧配置字段（默认 13），幻境村路由当前使用固定常量 216，不再读取此字段。
 
 ## 总览与库存同步
@@ -147,20 +151,26 @@
 - 空物品名表示该绝本或阶段当时没有对应职业武器，构建 lookup 时跳过。
 - 绝武总进度的每一段独立读取对应绝本的同步结果，不根据最高阶段补亮前段。
 
-### 雇员缓存语义
+### 库存与缓存语义
 
 - `InventoryManager` 提供当前已加载的背包、兵装库、装备栏和库存容器。
+- 背包、兵装库和装备中属于当前角色实时读取范围。
+- `ItemFinderModule.SaddleBagItemIds` 与 `PremiumSaddleBagItemIds` 提供鞍囊缓存；`GlamourDresserItemIds` 提供投影台缓存。
+- 收藏柜优先使用 `UIState.Cabinet` 的当前角色状态，未加载时回退到 `ItemFinderModule.CabinetItemUnlockBits` 缓存。
 - `ItemFinderModule.RetainerInventories` 保存雇员装备槽与库存槽的客户端缓存；插件直接扫描其中的 `EquippedItemIds` 和 `ItemIds`。
 - `ItemFinderModule.IsRetainerCurrent(retainerId)` 为 `true` 表示该雇员已在本次登录后打开，数据由当前会话从服务器加载。
 - 重登后本地缓存通常仍可读取，但 `IsRetainerCurrent` 会重置，因此缓存可能不是最新数据。
-- `/物品检索 物品` 可临时刷新当前检索物品的 `ItemFinderModule.Result`；该结果参与同步并写入插件角色进度缓存，但不会刷新完整雇员库存。
+- `/道具检索 物品` 可刷新当前检索物品的 `ItemFinderModule.Result`，也可用于刷新投影台相关缓存；该结果参与同步并写入插件角色进度缓存，但不会刷新完整雇员库存。
 - 要确保完整雇员库存最新，仍需通过传唤铃打开对应雇员后再执行同步。
+- 鞍囊、收藏柜、投影台和雇员数据依赖游戏缓存；缓存未加载或已过期时，插件不能将其可靠地当作实时空数据。
 
 总览显示文本：
 
 ```text
+背包、兵装库与装备中：实时读取
+鞍囊、收藏柜与投影台：读取游戏缓存（可能不是最新数据）
 雇员库存：0/7 个已在本次登录后打开并刷新，7/7 个已缓存（可能不是最新数据）
-/物品检索 物品 可临时刷新
+/道具检索 物品 可刷新投影台
 ```
 
 ## 秘影阶段需求
@@ -305,7 +315,7 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 
 ### 主窗口结构
 
-- 左侧固定导航栏分为 `Workspace` 和 `Tools` 两组。
+- 左侧固定导航栏分为“武器工坊”和“Tools”两组。
 - 左侧显示品牌、系列入口、数量、当前角色和插件启用状态。
 - 左侧角色状态上方提供“前往幻境村”按钮；启用状态只读显示，插件默认启用且不在幻武页重复提供开关。
 - 右侧显示当前系列内容；幻境武器页面顶部为横向阶段页签。
@@ -342,7 +352,7 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 2. 带着宠物后才会掉落兑换武器的材料，材料不是必出，最后用武器材料兑换对应武器。
 3. 注意：不同宠物掉落的材料不一样。该行使用红色强调。
 
-奖励按妖怪手表、坐骑、肖像、宠物和武器分类展示。同步扫描背包、关键道具、装备栏、兵装库和投影台缓存，结果按角色 ContentId 保存。
+奖励按妖怪手表、坐骑、肖像、宠物和武器分类展示。特殊物品、坐骑、肖像和宠物通过对应解锁状态判断；武器同步扫描背包、关键道具、装备栏、兵装库、鞍囊、收藏柜、投影台和雇员缓存，结果按角色 ContentId 保存。
 
 ### 曼德维尔武器页面
 
@@ -353,7 +363,7 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 曼德维尔武器·威严：iLvl 645，稀少无球粒陨石 ×3，1500 亚拉戈诗学神典石。
 - 曼德维尔武器·盈满：iLvl 665，雏晶 ×3，1500 亚拉戈诗学神典石。
 
-当前版本只提供 Wiki 资料、一次性任务勾选和材料手动进度，不执行曼武物品自动扫描。资料来源：<https://ff14.huijiwiki.com/wiki/%E6%9B%BC%E5%BE%B7%E7%BB%B4%E5%B0%94%E6%AD%A6%E5%99%A8>。
+当前版本提供 Wiki 按钮、一次性任务勾选、材料手动进度和武器持有自动扫描。资料来源：<https://ff14.huijiwiki.com/wiki/%E6%9B%BC%E5%BE%B7%E7%BB%B4%E5%B0%94%E6%AD%A6%E5%99%A8>。
 
 ## 战斗记忆界面读取（未完成）
 
