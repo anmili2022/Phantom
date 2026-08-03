@@ -34,12 +34,12 @@ public sealed class SecretKillTracker : IDisposable
         }
 
         var text = ExtractChatMessageText(message);
-        if (TryAutoMarkSecretAllComplete(text))
+        if (TryAutoMarkSecretDuty(text))
         {
             return;
         }
 
-        if (TryAutoMarkSecretDuty(text))
+        if (TryAutoMarkSecretAllComplete(text))
         {
             return;
         }

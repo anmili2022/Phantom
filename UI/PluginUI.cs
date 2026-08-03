@@ -27,12 +27,13 @@ public sealed class PluginUI
     private static readonly (string Key, string Label, string Count)[] MainSections =
     {
         ("overview", "总览", ""),
-        ("phantom", "幻武 · Phantom", "5"),
         ("zodiac", "古武 · Zodiac", "-"),
         ("anima", "魂武 · Anima", "-"),
         ("eureka", "优武 · Eurekan", "-"),
         ("resistance", "义武 · Resistance", "-"),
         ("manderville", "曼武 · Manderville", "-"),
+        ("elegant", "雅武 · Elegant", "-"),
+        ("phantom", "幻武 · Phantom", "5"),
         ("skysteel", "天钢 · Skysteel", "-"),
         ("splendorous", "莫雯 · Splendorous", "-"),
         ("cosmic", "宇宙 · Cosmic", "-"),
@@ -67,6 +68,7 @@ public sealed class PluginUI
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? weaponItemLookup;
     private Dictionary<string, IReadOnlyList<Item>>? phantomRewardWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? mandervilleWeaponItemLookup;
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? elegantWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? cosmicToolItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? zodiacWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? animaWeaponItemLookup;
@@ -232,6 +234,11 @@ public sealed class PluginUI
             return GetOwnedWeaponCount("manderville", MandervilleWeaponGuide.WeaponJobs, MandervilleWeaponGuide.ProgressStages, GetMandervilleWeaponItemLookup()).ToString();
         }
 
+        if (section.Key == "elegant")
+        {
+            return GetOwnedWeaponCount("elegant", RelicWeaponGuide.ElegantWeaponJobs, RelicWeaponGuide.ElegantProgressStages, GetElegantWeaponItemLookup()).ToString();
+        }
+
         if (section.Key == "cosmic")
         {
             return GetOwnedWeaponCount("cosmic", RelicWeaponGuide.CosmicToolJobs, RelicWeaponGuide.CosmicProgressStages, GetCosmicToolItemLookup()).ToString();
@@ -305,6 +312,7 @@ public sealed class PluginUI
             "eureka" => FontAwesomeIcon.Bolt,
             "resistance" => FontAwesomeIcon.ShieldAlt,
             "manderville" => FontAwesomeIcon.Music,
+            "elegant" => FontAwesomeIcon.Magic,
             "skysteel" => FontAwesomeIcon.Hammer,
             "splendorous" => FontAwesomeIcon.Wrench,
             "cosmic" => FontAwesomeIcon.Rocket,
@@ -367,6 +375,9 @@ public sealed class PluginUI
                 break;
             case "phantom":
                 DrawPhantomWeaponWorkspace();
+                break;
+            case "elegant":
+                DrawElegantWeaponWorkspace();
                 break;
             case "yokai":
                 DrawYokaiWorkspace();
@@ -492,12 +503,13 @@ public sealed class PluginUI
 
     private IReadOnlyList<OverviewSeries> GetOverviewSeries() => new[]
     {
-        new OverviewSeries("phantom", "phantom", "幻境武器", "5 个阶段", PhantomWeaponGuide.WeaponJobs, PhantomWeaponGuide.ProgressStages, GetPhantomWeaponItemLookup()),
         new OverviewSeries("zodiac", "zodiac", "古武", "Zodiac", RelicWeaponGuide.ZodiacWeaponJobs, RelicWeaponGuide.ZodiacProgressStages, GetZodiacWeaponItemLookup()),
         new OverviewSeries("anima", "anima", "魂武", "Anima", RelicWeaponGuide.AnimaWeaponJobs, RelicWeaponGuide.AnimaProgressStages, GetAnimaWeaponItemLookup()),
         new OverviewSeries("eureka", "eureka", "优武", "Eurekan", RelicWeaponGuide.EurekaWeaponJobs, RelicWeaponGuide.EurekaProgressStages, GetEurekaWeaponItemLookup()),
         new OverviewSeries("resistance", "resistance", "义武", "Resistance", RelicWeaponGuide.ResistanceWeaponJobs, RelicWeaponGuide.ResistanceProgressStages, GetResistanceWeaponItemLookup()),
         new OverviewSeries("manderville", "manderville", "曼德维尔武器", "Manderville", MandervilleWeaponGuide.WeaponJobs, MandervilleWeaponGuide.ProgressStages, GetMandervilleWeaponItemLookup()),
+        new OverviewSeries("elegant", "elegant", "雅武", "Elegant Weapons", RelicWeaponGuide.ElegantWeaponJobs, RelicWeaponGuide.ElegantProgressStages, GetElegantWeaponItemLookup()),
+        new OverviewSeries("phantom", "phantom", "幻境武器", "5 个阶段", PhantomWeaponGuide.WeaponJobs, PhantomWeaponGuide.ProgressStages, GetPhantomWeaponItemLookup()),
         new OverviewSeries("skysteel", "skysteel", "天钢工具", "Skysteel", RelicWeaponGuide.SkysteelToolJobs, RelicWeaponGuide.SkysteelProgressStages, GetSkysteelToolItemLookup()),
         new OverviewSeries("splendorous", "splendorous", "莫雯工具", "Splendorous", RelicWeaponGuide.SplendorousToolJobs, RelicWeaponGuide.SplendorousProgressStages, GetSplendorousToolItemLookup()),
         new OverviewSeries("cosmic", "cosmic", "宇宙工具", "Cosmic", RelicWeaponGuide.CosmicToolJobs, RelicWeaponGuide.CosmicProgressStages, GetCosmicToolItemLookup()),
@@ -805,6 +817,15 @@ public sealed class PluginUI
         }
     }
 
+    private void DrawElegantWeaponWorkspace()
+    {
+        ImGui.TextWrapped("6.x 雅武（Elegant Weapons）持有追踪。优雅武器会自动计入该职业的基础武器阶段。");
+        ImGui.SameLine();
+        DrawWikiButton("打开优雅武器兑换 Wiki", "elegant", "https://ff14.huijiwiki.com/wiki/%E7%89%A9%E5%93%81:%E5%85%A8%E5%A4%A9%E5%BC%BA%E5%8C%96%E8%8D%AF");
+        ImGui.Separator();
+        DrawElegantWeaponProgressPanel();
+    }
+
     private bool IsSeriesProgressActive(string seriesKey)
         => progressSeriesKey == seriesKey || (seriesKey != "ultimate" && !stageSelectedSeries.Contains(seriesKey));
 
@@ -1015,6 +1036,16 @@ public sealed class PluginUI
             GetMandervilleWeaponItemLookup(),
             stage => stage.Key == "manderville-complete",
             completed => $"盈满完成职业 {completed}/{MandervilleWeaponGuide.WeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+
+    private void DrawElegantWeaponProgressPanel()
+        => DrawWeaponProgressPanel(
+            "elegant",
+            "雅武",
+            RelicWeaponGuide.ElegantWeaponJobs,
+            RelicWeaponGuide.ElegantProgressStages,
+            GetElegantWeaponItemLookup(),
+            stage => stage.Key == "elegant",
+            completed => $"优雅完成职业 {completed}/{RelicWeaponGuide.ElegantWeaponJobs.Count}。持有优雅武器时会自动点亮基础武器。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
 
     private void DrawCosmicToolProgressPanel()
         => DrawWeaponProgressPanel(
@@ -1285,6 +1316,12 @@ public sealed class PluginUI
     {
         mandervilleWeaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("manderville"));
         return mandervilleWeaponItemLookup;
+    }
+
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetElegantWeaponItemLookup()
+    {
+        elegantWeaponItemLookup ??= BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), WeaponItemIds.Get("elegant"));
+        return elegantWeaponItemLookup;
     }
 
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetCosmicToolItemLookup()
@@ -2536,6 +2573,12 @@ public sealed class PluginUI
         }
 
         ImGui.SameLine();
+        if (ImGui.Button("读取雅武 Item.RowId##debug-export-elegant-item-ids"))
+        {
+            ExportElegantWeaponItemIds();
+        }
+
+        ImGui.SameLine();
         if (ImGui.Button("读取当前坐标##debug-print-coords"))
         {
             var player = DalamudApi.ObjectTable[0];
@@ -2652,6 +2695,50 @@ public sealed class PluginUI
         {
             DalamudApi.Log.Error(ex, "Failed to export Phantom item IDs.");
             PrintChat($"导出幻武 Item.RowId 失败：{ex.Message}");
+        }
+    }
+
+    private static void ExportElegantWeaponItemIds()
+    {
+        var itemsByName = DalamudApi.DataManager.GetExcelSheet<Item>()
+            .Where(item => item.RowId > 0)
+            .GroupBy(item => item.Name.ExtractText(), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var lines = new List<string> { "# SeriesKey|JobKey|StageKey|Item.RowId|ItemName" };
+        var found = 0;
+        var missing = 0;
+
+        for (var stageIndex = 0; stageIndex < RelicWeaponGuide.ElegantProgressStages.Count; stageIndex++)
+        {
+            var stage = RelicWeaponGuide.ElegantProgressStages[stageIndex];
+            foreach (var job in RelicWeaponGuide.ElegantWeaponJobs)
+            {
+                foreach (var name in job.StageItemNames[stageIndex].Where(name => !string.IsNullOrWhiteSpace(name)))
+                {
+                    if (itemsByName.TryGetValue(name, out var item))
+                    {
+                        found++;
+                        lines.Add($"elegant|{job.Key}|{stage.Key}|{item.RowId}|{name}");
+                    }
+                    else
+                    {
+                        missing++;
+                        lines.Add($"elegant|{job.Key}|{stage.Key}|MISSING|{name}");
+                    }
+                }
+            }
+        }
+
+        try
+        {
+            var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "elegant-weapon-item-ids.txt");
+            File.WriteAllLines(path, lines);
+            PrintChat($"已读取雅武 Item.RowId：匹配 {found}，未匹配 {missing}。文件：{path}");
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Error(ex, "Failed to export Elegant weapon item IDs.");
+            PrintChat($"读取雅武 Item.RowId 失败：{ex.Message}");
         }
     }
 
