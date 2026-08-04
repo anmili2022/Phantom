@@ -1,6 +1,6 @@
 # 肝武助手设计文档
 
-> 当前版本：0.1.15.0 | 更新日期：2026-08-04
+> 当前版本：0.1.16.0 | 更新日期：2026-08-04
 
 ## 目标
 
@@ -55,8 +55,8 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.15.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.15.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.16.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.16.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider）。
@@ -87,7 +87,7 @@
 - 妖表联动奖励扫描，支持隐藏已获得奖励、投影台缓存状态和按类别展示。
 - 妖表武器卡片提示对应的妖表宠物、职业、所需妖怪传奇徽章和可获取地区；右键武器卡片会复制完整提示文本，并通过 `[Phantom] [右键] [妖表]` 聊天消息确认。
 - 曼德维尔武器四阶段资料展示，支持任务与材料的手动进度保存。
-- 雅武页面追踪 21 个战斗职业的“基础武器”和“优雅”两阶段持有状态，并提供优雅武器兑换 Wiki 跳转。
+- 雅武页面追踪 22 个职业的“基础武器”和“优雅”两阶段持有状态，包含青魔法师（`blu`）；职业与武器归属、固定 `Item.RowId` 映射已按当前中文客户端物品表校正，并提供优雅武器兑换 Wiki 跳转。
 - 古武、魂武、优武、义武、天钢、莫雯、宇宙和绝武资料页，复用阶段页签、任务勾选、材料手动进度和固定 `Item.RowId` 职业持有同步。
 - 绝武按七个绝本独立统计，并提供“总进度”页；各绝本不是线性阶段，只有实际持有对应武器时才点亮。
 - 武器扫描读取背包、兵装库、装备栏、鞍囊、收藏柜、投影台和 `ItemFinderModule.RetainerInventories` 雇员缓存。
@@ -133,9 +133,10 @@
 - `Progress`：键为资料项 Key，值为当前进度。
 - `CompletedTasks`：已完成的一次性流程 Key（含秘影目标、讨伐任务）。
 - `FloatingSecretTerritoryType` / `FloatingManualMode`：悬浮窗当前地图与手动模式。
-- `ShowSecretTargetsInFloatingWindow` / `ShowSecretDutiesInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗显示选项。
+- `ShowSecretTargetsInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗目标显示选项。
 - `ShowAvailableFatesInFloatingWindow`：在悬浮窗显示当前地图可参与的 FATE 及导航按钮。
 - `NavigateToFlagDirectly`：前往 Flag 时使用直接前往还是导航前往。
+- `ShowNavigationLogs`：是否在聊天栏显示带 `[导航日志]` 前缀的导航过程与状态消息。
 - `GroupWeaponProgressByRole` / `ShowWeaponProgressIcons`：武器进度总览选项。
 - `WeaponProgressByCharacter` / `WeaponProgressItemsByCharacter` / `WeaponProgressSyncTimes`：按角色维度的武器进度总览数据。
 - `YokaiOwnedRewardKeysByCharacter` / `YokaiSyncTimesByCharacter`：按角色维度保存妖表奖励和同步时间。
@@ -371,11 +372,12 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 左侧角色状态上方“前往幻境村”按钮 → `VnavService.GoToOccultVillage()`。
 - 左侧“反馈与建议”按钮 → 打开 <https://discord.com/channels/1258981591124938762/1533030634623074466>。
 - 武器进度总览（按职业/阶段/角色维度，含物品名片段匹配与图标）。
-- 悬浮窗显示选项：是否显示秘影目标、是否显示讨伐任务、自动隐藏已完成项。
+- 悬浮窗显示选项：是否显示秘影目标、自动隐藏已完成项；秘影迷宫/讨伐任务不在悬浮窗显示。
 - 设置页提供“悬浮窗显示可参与 FATE”开关；开启后悬浮窗按距离列出当前地图处于准备/进行中的未完成 FATE，每项提供导航按钮。
 - 设置页在常用设置与 DEBUG 区域之间提供“整理背包”区域，包含“选择物品”和“整理背包”按钮，并显示当前已选择的物品种类数量。物品选择弹窗使用固定尺寸和内部滚动列表，避免物品较多时撑大窗口。
 - 悬浮窗最上方显示“当前可参与 FATE”，按距离列出当前地图处于准备/进行中的未完成 FATE，每项提供导航按钮。
 - “当前可参与 FATE”标题右侧提供“停止导航”按钮，调用 `VnavService.Stop()` 终止当前 FATE 导航、自动上坐骑等待和到达后的自动下坐骑监听。
+- 常用设置提供“导航日志”开关；开启时，聊天栏中的导航过程和 FATE 导航消息统一使用 `[Phantom] [导航日志]` 前缀，关闭后不输出这些过程消息。
 - FATE 导航复用 `VnavService`：目标较远时先前往附近以太水晶，再使用 vnavmesh 导航；目标较近时直接导航；找不到附近网格点时尝试直接使用 FATE 原始坐标。
 - 在蜃景幻界新月岛南征之章（`TerritoryType = 1252`）和北征之章（`TerritoryType = 1346`）点击 FATE 导航或“最近 FATE”时，不执行导航，提示“【新月岛地图】请使用【新月岛史官】插件。”；优雷卡四张地图（`732`、`763`、`795`、`827`）及博兹雅南方战线、扎杜诺尔（`920`、`975`）执行相同操作时，提示“【博兹雅/优雷卡】暂不支持该地图。”。以上八个地图 ID 均已由游戏内 DEBUG 输出确认。
 

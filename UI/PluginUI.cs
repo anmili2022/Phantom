@@ -1233,6 +1233,7 @@ public sealed class PluginUI
             DrawWeaponCollectionRow(seriesKey, "近战职能 2", new[] { "sam", "rpr", "vpr" }, jobs, stages, itemLookup, syncedItems);
             DrawWeaponCollectionRow(seriesKey, "远程物理", new[] { "brd", "mch", "dnc" }, jobs, stages, itemLookup, syncedItems);
             DrawWeaponCollectionRow(seriesKey, "远程魔法", new[] { "blm", "smn", "rdm", "pct" }, jobs, stages, itemLookup, syncedItems);
+            DrawWeaponCollectionRow(seriesKey, "特殊职业", new[] { "blu" }, jobs, stages, itemLookup, syncedItems);
         }
         else
         {
@@ -2528,7 +2529,7 @@ public sealed class PluginUI
             DrawSettingCard("自动标记击杀", "从聊天消息自动更新目标状态", configuration.AutoMarkSecretKills, "auto-mark", value => configuration.AutoMarkSecretKills = value);
             DrawSettingCard("自动隐藏已完成项目", "减少悬浮窗中的已完成条目", configuration.AutoHideCompletedFloatingItems, "auto-hide", value => configuration.AutoHideCompletedFloatingItems = value);
             DrawSettingCard("显示可参与 FATE", "列出当前地图可参与的 FATE", configuration.ShowAvailableFatesInFloatingWindow, "available-fates", value => configuration.ShowAvailableFatesInFloatingWindow = value);
-            DrawSettingCard("显示迷宫 / 讨伐", "在悬浮窗中显示任务组", configuration.ShowSecretDutiesInFloatingWindow, "duties", value => configuration.ShowSecretDutiesInFloatingWindow = value);
+            DrawSettingCard("导航日志", "在聊天栏显示导航过程与状态", configuration.ShowNavigationLogs, "navigation-logs", value => configuration.ShowNavigationLogs = value);
             ImGui.EndTable();
         }
 
@@ -3064,6 +3065,16 @@ public sealed class PluginUI
         }
     }
 
+    private void PrintNavigationLog(string message)
+    {
+        if (!configuration.ShowNavigationLogs)
+        {
+            return;
+        }
+
+        PrintChat($"[导航日志] {message}");
+    }
+
     private void DrawStage(PhantomWeaponStage stage)
     {
         ImGui.TextUnformatted($"{stage.ItemLevel}  {stage.Quest}");
@@ -3550,7 +3561,7 @@ public sealed class PluginUI
             if (ImGui.SmallButton($"导航##float-nav-{target.Key}"))
             {
                 vnav.NavigateTo(target, configuration.UseFlightNavigation);
-                PrintChat($"开始导航到 {target.Zone} {target.Name}");
+                PrintNavigationLog($"开始导航到 {target.Zone} {target.Name}");
             }
         }
 
@@ -3558,11 +3569,6 @@ public sealed class PluginUI
             {
                 ImGui.TextUnformatted("当前地图秘影目标已完成。");
             }
-        }
-
-        if (configuration.ShowSecretDutiesInFloatingWindow)
-        {
-            DrawFloatingSecretDuties();
         }
 
         ImGui.End();
@@ -3575,7 +3581,7 @@ public sealed class PluginUI
         if (ImGui.SmallButton("停止导航##floating-fates-stop-nav"))
         {
             vnav.Stop();
-            PrintChat("已停止 FATE 导航。 ");
+            PrintNavigationLog("已停止 FATE 导航。 ");
         }
 
         var fates = GetAvailableFates();
@@ -3629,7 +3635,7 @@ public sealed class PluginUI
         var player = DalamudApi.ObjectTable.LocalPlayer;
         if (player == null)
         {
-            PrintChat("导航失败：当前没有本地角色。");
+            PrintNavigationLog("导航失败：当前没有本地角色。");
             return;
         }
 
@@ -3642,13 +3648,13 @@ public sealed class PluginUI
             if (playerDistance > aetheryteDistance)
             {
                 vnav.NavigateToFate(target, configuration.UseFlightNavigation);
-                PrintChat($"导航到 FATE：{fate.Name}。");
+                PrintNavigationLog($"导航到 FATE：{fate.Name}。");
                 return;
             }
         }
 
         vnav.NavigateToFate(target, configuration.UseFlightNavigation);
-        PrintChat($"导航到 FATE：{fate.Name}。");
+        PrintNavigationLog($"导航到 FATE：{fate.Name}。");
     }
 
     private static bool IsChroniclerFateTerritory()
@@ -3753,13 +3759,6 @@ public sealed class PluginUI
         if (ImGui.MenuItem("自动标记击杀", string.Empty, autoMarkKills))
         {
             configuration.AutoMarkSecretKills = !autoMarkKills;
-            configuration.Save();
-        }
-
-        var showDuties = configuration.ShowSecretDutiesInFloatingWindow;
-        if (ImGui.MenuItem("悬浮迷宫/讨伐", string.Empty, showDuties))
-        {
-            configuration.ShowSecretDutiesInFloatingWindow = !showDuties;
             configuration.Save();
         }
 

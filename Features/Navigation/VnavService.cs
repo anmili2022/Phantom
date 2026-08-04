@@ -25,6 +25,7 @@ public sealed class VnavService : IDisposable
     private readonly ICallGateSubscriber<Vector3, float, float, Vector3?> nearestPoint;
     private readonly ICallGateSubscriber<object> stop;
     private readonly IDalamudPluginInterface pluginInterface;
+    private readonly PluginConfiguration configuration;
     private ICallGateSubscriber<uint, byte, bool>? teleport;
     private ICallGateSubscriber<uint, bool>? aethernetTeleportById;
     private ICallGateSubscriber<bool>? lifestreamIsBusy;
@@ -55,9 +56,10 @@ public sealed class VnavService : IDisposable
         MovingToDestination,
     }
 
-    public VnavService(IDalamudPluginInterface pluginInterface)
+    public VnavService(IDalamudPluginInterface pluginInterface, PluginConfiguration configuration)
     {
         this.pluginInterface = pluginInterface;
+        this.configuration = configuration;
         isReady = pluginInterface.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
         pathfindAndMoveTo = pluginInterface.GetIpcSubscriber<Vector3, bool, bool>("vnavmesh.SimpleMove.PathfindAndMoveTo");
         nearestPoint = pluginInterface.GetIpcSubscriber<Vector3, float, float, Vector3?>("vnavmesh.Query.Mesh.NearestPoint");
@@ -1022,8 +1024,13 @@ public sealed class VnavService : IDisposable
         }
     }
 
-    private static void PrintEcho(string message)
+    private void PrintEcho(string message)
     {
+        if (!configuration.ShowNavigationLogs)
+        {
+            return;
+        }
+
         try
         {
             DalamudApi.ChatGui.Print(new XivChatEntry
@@ -1031,7 +1038,7 @@ public sealed class VnavService : IDisposable
                 Type = XivChatType.Echo,
                 Message = new SeStringBuilder()
                     .AddUiForeground("[Phantom] ", 37)
-                    .AddUiForeground(message, 24)
+                    .AddUiForeground($"[导航日志] {message}", 24)
                     .Build(),
             });
         }

@@ -18,6 +18,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowAvailableFatesInFloatingWindow { get; set; } = true;
     public bool AutoHideCompletedFloatingItems { get; set; } = true;
     public bool NavigateToFlagDirectly { get; set; } = true;
+    public bool ShowNavigationLogs { get; set; } = true;
     public bool GroupWeaponProgressByRole { get; set; }
     public bool ShowWeaponProgressIcons { get; set; } = true;
     public bool AutoMarkSecretKills { get; set; } = true;

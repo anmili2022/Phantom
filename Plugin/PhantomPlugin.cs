@@ -21,7 +21,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         Configuration = pluginInterface.GetPluginConfig() as PluginConfiguration ?? new PluginConfiguration();
         Configuration.Initialize(pluginInterface);
 
-        vnav = new VnavService(pluginInterface);
+        vnav = new VnavService(pluginInterface, Configuration);
         killTracker = new SecretKillTracker(Configuration);
         fateTracker = new FateTracker(Configuration);
         ui = new PluginUI(Configuration, vnav);
