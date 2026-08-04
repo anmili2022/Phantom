@@ -37,6 +37,9 @@ public sealed class VnavService : IDisposable
     private Vector3? pendingMoveTarget;
     private bool pendingMoveFly;
     private DateTime pendingMoveStartedUtc;
+    private Vector3? activeMoveTarget;
+    private DateTime lastDismountAttemptUtc = DateTime.MinValue;
+    private bool activeMoveArrivalLogged;
     private DateTime lastMountAttemptUtc = DateTime.MinValue;
     private OccultVillageRouteStep occultRouteStep;
     private DateTime occultRouteStepStartedUtc;
@@ -521,6 +524,7 @@ public sealed class VnavService : IDisposable
         _ = framework;
         ProcessOccultVillageRoute();
         ProcessPendingMove();
+        ProcessActiveMove();
 
         if (!pendingTarget.HasValue)
         {
@@ -890,7 +894,7 @@ public sealed class VnavService : IDisposable
         if (DalamudApi.Condition[ConditionFlag.Mounted])
         {
             pendingMoveTarget = null;
-            PrintEcho("未能自动上坐骑，改为直接发起 vnavmesh 导航。 ");
+            PrintEcho("已自动上坐骑，发起 vnavmesh 导航。 ");
             StartPathfind(target, fly);
             return;
         }
@@ -925,12 +929,59 @@ public sealed class VnavService : IDisposable
         ActionManager.Instance()->UseAction(ActionType.GeneralAction, 9);
     }
 
+    private unsafe void ProcessActiveMove()
+    {
+        if (!activeMoveTarget.HasValue)
+        {
+            return;
+        }
+
+        if (!DalamudApi.Condition[ConditionFlag.Mounted])
+        {
+            activeMoveTarget = null;
+            activeMoveArrivalLogged = false;
+            return;
+        }
+
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        if (player == null)
+        {
+            return;
+        }
+
+        var target = activeMoveTarget.Value;
+        var distance = Vector2.Distance(
+            new Vector2(player.Position.X, player.Position.Z),
+            new Vector2(target.X, target.Z));
+        if (distance > 8f)
+        {
+            return;
+        }
+
+        if (!activeMoveArrivalLogged)
+        {
+            activeMoveArrivalLogged = true;
+            PrintEcho($"已到达目标附近（{distance:0.#} yalms），尝试自动下坐骑。 ");
+        }
+
+        if (DateTime.UtcNow - lastDismountAttemptUtc < TimeSpan.FromMilliseconds(500))
+        {
+            return;
+        }
+
+        lastDismountAttemptUtc = DateTime.UtcNow;
+        try { stop.InvokeAction(); } catch { }
+        ActionManager.Instance()->UseAction(ActionType.Mount, 0);
+    }
+
     public void Stop()
     {
         pendingTarget = null;
         pendingTerritoryType = 0;
         pendingAetherytePosition = null;
         pendingMoveTarget = null;
+        activeMoveTarget = null;
+        activeMoveArrivalLogged = false;
         occultRouteStep = OccultVillageRouteStep.None;
         occultDestinationMoveStartedUtc = DateTime.MinValue;
         occultDestinationLastPosition = default;
@@ -952,12 +1003,20 @@ public sealed class VnavService : IDisposable
             var ok = pathfindAndMoveTo.InvokeFunc(target, fly);
             if (!ok)
             {
+                activeMoveTarget = null;
                 DalamudApi.Log.Warning("vnavmesh failed to start navigation.");
                 PrintEcho("导航失败：vnavmesh 拒绝开始路径规划，可能当前地图没有网格或目标不可达。 ");
+            }
+            else
+            {
+                activeMoveTarget = fly ? target : null;
+                activeMoveArrivalLogged = false;
+                lastDismountAttemptUtc = DateTime.MinValue;
             }
         }
         catch (Exception ex)
         {
+            activeMoveTarget = null;
             DalamudApi.Log.Warning(ex, "vnavmesh navigation IPC failed.");
             PrintEcho($"导航失败：vnavmesh IPC 调用异常：{ex.Message}");
         }

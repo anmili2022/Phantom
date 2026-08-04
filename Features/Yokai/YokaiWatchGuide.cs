@@ -2,6 +2,8 @@ namespace Phantom;
 
 public static class YokaiWatchGuide
 {
+    public sealed record WeaponAcquisition(string JobName, string BadgeName, IReadOnlyList<string> Territories);
+
     public const string WatchCategory = "手表";
     public const string MountCategory = "坐骑";
     public const string PortraitCategory = "肖像教材";
@@ -66,6 +68,29 @@ public static class YokaiWatchGuide
             "weapon-whisper" => "维斯帕",
             "weapon-blizzaria" => "吹雪公主",
             "weapon-manji" => "人面犬",
+            _ => null,
+        };
+
+    public static WeaponAcquisition? GetWeaponAcquisition(string weaponKey)
+        => weaponKey switch
+        {
+            "weapon-jibanyan" => new("战士", "妖怪传奇徽章：地缚猫", ["黑衣森林中央林区", "拉诺西亚低地", "中萨纳兰"]),
+            "weapon-komasan" => new("白魔法师", "妖怪传奇徽章：小狛", ["黑衣森林东部林区", "西拉诺西亚", "东萨纳兰"]),
+            "weapon-whisper" => new("吟游诗人", "妖怪传奇徽章：维斯帕", ["黑衣森林南部林区", "拉诺西亚高地", "南萨纳兰"]),
+            "weapon-blizzaria" => new("黑魔法师", "妖怪传奇徽章：吹雪公主", ["黑衣森林北部林区", "拉诺西亚外地", "中拉诺西亚"]),
+            "weapon-kyubi" => new("忍者", "妖怪传奇徽章：九尾", ["西萨纳兰", "黑衣森林中央林区", "拉诺西亚低地"]),
+            "weapon-komajiro" => new("学者", "妖怪传奇徽章：狛次郎", ["中萨纳兰", "黑衣森林东部林区", "西拉诺西亚"]),
+            "weapon-manji" => new("召唤师", "妖怪传奇徽章：人面犬", ["东萨纳兰", "黑衣森林南部林区", "拉诺西亚高地"]),
+            "weapon-nokojima" => new("占星术士", "妖怪传奇徽章：野槌蛇", ["南萨纳兰", "黑衣森林北部林区", "拉诺西亚外地"]),
+            "weapon-orochi" => new("龙骑士", "妖怪传奇徽章：大蛇", ["中拉诺西亚", "西萨纳兰", "黑衣森林中央林区"]),
+            "weapon-shogunyan" => new("骑士", "妖怪传奇徽章：武士猫", ["拉诺西亚低地", "中萨纳兰", "黑衣森林东部林区"]),
+            "weapon-hovernyan" => new("暗黑骑士", "妖怪传奇徽章：浮游猫", ["西拉诺西亚", "黑衣森林南部林区", "东萨纳兰"]),
+            "weapon-robot-cat" => new("机工士", "妖怪传奇徽章：机器猫F型", ["拉诺西亚高地", "南萨纳兰", "黑衣森林北部林区"]),
+            "weapon-usa-pyon" => new("武僧", "妖怪传奇徽章：USA蹦", ["拉诺西亚外地", "中拉诺西亚", "西萨纳兰"]),
+            "weapon-enma" => new("绝枪战士", "妖怪传奇徽章：阎魔", ["基拉巴尼亚边区", "红玉海", "延夏", "基拉巴尼亚山区", "基拉巴尼亚湖区", "太阳神草原"]),
+            "weapon-kaira" => new("赤魔法师", "妖怪传奇徽章：蛇王凯拉", ["库尔札斯西部高地", "龙堡参天高地", "龙堡内陆低地", "翻云雾海", "阿巴拉提亚云海", "魔大陆阿济兹拉"]),
+            "weapon-nurarihyon" => new("武士", "妖怪传奇徽章：滑头鬼", ["库尔札斯西部高地", "龙堡参天高地", "龙堡内陆低地", "翻云雾海", "阿巴拉提亚云海", "魔大陆阿济兹拉"]),
+            "weapon-oni-princess" => new("舞者", "妖怪传奇徽章：百鬼公主", ["基拉巴尼亚边区", "红玉海", "延夏", "基拉巴尼亚山区", "基拉巴尼亚湖区", "太阳神草原"]),
             _ => null,
         };
 }

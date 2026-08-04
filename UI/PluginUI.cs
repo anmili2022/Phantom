@@ -2496,6 +2496,16 @@ public sealed class PluginUI
             tooltip += $"\n对应宠物：{minionName}";
         }
 
+        var acquisition = reward.Category == YokaiWatchGuide.WeaponCategory
+            ? YokaiWatchGuide.GetWeaponAcquisition(reward.Key)
+            : null;
+        if (acquisition != null)
+        {
+            tooltip += $"\n职业：{acquisition.JobName}";
+            tooltip += $"\n所需徽章：{acquisition.BadgeName}";
+            tooltip += $"\n获取地区：{string.Join("、", acquisition.Territories)}";
+        }
+
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip(tooltip);
@@ -2510,118 +2520,131 @@ public sealed class PluginUI
     private void DrawSettingsWorkspace()
     {
         DrawDependencyStatus();
-
-        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "常用设置");
-        var useFlight = configuration.UseFlightNavigation;
-        if (ImGui.Checkbox("飞行导航", ref useFlight))
+        DrawSettingsSectionHeader("常用设置", "即时生效");
+        if (ImGui.BeginTable("settings-common-grid", 2, ImGuiTableFlags.SizingStretchSame))
         {
-            configuration.UseFlightNavigation = useFlight;
-            configuration.Save();
-        }
-
-        var showFloating = configuration.ShowFloatingObjectiveWindow;
-        if (ImGui.Checkbox("悬浮窗", ref showFloating))
-        {
-            configuration.ShowFloatingObjectiveWindow = showFloating;
-            configuration.Save();
-        }
-
-        var autoMarkKills = configuration.AutoMarkSecretKills;
-        if (ImGui.Checkbox("自动标记击杀", ref autoMarkKills))
-        {
-            configuration.AutoMarkSecretKills = autoMarkKills;
-            configuration.Save();
-        }
-
-        var autoHideCompletedFloatingItems = configuration.AutoHideCompletedFloatingItems;
-        if (ImGui.Checkbox("悬浮窗自动隐藏已完成项目", ref autoHideCompletedFloatingItems))
-        {
-            configuration.AutoHideCompletedFloatingItems = autoHideCompletedFloatingItems;
-            configuration.Save();
-        }
-
-        var showAvailableFates = configuration.ShowAvailableFatesInFloatingWindow;
-        if (ImGui.Checkbox("悬浮窗显示可参与 FATE", ref showAvailableFates))
-        {
-            configuration.ShowAvailableFatesInFloatingWindow = showAvailableFates;
-            configuration.Save();
+            DrawSettingCard("飞行导航", "允许导航过程自动使用飞行", configuration.UseFlightNavigation, "flight", value => configuration.UseFlightNavigation = value);
+            DrawSettingCard("悬浮窗", "显示秘影目标与当前地图进度", configuration.ShowFloatingObjectiveWindow, "floating", value => configuration.ShowFloatingObjectiveWindow = value);
+            DrawSettingCard("自动标记击杀", "从聊天消息自动更新目标状态", configuration.AutoMarkSecretKills, "auto-mark", value => configuration.AutoMarkSecretKills = value);
+            DrawSettingCard("自动隐藏已完成项目", "减少悬浮窗中的已完成条目", configuration.AutoHideCompletedFloatingItems, "auto-hide", value => configuration.AutoHideCompletedFloatingItems = value);
+            DrawSettingCard("显示可参与 FATE", "列出当前地图可参与的 FATE", configuration.ShowAvailableFatesInFloatingWindow, "available-fates", value => configuration.ShowAvailableFatesInFloatingWindow = value);
+            DrawSettingCard("显示迷宫 / 讨伐", "在悬浮窗中显示任务组", configuration.ShowSecretDutiesInFloatingWindow, "duties", value => configuration.ShowSecretDutiesInFloatingWindow = value);
+            ImGui.EndTable();
         }
 
         ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "前往 Flag");
-        ImGui.TextDisabled("选择点击 Flag 时的前往方式。");
-        var navigateToFlagDirectly = configuration.NavigateToFlagDirectly;
-        if (ImGui.RadioButton("直接前往##flag-direct", navigateToFlagDirectly))
+        DrawSettingsSectionHeader("前往 Flag", "二选一");
+        if (ImGui.BeginChild("settings-flag-panel", new Vector2(0f, 92f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
-            configuration.NavigateToFlagDirectly = true;
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.RadioButton("按导航前往##flag-navigation", !navigateToFlagDirectly))
-        {
-            configuration.NavigateToFlagDirectly = false;
-            configuration.Save();
-        }
-
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "同步");
-        var debugLogSyncedItemLocations = configuration.DebugLogSyncedItemLocations;
-        if (ImGui.Checkbox("同步时输出物品位置##debug-log-synced-item-locations", ref debugLogSyncedItemLocations))
-        {
-            configuration.DebugLogSyncedItemLocations = debugLogSyncedItemLocations;
-            configuration.Save();
-        }
-
-        if (configuration.DebugLogSyncedItemLocations)
-        {
-            ImGui.Indent();
-            var debugLogMissingItemLocations = configuration.DebugLogMissingItemLocations;
-            if (ImGui.Checkbox("输出未找到物品##debug-log-missing-item-locations", ref debugLogMissingItemLocations))
+            ImGui.TextDisabled("选择点击 Flag 时的前往方式。直接前往适合快速抵达目标，按导航前往会交给 vnavmesh 计算路线。");
+            ImGui.Spacing();
+            var navigateToFlagDirectly = configuration.NavigateToFlagDirectly;
+            if (ImGui.RadioButton("直接前往##flag-direct", navigateToFlagDirectly))
             {
-                configuration.DebugLogMissingItemLocations = debugLogMissingItemLocations;
+                configuration.NavigateToFlagDirectly = true;
                 configuration.Save();
             }
 
-            ImGui.Unindent();
+            ImGui.SameLine(0f, 32f);
+            if (ImGui.RadioButton("按导航前往##flag-navigation", !navigateToFlagDirectly))
+            {
+                configuration.NavigateToFlagDirectly = false;
+                configuration.Save();
+            }
+
+            ImGui.EndChild();
         }
 
-        var itemFinderText = GetItemFinderDebugText();
-        ImGui.TextDisabled(itemFinderText);
+        ImGui.Spacing();
+        DrawSettingsSectionHeader("同步", "按当前角色保存");
+        if (ImGui.BeginChild("settings-sync-panel", new Vector2(0f, 188f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            var debugLogSyncedItemLocations = configuration.DebugLogSyncedItemLocations;
+            if (DrawSettingToggle("同步时输出物品位置", "输出背包、收藏柜、投影台和雇员缓存中的匹配位置", ref debugLogSyncedItemLocations, "debug-log-synced-item-locations"))
+            {
+                configuration.DebugLogSyncedItemLocations = debugLogSyncedItemLocations;
+                configuration.Save();
+            }
 
+            if (configuration.DebugLogSyncedItemLocations)
+            {
+                ImGui.SameLine(0f, 20f);
+                var debugLogMissingItemLocations = configuration.DebugLogMissingItemLocations;
+                if (ImGui.Checkbox("输出未找到物品##debug-log-missing-item-locations", ref debugLogMissingItemLocations))
+                {
+                    configuration.DebugLogMissingItemLocations = debugLogMissingItemLocations;
+                    configuration.Save();
+                }
+            }
+
+            var itemFinderText = GetItemFinderDebugText();
+            ImGui.TextDisabled(itemFinderText);
+            DrawDebugButtons(itemFinderText);
+            ImGui.EndChild();
+        }
+
+        DrawBackpackOrganizer();
+    }
+
+    private static void DrawSettingsSectionHeader(string title, string note)
+    {
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.45f, 0.86f, 0.82f, 1f), title);
+        ImGui.SameLine();
+        ImGui.TextDisabled(note);
+        ImGui.Separator();
+    }
+
+    private void DrawSettingCard(string label, string description, bool value, string id, Action<bool> setValue)
+    {
+        ImGui.TableNextColumn();
+        if (ImGui.BeginChild($"settings-card-{id}", new Vector2(0f, 72f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            var changedValue = value;
+            var changed = DrawSettingToggle(label, description, ref changedValue, id);
+            if (changed)
+            {
+                setValue(changedValue);
+                configuration.Save();
+            }
+
+            ImGui.EndChild();
+            return;
+        }
+
+        ImGui.EndChild();
+    }
+
+    private static bool DrawSettingToggle(string label, string description, ref bool value, string id)
+    {
+        var changed = ImGui.Checkbox($"##settings-toggle-{id}", ref value);
+        ImGui.SameLine();
+        ImGui.BeginGroup();
+        ImGui.TextUnformatted(label);
+        ImGui.TextDisabled(description);
+        ImGui.EndGroup();
+        return changed;
+    }
+
+    private void DrawDebugButtons(string itemFinderText)
+    {
         if (ImGui.Button("读取道具检索##debug-item-finder"))
         {
             PrintChat($"DEBUG: {itemFinderText}");
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("导出幻武 Item.RowId##debug-export-phantom-item-ids"))
-        {
-            ExportPhantomWeaponItemIds();
-        }
-
+        if (ImGui.Button("导出幻武 Item.RowId##debug-export-phantom-item-ids")) ExportPhantomWeaponItemIds();
         ImGui.SameLine();
-        if (ImGui.Button("读取雅武 Item.RowId##debug-export-elegant-item-ids"))
-        {
-            ExportElegantWeaponItemIds();
-        }
+        if (ImGui.Button("读取雅武 Item.RowId##debug-export-elegant-item-ids")) ExportElegantWeaponItemIds();
 
-        ImGui.SameLine();
         if (ImGui.Button("读取当前坐标##debug-print-coords"))
         {
             var player = DalamudApi.ObjectTable[0];
             var terr = DalamudApi.ClientState.TerritoryType;
-            if (player != null)
-            {
-                var pos = player.Position;
-                PrintChat($"DEBUG: TerritoryType={terr}, Position=({pos.X:0.##}, {pos.Y:0.##}, {pos.Z:0.##})");
-            }
-            else
-            {
-                PrintChat($"DEBUG: TerritoryType={terr}, (no local player)");
-            }
+            PrintChat(player == null
+                ? $"DEBUG: TerritoryType={terr}, (no local player)"
+                : $"DEBUG: TerritoryType={terr}, Position=({player.Position.X:0.##}, {player.Position.Y:0.##}, {player.Position.Z:0.##})");
         }
 
         ImGui.SameLine();
@@ -2632,17 +2655,16 @@ public sealed class PluginUI
             var territories = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>();
             if (player != null && territories.TryGetRow(terr, out var territory))
             {
-                var pos = player.Position;
                 try
                 {
                     var map = territory.Map.Value;
                     var s = map.SizeFactor;
                     var ox = map.OffsetX;
                     var oy = map.OffsetY;
-                    var fwdX = 0.02f * ox + 2048f / s + 0.02f * pos.X + 1f;
-                    var fwdZ = 0.02f * oy + 2048f / s + 0.02f * pos.Z + 1f;
+                    var fwdX = 0.02f * ox + 2048f / s + 0.02f * player.Position.X + 1f;
+                    var fwdZ = 0.02f * oy + 2048f / s + 0.02f * player.Position.Z + 1f;
                     PrintChat($"DEBUG: 当前位置→地图显示 ≈ ({fwdX:0.##}, {fwdZ:0.##})");
-                    PrintChat($"DEBUG: 若地图坐标(20.7, 14.3)→世界 ≈ ({50f*20.7f - ox - 102400f/s - 50f:0.##}, {50f*14.3f - oy - 102400f/s - 50f:0.##})");
+                    PrintChat($"DEBUG: 若地图坐标(20.7, 14.3)→世界 ≈ ({50f * 20.7f - ox - 102400f / s - 50f:0.##}, {50f * 14.3f - oy - 102400f / s - 50f:0.##})");
                 }
                 catch { }
             }
@@ -2660,30 +2682,14 @@ public sealed class PluginUI
                     var map = territory.Map.Value;
                     PrintChat($"DEBUG: TerritoryType={terr}, MapRowId={map.RowId}, SizeFactor={map.SizeFactor}, OffsetX={map.OffsetX}, OffsetY={map.OffsetY}");
                 }
-                catch (Exception ex)
-                {
-                    PrintChat($"DEBUG: TerritoryType={terr}, Failed to resolve map: {ex.Message}");
-                }
+                catch (Exception ex) { PrintChat($"DEBUG: TerritoryType={terr}, Failed to resolve map: {ex.Message}"); }
             }
-            else
-            {
-                PrintChat($"DEBUG: TerritoryType={terr}, Territory not found in sheet.");
-            }
+            else PrintChat($"DEBUG: TerritoryType={terr}, Territory not found in sheet.");
         }
 
+        if (ImGui.Button("打开 Wiki##debug-open-wiki")) OpenUrl("https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
         ImGui.SameLine();
-        if (ImGui.Button("打开Wiki##debug-open-wiki"))
-        {
-            OpenUrl("https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("读取战斗记忆（未完成）##debug-read-memory-ui"))
-        {
-            PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
-        }
-
-        DrawBackpackOrganizer();
+        if (ImGui.Button("读取战斗记忆（未完成）##debug-read-memory-ui")) PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
     }
 
     private static void ExportPhantomWeaponItemIds()
@@ -3565,6 +3571,13 @@ public sealed class PluginUI
     private void DrawFloatingAvailableFates()
     {
         ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "当前可参与 FATE");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("停止导航##floating-fates-stop-nav"))
+        {
+            vnav.Stop();
+            PrintChat("已停止 FATE 导航。 ");
+        }
+
         var fates = GetAvailableFates();
         if (fates.Length == 0)
         {
