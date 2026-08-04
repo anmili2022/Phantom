@@ -1,6 +1,6 @@
 # 肝武助手设计文档
 
-> 当前版本：0.1.13.0 | 更新日期：2026-08-03
+> 当前版本：0.1.14.0 | 更新日期：2026-08-04
 
 ## 目标
 
@@ -55,8 +55,8 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.13.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.13.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.14.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.14.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider）。
@@ -85,6 +85,7 @@
 - 总览页按当前角色汇总职业收藏、绝武收藏、妖表奖励、雇员缓存覆盖和各系列完成度，支持一键同步全部系列。
 - 各系列武器进度页支持按职业分组、物品图标、角色维度保存和库存自动同步。
 - 妖表联动奖励扫描，支持隐藏已获得奖励、投影台缓存状态和按类别展示。
+- 妖表武器卡片提示对应的妖表宠物；右键武器卡片会复制完整提示文本，并通过 `[Phantom] [右键] [妖表]` 聊天消息确认。
 - 曼德维尔武器四阶段资料展示，支持任务与材料的手动进度保存。
 - 雅武页面追踪 21 个战斗职业的“基础武器”和“优雅”两阶段持有状态，并提供优雅武器兑换 Wiki 跳转。
 - 古武、魂武、优武、义武、天钢、莫雯、宇宙和绝武资料页，复用阶段页签、任务勾选、材料手动进度和固定 `Item.RowId` 职业持有同步。
@@ -98,6 +99,7 @@
 - 武器和妖表同步按钮使用悬浮提示说明扫描范围；每个系列页面提供对应 Wiki 按钮，古武页面分别提供上古武器和黄道武器 Wiki 按钮。
 - DEBUG 设置提供“同步时输出物品位置”开关，以及“导出幻武 Item.RowId”和“读取雅武 Item.RowId”按钮。二者将中文客户端物品表中的职业、阶段、物品 ID 和名称分别写入插件配置目录下的 `phantom-item-ids.txt` 和 `elegant-weapon-item-ids.txt`。开启位置输出后，同步会输出每个候选物品的具体位置；未命中时输出“未找到”。妖表的特殊物品、坐骑、肖像和宠物按解锁状态输出，武器和幻境菜刀按库存位置输出。DEBUG 系列名称使用短称，例如“幻武”“雅武”“绝武”“古武”“魂武”。
 - 设置页提供“整理背包”功能：从当前四个普通背包读取物品，按 `itemid` 合并相同物品，支持按名称搜索并选择；点击整理后将选中物品尽可能移动到普通或高级鞍囊，容量不足时保留剩余物品并在聊天栏报告结果。
+- 设置页在悬浮窗选项下提供“前往 Flag”互斥选项，可选择“直接前往”或“按导航前往”，并使用分割线与同步设置区分。
 - 左侧导航显示当前角色与插件状态，右侧阶段页签使用与武器进度卡片一致的自绘配色。
 - vnavmesh + Lifestream 的两段式导航，以及“前往幻境村”独立入口。
 
@@ -131,6 +133,7 @@
 - `FloatingSecretTerritoryType` / `FloatingManualMode`：悬浮窗当前地图与手动模式。
 - `ShowSecretTargetsInFloatingWindow` / `ShowSecretDutiesInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗显示选项。
 - `ShowAvailableFatesInFloatingWindow`：在悬浮窗显示当前地图可参与的 FATE 及导航按钮。
+- `NavigateToFlagDirectly`：前往 Flag 时使用直接前往还是导航前往。
 - `GroupWeaponProgressByRole` / `ShowWeaponProgressIcons`：武器进度总览选项。
 - `WeaponProgressByCharacter` / `WeaponProgressItemsByCharacter` / `WeaponProgressSyncTimes`：按角色维度的武器进度总览数据。
 - `YokaiOwnedRewardKeysByCharacter` / `YokaiSyncTimesByCharacter`：按角色维度保存妖表奖励和同步时间。
@@ -382,6 +385,8 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 3. 注意：不同宠物掉落的材料不一样。该行使用红色强调。
 
 奖励按妖怪手表、坐骑、肖像、宠物和武器分类展示。特殊物品、坐骑、肖像和宠物通过对应解锁状态判断；武器同步扫描背包、关键道具、装备栏、兵装库、鞍囊、收藏柜、投影台和雇员缓存，结果按角色 ContentId 保存。
+
+武器卡片悬浮提示显示武器名称、持有状态和对应宠物；对武器卡片点击右键会复制该提示内容，并在聊天栏显示复制成功消息。
 
 ### 曼德维尔武器页面
 

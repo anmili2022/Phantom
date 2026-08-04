@@ -2487,9 +2487,23 @@ public sealed class PluginUI
         ImGui.TextDisabled(reward.Owned ? "已获得" : "未获得");
         ImGui.SetCursorScreenPos(cursor);
         ImGui.InvisibleButton($"yokai-reward-{reward.Key}", size);
+        var minionName = reward.Category == YokaiWatchGuide.WeaponCategory
+            ? YokaiWatchGuide.GetWeaponMinionName(reward.Key)
+            : null;
+        var tooltip = $"{reward.Name}\n{(reward.Owned ? "已获得" : "未获得")}";
+        if (minionName != null)
+        {
+            tooltip += $"\n对应宠物：{minionName}";
+        }
+
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip(reward.Owned ? $"{reward.Name}\n已获得" : $"{reward.Name}\n未获得");
+            ImGui.SetTooltip(tooltip);
+            if (reward.Category == YokaiWatchGuide.WeaponCategory && ImGui.IsMouseReleased(ImGuiMouseButton.Right))
+            {
+                ImGui.SetClipboardText(tooltip);
+                PrintChat($"[右键] [妖表] 武器信息已复制。\n{tooltip}");
+            }
         }
     }
 
@@ -2533,11 +2547,27 @@ public sealed class PluginUI
             configuration.Save();
         }
 
-        DrawBackpackOrganizer();
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "前往 Flag");
+        ImGui.TextDisabled("选择点击 Flag 时的前往方式。");
+        var navigateToFlagDirectly = configuration.NavigateToFlagDirectly;
+        if (ImGui.RadioButton("直接前往##flag-direct", navigateToFlagDirectly))
+        {
+            configuration.NavigateToFlagDirectly = true;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.RadioButton("按导航前往##flag-navigation", !navigateToFlagDirectly))
+        {
+            configuration.NavigateToFlagDirectly = false;
+            configuration.Save();
+        }
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "DEBUG");
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "同步");
         var debugLogSyncedItemLocations = configuration.DebugLogSyncedItemLocations;
         if (ImGui.Checkbox("同步时输出物品位置##debug-log-synced-item-locations", ref debugLogSyncedItemLocations))
         {
@@ -2652,6 +2682,8 @@ public sealed class PluginUI
         {
             PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
         }
+
+        DrawBackpackOrganizer();
     }
 
     private static void ExportPhantomWeaponItemIds()
@@ -3006,6 +3038,11 @@ public sealed class PluginUI
     {
         try
         {
+            if (message.StartsWith("DEBUG ", StringComparison.Ordinal))
+            {
+                message = $"[DEBUG] {message[6..]}";
+            }
+
             DalamudApi.ChatGui.Print(new Dalamud.Game.Text.XivChatEntry
             {
                 Type = Dalamud.Game.Text.XivChatType.Echo,

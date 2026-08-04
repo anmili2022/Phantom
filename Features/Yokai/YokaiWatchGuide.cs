@@ -48,4 +48,24 @@ public static class YokaiWatchGuide
         new("weapon-manji", "凭依教典", WeaponCategory, "凭依教典"),
         new("weapon-kaira", "蛇王刺剑", WeaponCategory, "蛇王刺剑"),
     ];
+
+    public static string? GetWeaponMinionName(string weaponKey)
+        => weaponKey switch
+        {
+            "weapon-shogunyan" => "武士猫",
+            "weapon-jibanyan" => "地缚猫",
+            "weapon-hovernyan" => "浮游猫",
+            "weapon-enma" => "阎魔",
+            "weapon-komasan" => "小狛",
+            "weapon-komajiro" => "狛次郎",
+            "weapon-nokojima" => "野槌蛇",
+            "weapon-usa-pyon" => "USA蹦",
+            "weapon-orochi" => "大蛇",
+            "weapon-kyubi" => "九尾",
+            "weapon-nurarihyon" => "滑头鬼",
+            "weapon-whisper" => "维斯帕",
+            "weapon-blizzaria" => "吹雪公主",
+            "weapon-manji" => "人面犬",
+            _ => null,
+        };
 }
