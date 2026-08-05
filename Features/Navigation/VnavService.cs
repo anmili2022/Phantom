@@ -118,6 +118,46 @@ public sealed class VnavService : IDisposable
         }
     }
 
+    public void NavigateToHuntTarget(Vector3 targetPos, float height)
+    {
+        try
+        {
+            var groundTarget = SnapToNavmesh(targetPos) ?? targetPos;
+            var elevatedTarget = new Vector3(groundTarget.X, groundTarget.Y + Math.Clamp(height, 0f, 200f), groundTarget.Z);
+            StartMove(elevatedTarget, true);
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Warning(ex, "Hunt target navigation request failed.");
+            PrintEcho($"狩猎导航失败：{ex.Message}");
+        }
+    }
+
+    public bool TryResolveMapLinkPosition(uint territoryType, uint mapId, float mapX, float mapY, out Vector3 position)
+    {
+        position = default;
+        if (territoryType == 0 || territoryType != DalamudApi.ClientState.TerritoryType)
+        {
+            return false;
+        }
+
+        var maps = DalamudApi.DataManager.GetExcelSheet<Map>();
+        if (!maps.TryGetRow(mapId, out var map) || map.SizeFactor <= 0)
+        {
+            map = maps.FirstOrDefault(candidate => candidate.TerritoryType.RowId == territoryType);
+            if (map.RowId == 0 || map.SizeFactor <= 0)
+            {
+                return false;
+            }
+        }
+
+        position = new Vector3(
+            50f * mapX - map.OffsetX - 102400f / map.SizeFactor - 50f,
+            0f,
+            50f * mapY - map.OffsetY - 102400f / map.SizeFactor - 50f);
+        return true;
+    }
+
     public void TeleportAndNavigate(Vector3 targetPos, bool fly)
     {
         var snapped = SnapToNavmesh(targetPos);

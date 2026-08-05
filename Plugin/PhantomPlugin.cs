@@ -8,6 +8,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
     private readonly VnavService vnav;
     private readonly SecretKillTracker killTracker;
     private readonly FateTracker fateTracker;
+    private readonly HuntAssistant huntAssistant;
     private readonly PluginUI ui;
 
     public string Name => "Phantom";
@@ -24,6 +25,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         vnav = new VnavService(pluginInterface, Configuration);
         killTracker = new SecretKillTracker(Configuration);
         fateTracker = new FateTracker(Configuration);
+        huntAssistant = new HuntAssistant(Configuration, vnav);
         ui = new PluginUI(Configuration, vnav);
 
         DalamudApi.Commands.AddHandler(CommandName, new Dalamud.Game.Command.CommandInfo(OnCommand)
@@ -46,6 +48,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         DalamudApi.Commands.RemoveHandler(CommandName);
         killTracker.Dispose();
         fateTracker.Dispose();
+        huntAssistant.Dispose();
         vnav.Dispose();
         Configuration.Save();
     }

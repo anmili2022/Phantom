@@ -1,6 +1,6 @@
 # 肝武助手设计文档
 
-> 当前版本：0.1.16.0 | 更新日期：2026-08-04
+> 当前版本：0.1.17.0 | 更新日期：2026-08-05
 
 ## 目标
 
@@ -55,8 +55,8 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.16.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.16.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.17.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.17.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider）。
@@ -65,6 +65,7 @@
 - `Features/PhantomWeapons/SecretKillTracker.cs`：聊天击杀/讨伐任务/探索记忆自动标记。
 - `Features/PhantomWeapons/FateTracker.cs`：金牌 FATE 自动检测。
 - `Features/Navigation/VnavService.cs`：导航 IPC 服务，含幻境村路线状态机。
+- `Features/Hunt/HuntAssistant.cs`：狩猎车头 Flag 监听、地图链接坐标解析与自动飞行导航。
 - `UI/PluginUI.cs`：主窗口、左侧系列导航、自绘阶段页签、武器进度总览、妖表页面、悬浮窗和设置页。
 - `Features/Yokai/YokaiWatchGuide.cs`：妖表联动奖励定义。
 - `Features/Yokai/YokaiProgressService.cs`：妖表奖励扫描，支持背包、关键道具、装备栏、兵装库、鞍囊、收藏柜、投影台和雇员缓存。
@@ -104,6 +105,7 @@
 - 左侧导航显示当前角色与插件状态，右侧阶段页签使用与武器进度卡片一致的自绘配色。
 - vnavmesh + Lifestream 的两段式导航，以及“前往幻境村”独立入口。
 - 飞行导航会先尝试上坐骑，8 秒内未成功才直接发起 vnavmesh；抵达飞行导航目标 8 yalms 内时停止路径并以 `ActionType.Mount, 0` 自动下坐骑，每 500ms 重试至游戏确认已下坐骑。
+- 狩猎助手可指定车头，监听其聊天中的地图 Flag，并自动飞行导航到目标点。
 
 当前还保留的手动项：
 
@@ -136,6 +138,10 @@
 - `ShowSecretTargetsInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗目标显示选项。
 - `ShowAvailableFatesInFloatingWindow`：在悬浮窗显示当前地图可参与的 FATE 及导航按钮。
 - `NavigateToFlagDirectly`：前往 Flag 时使用直接前往还是导航前往。
+- `HuntAssistantEnabled`：是否监听指定车头发送的狩猎 Flag。
+- `ShowHuntAssistantInFloatingWindow`：是否在悬浮窗显示狩猎助手状态。
+- `HuntLeaderName`：指定车头的角色名。
+- `HuntTargetHeight`：狩猎 Flag 目标接地后向上抬升的距离，默认 50 yalms。
 - `ShowNavigationLogs`：是否在聊天栏显示带 `[导航日志]` 前缀的导航过程与状态消息。
 - `GroupWeaponProgressByRole` / `ShowWeaponProgressIcons`：武器进度总览选项。
 - `WeaponProgressByCharacter` / `WeaponProgressItemsByCharacter` / `WeaponProgressSyncTimes`：按角色维度的武器进度总览数据。
@@ -379,6 +385,9 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - “当前可参与 FATE”标题右侧提供“停止导航”按钮，调用 `VnavService.Stop()` 终止当前 FATE 导航、自动上坐骑等待和到达后的自动下坐骑监听。
 - 常用设置提供“导航日志”开关；开启时，聊天栏中的导航过程和 FATE 导航消息统一使用 `[Phantom] [导航日志]` 前缀，关闭后不输出这些过程消息。
 - FATE 导航复用 `VnavService`：目标较远时先前往附近以太水晶，再使用 vnavmesh 导航；目标较近时直接导航；找不到附近网格点时尝试直接使用 FATE 原始坐标。
+- 狩猎助手面板位于“前往 Flag”上方，可启用自动跟随、将当前选中玩家设为车头、清除车头、设置目标接地距离，并控制是否在悬浮窗显示状态。
+- 狩猎助手监听车头发送的 `MapLinkPayload`。仅当启用狩猎助手、已指定车头且 Flag 位于当前地图时触发，避免跨地图 Flag 直接飞行造成误操作。地图坐标先按当前 Map 参数换算为世界坐标，再使用与 FATE 相同的近邻网格查询与原始坐标回退逻辑确定接地点；最终目标在接地点上方增加可配置高度，固定使用飞行导航。
+- 狩猎助手状态可显示在悬浮窗，包含启用状态、车头名称与接地距离。
 - 在蜃景幻界新月岛南征之章（`TerritoryType = 1252`）和北征之章（`TerritoryType = 1346`）点击 FATE 导航或“最近 FATE”时，不执行导航，提示“【新月岛地图】请使用【新月岛史官】插件。”；优雷卡四张地图（`732`、`763`、`795`、`827`）及博兹雅南方战线、扎杜诺尔（`920`、`975`）执行相同操作时，提示“【博兹雅/优雷卡】暂不支持该地图。”。以上八个地图 ID 均已由游戏内 DEBUG 输出确认。
 
 ### 妖表联动页面

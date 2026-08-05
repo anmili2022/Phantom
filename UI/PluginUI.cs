@@ -2534,6 +2534,54 @@ public sealed class PluginUI
         }
 
         ImGui.Spacing();
+        DrawSettingsSectionHeader("狩猎助手", "跟随车头 Flag");
+        if (ImGui.BeginChild("settings-hunt-assistant-panel", new Vector2(0f, 142f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            var huntAssistantEnabled = configuration.HuntAssistantEnabled;
+            if (DrawSettingToggle("启用狩猎助手", "车头在当前地图发送 Flag 后自动飞行导航", ref huntAssistantEnabled, "hunt-assistant"))
+            {
+                configuration.HuntAssistantEnabled = huntAssistantEnabled;
+                configuration.Save();
+            }
+
+            var leader = DalamudApi.TargetManager.Target;
+            var leaderName = leader?.Name.TextValue ?? string.Empty;
+            ImGui.TextUnformatted(string.IsNullOrWhiteSpace(configuration.HuntLeaderName) ? "车头：未指定" : $"车头：{configuration.HuntLeaderName}");
+            ImGui.SameLine();
+            if (ImGui.Button("设为车头##hunt-leader") && !string.IsNullOrWhiteSpace(leaderName))
+            {
+                configuration.HuntLeaderName = leaderName;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("将当前选中的玩家设为车头。\n当前目标：" + (string.IsNullOrWhiteSpace(leaderName) ? "无" : leaderName));
+
+            ImGui.SameLine();
+            if (ImGui.Button("清除##hunt-leader"))
+            {
+                configuration.HuntLeaderName = string.Empty;
+                configuration.Save();
+            }
+
+            var showHuntAssistant = configuration.ShowHuntAssistantInFloatingWindow;
+            if (ImGui.Checkbox("在悬浮窗显示狩猎助手##hunt-floating", ref showHuntAssistant))
+            {
+                configuration.ShowHuntAssistantInFloatingWindow = showHuntAssistant;
+                configuration.Save();
+            }
+
+            var height = configuration.HuntTargetHeight;
+            ImGui.SetNextItemWidth(180f);
+            if (ImGui.SliderFloat("接地距离##hunt-target-height", ref height, 0f, 200f, "%.0f yalms"))
+            {
+                configuration.HuntTargetHeight = height;
+                configuration.Save();
+            }
+            ImGui.SameLine();
+            ImGui.TextDisabled("目标贴地后自动上抬");
+            ImGui.EndChild();
+        }
+
+        ImGui.Spacing();
         DrawSettingsSectionHeader("前往 Flag", "二选一");
         if (ImGui.BeginChild("settings-flag-panel", new Vector2(0f, 92f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
@@ -3440,6 +3488,12 @@ public sealed class PluginUI
 
         DrawFloatingContextMenu();
 
+        if (configuration.ShowHuntAssistantInFloatingWindow)
+        {
+            DrawFloatingHuntAssistant();
+            ImGui.Separator();
+        }
+
         if (configuration.ShowAvailableFatesInFloatingWindow)
         {
             DrawFloatingAvailableFates();
@@ -3572,6 +3626,17 @@ public sealed class PluginUI
         }
 
         ImGui.End();
+    }
+
+    private void DrawFloatingHuntAssistant()
+    {
+        ImGui.TextColored(new Vector4(0.95f, 0.45f, 0.25f, 1f), "狩猎助手");
+        ImGui.SameLine();
+        ImGui.TextDisabled(configuration.HuntAssistantEnabled ? "已启用" : "未启用");
+        ImGui.TextUnformatted(string.IsNullOrWhiteSpace(configuration.HuntLeaderName)
+            ? "车头：未指定"
+            : $"车头：{configuration.HuntLeaderName}");
+        ImGui.TextDisabled($"接地距离：{configuration.HuntTargetHeight:0} yalms（自动飞行）");
     }
 
     private void DrawFloatingAvailableFates()
