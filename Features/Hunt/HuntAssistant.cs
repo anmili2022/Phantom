@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 
 namespace Phantom;
 
@@ -9,6 +10,8 @@ public sealed class HuntAssistant : IDisposable
 {
     private readonly PluginConfiguration configuration;
     private readonly VnavService vnav;
+    private string lastFlagKey = string.Empty;
+    private DateTime lastFlagUtc = DateTime.MinValue;
 
     public HuntAssistant(PluginConfiguration configuration, VnavService vnav)
     {
@@ -31,7 +34,8 @@ public sealed class HuntAssistant : IDisposable
             return;
         }
 
-        var sender = ExtractText(message, "OriginalSender", "Author", "Sender", "AuthorName", "SenderName", "PlayerName", "Name");
+        var sender = ExtractPlayerName(message)
+            ?? ExtractText(message, "OriginalSender", "Author", "Sender", "AuthorName", "SenderName", "PlayerName", "Name");
         if (!MatchesLeader(sender, configuration.HuntLeaderName))
         {
             return;
@@ -47,12 +51,26 @@ public sealed class HuntAssistant : IDisposable
             return;
         }
 
-        if (!TryExtractMapLink(message, out var territoryType, out var mapId, out var mapX, out var mapY))
+        if (!TryExtractMapLink(message, out var mapLink))
         {
             DalamudApi.Log.Information("Ignored hunt chat from {Sender}: no MapLink payload found.", sender);
             PrintTestStatus("未读取到 Flag payload。", false);
             return;
         }
+
+        var territoryType = mapLink.TerritoryType.RowId;
+        var mapId = mapLink.Map.RowId;
+        var mapX = mapLink.XCoord;
+        var mapY = mapLink.YCoord;
+        var flagKey = $"{sender}|{territoryType}|{mapId}|{mapLink.RawX}|{mapLink.RawY}";
+        if (flagKey == lastFlagKey && DateTime.UtcNow - lastFlagUtc < TimeSpan.FromSeconds(5))
+        {
+            PrintTestStatus("忽略 5 秒内重复的车头 Flag。", false);
+            return;
+        }
+
+        lastFlagKey = flagKey;
+        lastFlagUtc = DateTime.UtcNow;
 
         if (!vnav.TryResolveMapLinkPosition(territoryType, mapId, mapX, mapY, out var position))
         {
@@ -61,15 +79,15 @@ public sealed class HuntAssistant : IDisposable
             return;
         }
 
+        TryMarkMapFlag(territoryType, mapId, position);
         vnav.NavigateToHuntTarget(territoryType, position, configuration.HuntTargetHeight);
         DalamudApi.Log.Information("Navigating to hunt Flag from {Leader}: {X:0.0}, {Y:0.0}.", configuration.HuntLeaderName, mapX, mapY);
         PrintTestStatus($"已解析 Flag：Territory={territoryType}，Map={mapId}，X={mapX:0.0}，Y={mapY:0.0}。", true);
     }
 
-    private static bool TryExtractMapLink(object message, out uint territoryType, out uint mapId, out float mapX, out float mapY)
+    private static bool TryExtractMapLink(object message, out MapLinkPayload mapLink)
     {
-        territoryType = mapId = 0;
-        mapX = mapY = 0f;
+        mapLink = null!;
         try
         {
             foreach (var propertyName in new[] { "OriginalMessage", "Message", "OriginalSender", "Sender" })
@@ -83,24 +101,14 @@ public sealed class HuntAssistant : IDisposable
 
                 foreach (var payload in payloads)
                 {
-                    if (payload is MapLinkPayload mapLink)
+                    if (payload is MapLinkPayload payloadMapLink)
                     {
-                        territoryType = mapLink.TerritoryType.RowId;
-                        mapId = mapLink.Map.RowId;
-                        mapX = mapLink.XCoord;
-                        mapY = mapLink.YCoord;
-                        return territoryType != 0 && mapId != 0;
+                        if (payloadMapLink.TerritoryType.RowId != 0 && payloadMapLink.Map.RowId != 0)
+                        {
+                            mapLink = payloadMapLink;
+                            return true;
+                        }
                     }
-
-                    if (payload == null || !payload.GetType().Name.Contains("MapLink", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-                    territoryType = GetUInt(payload, "TerritoryType", "Territory");
-                    mapId = GetUInt(payload, "Map", "MapId");
-                    mapX = GetFloat(payload, "XCoord", "MapX", "RawX");
-                    mapY = GetFloat(payload, "YCoord", "MapY", "RawY");
-                    return territoryType != 0 && mapX != 0f && mapY != 0f;
                 }
             }
         }
@@ -212,6 +220,47 @@ public sealed class HuntAssistant : IDisposable
         }
 
         return value is string stringValue ? stringValue : string.Empty;
+    }
+
+    private static string? ExtractPlayerName(object message)
+    {
+        foreach (var propertyName in new[] { "OriginalSender", "Sender" })
+        {
+            var content = message.GetType().GetProperty(propertyName)?.GetValue(message);
+            var payloads = content?.GetType().GetProperty("Payloads")?.GetValue(content) as System.Collections.IEnumerable;
+            if (payloads == null)
+            {
+                continue;
+            }
+
+            foreach (var payload in payloads)
+            {
+                if (payload is PlayerPayload player && !string.IsNullOrWhiteSpace(player.PlayerName))
+                {
+                    return player.PlayerName;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static unsafe void TryMarkMapFlag(uint territoryType, uint mapId, Vector3 worldPosition)
+    {
+        try
+        {
+            var agentMap = AgentMap.Instance();
+            if (agentMap == null)
+            {
+                return;
+            }
+
+            agentMap->SetFlagMapMarker(territoryType, mapId, worldPosition);
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Warning(ex, "Failed to set the map Flag for hunt navigation.");
+        }
     }
 
     private static void PrintLeaderMessage(string sender, string text)

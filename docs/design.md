@@ -1,6 +1,6 @@
 # 肝武助手设计文档
 
-> 当前版本：0.1.18.0 | 更新日期：2026-08-05
+> 当前版本：0.1.19.0 | 更新日期：2026-08-05
 
 ## 目标
 
@@ -55,8 +55,8 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.18.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.18.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.19.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.19.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider）。
@@ -107,6 +107,7 @@
 - 飞行导航会先尝试上坐骑，8 秒内未成功才直接发起 vnavmesh；抵达飞行导航目标 8 yalms 内时停止路径并以 `ActionType.Mount, 0` 自动下坐骑，每 500ms 重试至游戏确认已下坐骑。
 - 飞行导航支持按调用场景控制抵达后的下坐骑行为；狩猎助手抵达目标后保持骑乘，危命和其他普通导航保留原有自动下坐骑逻辑。
 - 狩猎助手可指定车头，监听其聊天中的地图 Flag，并支持跨地图自动传送后飞行导航到目标点。
+- 车头身份优先从聊天 `PlayerPayload.PlayerName` 读取，该字段不包含服务器名；配置只需填写角色名，例如填写 `津见宇` 即可匹配聊天中显示为“津见宇 + 服务器名”的玩家。若同一车头在 5 秒内重复发送相同地图和坐标的 Flag，只处理第一次，避免重复覆盖传送/导航状态。
 
 当前还保留的手动项：
 
@@ -389,6 +390,8 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - FATE 找不到附近网格点时尝试直接使用 FATE 原始坐标；狩猎 Flag 使用 `MapLinkPayload` 的 `TerritoryType`、`Map`、`XCoord` 和 `YCoord` 解析地图与坐标。
 - 狩猎助手可启用自动跟随、输入或粘贴车头名称、使用当前目标、设为自己、清除车头、设置目标接地距离，并控制是否在悬浮窗显示状态。车头名称匹配会忽略 `@服务器` 后缀，因此不需要填写服务器名。
 - 狩猎助手支持跨地图：先按目标地图 ID 使用 Lifestream 传送到目标地图，再等待读图、Lifestream 空闲和 vnavmesh 就绪后导航。目标点先贴地，再按配置高度抬升，狩猎导航抵达后保持骑乘，不自动下坐骑。
+- 车头 Flag 会通过 `FFXIVClientStructs` 的 `AgentMap.SetFlagMapMarker` 写入游戏地图，不调用 `IGameGui.OpenMapWithMapLink`，因此只设置地图标记而不自动打开地图。该接口使用世界坐标，必须传入经过 `Map.OffsetX`、`Map.OffsetY` 和 `Map.SizeFactor` 换算后的目标世界坐标。
+- Lifestream 传送完成后，若 vnavmesh 仍处于地图网格缓存/加载状态，会保留待导航目标并持续重试；必须确认读图结束、Lifestream 空闲、达到传送后的稳定等待时间且 vnavmesh 可用后，才开始后续导航。不能因首次近邻网格查询失败而丢弃目标。
 - 狩猎助手页面和悬浮窗均提供停止导航按钮，可取消传送等待、自动上坐骑等待和 vnavmesh 路径；测试开关可用 Echo/默语复述车头任意频道发言。
 - 幻武页面的 Wiki 按钮右侧提供“监控幻武”（原悬浮窗开关）和“自动标记击杀”开关。
 - 在蜃景幻界新月岛南征之章（`TerritoryType = 1252`）和北征之章（`TerritoryType = 1346`）点击 FATE 导航或“最近 FATE”时，不执行导航，提示“【新月岛地图】请使用【新月岛史官】插件。”；优雷卡四张地图（`732`、`763`、`795`、`827`）及博兹雅南方战线、扎杜诺尔（`920`、`975`）执行相同操作时，提示“【博兹雅/优雷卡】暂不支持该地图。”。以上八个地图 ID 均已由游戏内 DEBUG 输出确认。

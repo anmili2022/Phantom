@@ -35,6 +35,7 @@ public sealed class VnavService : IDisposable
     private Vector3? pendingAetherytePosition;
     private bool pendingFly;
     private bool pendingAutoDismount = true;
+    private bool pendingTeleportBegan;
     private DateTime pendingStartedUtc;
     private float pendingElevation;
     private Vector3? pendingMoveTarget;
@@ -269,6 +270,7 @@ public sealed class VnavService : IDisposable
         pendingTerritoryType = DalamudApi.ClientState.TerritoryType;
         pendingAetherytePosition = TryFindAetherytePosition(aetheryteId, out var aetherytePosition) ? aetherytePosition : null;
         pendingFly = fly;
+        pendingTeleportBegan = false;
         pendingStartedUtc = DateTime.UtcNow;
     }
 
@@ -515,6 +517,7 @@ public sealed class VnavService : IDisposable
         pendingFly = fly;
         pendingElevation = Math.Clamp(elevation, 0f, 200f);
         pendingAutoDismount = autoDismount;
+        pendingTeleportBegan = false;
         pendingStartedUtc = DateTime.UtcNow;
         PrintEcho($"已请求传送到目标地图 {territoryType}，等待读图完成后继续导航。 ");
         return true;
@@ -645,6 +648,7 @@ public sealed class VnavService : IDisposable
             pendingTarget = null;
             pendingTerritoryType = 0;
             pendingAetherytePosition = null;
+            pendingTeleportBegan = false;
             DalamudApi.Log.Warning("Timed out waiting for Lifestream teleport before vnavmesh navigation.");
             PrintEcho("等待 Lifestream 传送超时，已取消后续导航。 ");
             return;
@@ -679,7 +683,17 @@ public sealed class VnavService : IDisposable
 
         try
         {
-            if (lifestreamIsBusy?.InvokeFunc() == true || !isReady.InvokeFunc())
+            if (lifestreamIsBusy?.InvokeFunc() == true)
+            {
+                pendingTeleportBegan = true;
+                return;
+            }
+
+            // Lifestream can finish between framework frames, so do not require
+            // observing IsBusy=true; the settle delay prevents the first frame
+            // after the IPC call from starting navigation too early.
+            if ((!pendingTeleportBegan && DateTime.UtcNow - pendingStartedUtc < TimeSpan.FromSeconds(8))
+                || !isReady.InvokeFunc())
             {
                 return;
             }
@@ -693,19 +707,19 @@ public sealed class VnavService : IDisposable
         var fly = pendingFly;
         var elevation = pendingElevation;
         var autoDismount = pendingAutoDismount;
+        var snapped = SnapToNavmesh(target);
+        if (!snapped.HasValue)
+        {
+            // Target-map navmesh data may still be loading after the teleport; keep the request for retry.
+            return;
+        }
+
         pendingTarget = null;
         pendingTerritoryType = 0;
         pendingAetherytePosition = null;
         pendingElevation = 0f;
         pendingAutoDismount = true;
-        var snapped = SnapToNavmesh(target);
-        if (!snapped.HasValue)
-        {
-            DalamudApi.Log.Warning("vnavmesh could not find a nearby navmesh point after teleport.");
-            PrintEcho("传送完成，但 vnavmesh 在目标附近找不到可走网格点。 ");
-            return;
-        }
-
+        pendingTeleportBegan = false;
         var finalTarget = elevation > 0f
             ? new Vector3(snapped.Value.X, snapped.Value.Y + elevation, snapped.Value.Z)
             : snapped.Value;
@@ -1092,6 +1106,7 @@ public sealed class VnavService : IDisposable
         pendingTarget = null;
         pendingTerritoryType = 0;
         pendingAetherytePosition = null;
+        pendingTeleportBegan = false;
         pendingElevation = 0f;
         pendingMoveTarget = null;
         pendingMoveAutoDismount = true;
