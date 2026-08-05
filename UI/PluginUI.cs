@@ -3722,46 +3722,66 @@ public sealed class PluginUI
 
     private void DrawFloatingHuntAssistant()
     {
-        ImGui.TextColored(new Vector4(0.95f, 0.45f, 0.25f, 1f), "狩猎助手");
-        ImGui.SameLine();
-        ImGui.TextDisabled(configuration.HuntAssistantEnabled ? "已启用" : "未启用");
-        ImGui.SameLine();
-        if (ImGui.SmallButton("停止导航##floating-hunt-stop-navigation"))
+        if (ImGui.BeginChild("floating-hunt-card", new Vector2(284f, 72f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
-            vnav.Stop();
+            var accent = configuration.HuntAssistantEnabled
+                ? new Vector4(0.95f, 0.45f, 0.25f, 1f)
+                : new Vector4(0.48f, 0.52f, 0.58f, 1f);
+            ImGui.TextColored(accent, "狩猎助手");
+            ImGui.SameLine();
+            ImGui.TextColored(configuration.HuntAssistantEnabled ? new Vector4(0.42f, 0.88f, 0.58f, 1f) : new Vector4(0.65f, 0.67f, 0.70f, 1f),
+                configuration.HuntAssistantEnabled ? "ONLINE" : "OFFLINE");
+            ImGui.SameLine();
+            if (ImGui.SmallButton("停止导航##floating-hunt-stop-navigation"))
+            {
+                vnav.Stop();
+            }
+
+            ImGui.Separator();
+            ImGui.TextUnformatted(string.IsNullOrWhiteSpace(configuration.HuntLeaderName)
+                ? "车头  未指定"
+                : $"车头  {configuration.HuntLeaderName}");
+            ImGui.SameLine();
+            ImGui.TextDisabled($"高度 +{configuration.HuntTargetHeight:0}y");
         }
-        ImGui.TextUnformatted(string.IsNullOrWhiteSpace(configuration.HuntLeaderName)
-            ? "车头：未指定"
-            : $"车头：{configuration.HuntLeaderName}");
-        ImGui.TextDisabled($"接地距离：{configuration.HuntTargetHeight:0} yalms（自动飞行）");
+        ImGui.EndChild();
     }
 
     private void DrawFloatingAvailableFates()
     {
-        ImGui.TextColored(new Vector4(1f, 0.85f, 0.3f, 1f), "当前可参与 FATE");
-        ImGui.SameLine();
-        if (ImGui.SmallButton("停止导航##floating-fates-stop-nav"))
-        {
-            vnav.Stop();
-            PrintNavigationLog("已停止 FATE 导航。 ");
-        }
-
         var fates = GetAvailableFates();
-        if (fates.Length == 0)
+        var height = Math.Min(44f + Math.Max(fates.Length, 1) * 26f, 252f);
+        if (ImGui.BeginChild("floating-fate-card", new Vector2(284f, height), true, ImGuiWindowFlags.NoScrollbar))
         {
-            ImGui.TextDisabled("当前地图没有可参与的 FATE。");
-            return;
-        }
-
-        foreach (var fate in fates)
-        {
-            ImGui.TextUnformatted($"{fate.Name}  {FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
+            ImGui.TextColored(new Vector4(1f, 0.82f, 0.24f, 1f), "危命助手");
             ImGui.SameLine();
-            if (ImGui.SmallButton($"导航##floating-available-fate-{fate.FateId}"))
+            ImGui.TextDisabled(fates.Length == 0 ? "当前地图" : $"{fates.Length} 个可参与");
+            ImGui.SameLine();
+            if (ImGui.SmallButton("停止导航##floating-fates-stop-nav"))
             {
-                NavigateToFate(fate);
+                vnav.Stop();
+                PrintNavigationLog("已停止 FATE 导航。 ");
+            }
+
+            ImGui.Separator();
+            if (fates.Length == 0)
+            {
+                ImGui.TextDisabled("当前地图没有可参与的 FATE。 ");
+            }
+
+            foreach (var fate in fates)
+            {
+                ImGui.TextUnformatted($"{fate.Name}");
+                ImGui.SameLine();
+                ImGui.TextDisabled($"{FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
+                ImGui.SameLine();
+                if (ImGui.SmallButton($"前往##floating-available-fate-{fate.FateId}"))
+                {
+                    NavigateToFate(fate);
+                }
             }
         }
+        ImGui.EndChild();
     }
 
     private IFate[] GetAvailableFates()

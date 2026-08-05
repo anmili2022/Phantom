@@ -1,6 +1,6 @@
 # 肝武助手设计文档
 
-> 当前版本：0.1.19.0 | 更新日期：2026-08-05
+> 当前版本：0.1.20.0 | 更新日期：2026-08-05
 
 ## 目标
 
@@ -55,8 +55,8 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.19.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.19.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.20.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.20.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider）。
