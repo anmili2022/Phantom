@@ -40,11 +40,13 @@ public sealed class PluginUI
         ("ultimate", "绝武 · Ultimate", "-"),
         ("yokai", "妖表联动", "37"),
         ("settings", "设置", "-"),
+        ("fate", "危命助手", "-"),
+        ("hunt", "狩猎助手", "-"),
     };
     private static readonly (string Key, string Label, string Count)[] WorkspaceSections =
-        MainSections.Where(section => section.Key != "settings").ToArray();
+        MainSections.Where(section => section.Key is not "settings" and not "fate" and not "hunt").ToArray();
     private static readonly (string Key, string Label, string Count)[] ToolSections =
-        MainSections.Where(section => section.Key == "settings").ToArray();
+        MainSections.Where(section => section.Key is "settings" or "fate" or "hunt").ToArray();
     private static readonly InventoryType[] WeaponInventoryTypes =
     {
         InventoryType.Inventory1,
@@ -319,6 +321,8 @@ public sealed class PluginUI
             "ultimate" => FontAwesomeIcon.Trophy,
             "yokai" => FontAwesomeIcon.Paw,
             "settings" => FontAwesomeIcon.Cog,
+            "fate" => FontAwesomeIcon.Flag,
+            "hunt" => FontAwesomeIcon.Crosshairs,
             _ => FontAwesomeIcon.Circle,
         };
 
@@ -387,6 +391,12 @@ public sealed class PluginUI
                 break;
             case "settings":
                 DrawSettingsWorkspace();
+                break;
+            case "fate":
+                DrawFateAssistantWorkspace();
+                break;
+            case "hunt":
+                DrawHuntAssistantWorkspace();
                 break;
             default:
                 if (RelicWeaponGuide.Series.TryGetValue(section.Key, out var series))
@@ -634,6 +644,21 @@ public sealed class PluginUI
 
         ImGui.SameLine();
         DrawWikiButton("打开幻境武器 Wiki", "phantom", "https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
+        ImGui.SameLine();
+        var monitorPhantom = configuration.ShowFloatingObjectiveWindow;
+        if (ImGui.Checkbox("监控幻武##phantom-floating-window", ref monitorPhantom))
+        {
+            configuration.ShowFloatingObjectiveWindow = monitorPhantom;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        var autoMarkKills = configuration.AutoMarkSecretKills;
+        if (ImGui.Checkbox("自动标记击杀##phantom-auto-mark-kills", ref autoMarkKills))
+        {
+            configuration.AutoMarkSecretKills = autoMarkKills;
+            configuration.Save();
+        }
     }
 
     private static void DrawWeaponSeriesPlaceholder(string name)
@@ -2524,64 +2549,18 @@ public sealed class PluginUI
         DrawSettingsSectionHeader("常用设置", "即时生效");
         if (ImGui.BeginTable("settings-common-grid", 2, ImGuiTableFlags.SizingStretchSame))
         {
-            DrawSettingCard("飞行导航", "允许导航过程自动使用飞行", configuration.UseFlightNavigation, "flight", value => configuration.UseFlightNavigation = value);
-            DrawSettingCard("悬浮窗", "显示秘影目标与当前地图进度", configuration.ShowFloatingObjectiveWindow, "floating", value => configuration.ShowFloatingObjectiveWindow = value);
-            DrawSettingCard("自动标记击杀", "从聊天消息自动更新目标状态", configuration.AutoMarkSecretKills, "auto-mark", value => configuration.AutoMarkSecretKills = value);
             DrawSettingCard("自动隐藏已完成项目", "减少悬浮窗中的已完成条目", configuration.AutoHideCompletedFloatingItems, "auto-hide", value => configuration.AutoHideCompletedFloatingItems = value);
-            DrawSettingCard("显示可参与 FATE", "列出当前地图可参与的 FATE", configuration.ShowAvailableFatesInFloatingWindow, "available-fates", value => configuration.ShowAvailableFatesInFloatingWindow = value);
+            ImGui.EndTable();
+        }
+
+        DrawSettingsSectionHeader("导航设置", "即时生效");
+        if (ImGui.BeginTable("settings-navigation-grid", 2, ImGuiTableFlags.SizingStretchSame))
+        {
+            DrawSettingCard("飞行导航", "允许导航过程自动使用飞行", configuration.UseFlightNavigation, "flight", value => configuration.UseFlightNavigation = value);
             DrawSettingCard("导航日志", "在聊天栏显示导航过程与状态", configuration.ShowNavigationLogs, "navigation-logs", value => configuration.ShowNavigationLogs = value);
             ImGui.EndTable();
         }
 
-        ImGui.Spacing();
-        DrawSettingsSectionHeader("狩猎助手", "跟随车头 Flag");
-        if (ImGui.BeginChild("settings-hunt-assistant-panel", new Vector2(0f, 142f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
-        {
-            var huntAssistantEnabled = configuration.HuntAssistantEnabled;
-            if (DrawSettingToggle("启用狩猎助手", "车头在当前地图发送 Flag 后自动飞行导航", ref huntAssistantEnabled, "hunt-assistant"))
-            {
-                configuration.HuntAssistantEnabled = huntAssistantEnabled;
-                configuration.Save();
-            }
-
-            var leader = DalamudApi.TargetManager.Target;
-            var leaderName = leader?.Name.TextValue ?? string.Empty;
-            ImGui.TextUnformatted(string.IsNullOrWhiteSpace(configuration.HuntLeaderName) ? "车头：未指定" : $"车头：{configuration.HuntLeaderName}");
-            ImGui.SameLine();
-            if (ImGui.Button("设为车头##hunt-leader") && !string.IsNullOrWhiteSpace(leaderName))
-            {
-                configuration.HuntLeaderName = leaderName;
-                configuration.Save();
-            }
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("将当前选中的玩家设为车头。\n当前目标：" + (string.IsNullOrWhiteSpace(leaderName) ? "无" : leaderName));
-
-            ImGui.SameLine();
-            if (ImGui.Button("清除##hunt-leader"))
-            {
-                configuration.HuntLeaderName = string.Empty;
-                configuration.Save();
-            }
-
-            var showHuntAssistant = configuration.ShowHuntAssistantInFloatingWindow;
-            if (ImGui.Checkbox("在悬浮窗显示狩猎助手##hunt-floating", ref showHuntAssistant))
-            {
-                configuration.ShowHuntAssistantInFloatingWindow = showHuntAssistant;
-                configuration.Save();
-            }
-
-            var height = configuration.HuntTargetHeight;
-            ImGui.SetNextItemWidth(180f);
-            if (ImGui.SliderFloat("接地距离##hunt-target-height", ref height, 0f, 200f, "%.0f yalms"))
-            {
-                configuration.HuntTargetHeight = height;
-                configuration.Save();
-            }
-            ImGui.SameLine();
-            ImGui.TextDisabled("目标贴地后自动上抬");
-            ImGui.EndChild();
-        }
-
-        ImGui.Spacing();
         DrawSettingsSectionHeader("前往 Flag", "二选一");
         if (ImGui.BeginChild("settings-flag-panel", new Vector2(0f, 92f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
@@ -2601,8 +2580,8 @@ public sealed class PluginUI
                 configuration.Save();
             }
 
-            ImGui.EndChild();
         }
+        ImGui.EndChild();
 
         ImGui.Spacing();
         DrawSettingsSectionHeader("同步", "按当前角色保存");
@@ -2629,10 +2608,126 @@ public sealed class PluginUI
             var itemFinderText = GetItemFinderDebugText();
             ImGui.TextDisabled(itemFinderText);
             DrawDebugButtons(itemFinderText);
-            ImGui.EndChild();
         }
+        ImGui.EndChild();
 
         DrawBackpackOrganizer();
+    }
+
+    private void DrawHuntAssistantWorkspace()
+    {
+        DrawSettingsSectionHeader("狩猎助手", "跟随车头 Flag");
+        ImGui.TextDisabled("指定车头在当前地图发送 Flag 后，自动贴地并抬升至指定高度飞行导航。");
+        ImGui.Spacing();
+
+        var huntAssistantEnabled = configuration.HuntAssistantEnabled;
+        if (ImGui.Checkbox("启用狩猎助手##hunt-assistant", ref huntAssistantEnabled))
+        {
+            configuration.HuntAssistantEnabled = huntAssistantEnabled;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        var showHuntAssistant = configuration.ShowHuntAssistantInFloatingWindow;
+        if (ImGui.Checkbox("在悬浮窗显示##hunt-floating", ref showHuntAssistant))
+        {
+            configuration.ShowHuntAssistantInFloatingWindow = showHuntAssistant;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        var echoLeaderMessages = configuration.HuntAssistantEchoLeaderMessages;
+        if (ImGui.Checkbox("测试##hunt-echo-leader", ref echoLeaderMessages))
+        {
+            configuration.HuntAssistantEchoLeaderMessages = echoLeaderMessages;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("以默语输出，用于确认车头名称匹配和聊天监听是否正常。\n测试开关不需要启用自动导航。");
+
+        var configuredLeaderName = configuration.HuntLeaderName;
+        ImGui.SetNextItemWidth(300f);
+        if (ImGui.InputText("车头名称##hunt-leader-name", ref configuredLeaderName, 128))
+        {
+            configuration.HuntLeaderName = configuredLeaderName.Trim();
+            configuration.Save();
+        }
+        ImGui.TextDisabled("可直接粘贴完整角色名。车头名称需与聊天消息发送者一致。");
+
+        var leaderName = DalamudApi.TargetManager.Target?.Name.TextValue ?? string.Empty;
+        if (ImGui.Button("使用当前目标##hunt-leader") && !string.IsNullOrWhiteSpace(leaderName))
+        {
+            configuration.HuntLeaderName = leaderName;
+            configuration.Save();
+        }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("当前目标：" + (string.IsNullOrWhiteSpace(leaderName) ? "无" : leaderName));
+
+        ImGui.SameLine();
+        var localPlayerName = DalamudApi.ObjectTable.LocalPlayer?.Name.TextValue ?? string.Empty;
+        if (ImGui.Button("设为自己##hunt-leader") && !string.IsNullOrWhiteSpace(localPlayerName))
+        {
+            configuration.HuntLeaderName = localPlayerName;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("清除##hunt-leader"))
+        {
+            configuration.HuntLeaderName = string.Empty;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("停止导航##hunt-stop-navigation"))
+        {
+            vnav.Stop();
+        }
+
+        var height = configuration.HuntTargetHeight;
+        ImGui.SetNextItemWidth(240f);
+        if (ImGui.SliderFloat("接地距离##hunt-target-height", ref height, 0f, 200f, "%.0f yalms"))
+        {
+            configuration.HuntTargetHeight = height;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        ImGui.TextDisabled("目标贴地后自动上抬");
+    }
+
+    private void DrawFateAssistantWorkspace()
+    {
+        DrawSettingsSectionHeader("危命助手", "当前地图");
+        var showAvailableFates = configuration.ShowAvailableFatesInFloatingWindow;
+        if (ImGui.Checkbox("在悬浮窗显示可参与 FATE##fate-floating", ref showAvailableFates))
+        {
+            configuration.ShowAvailableFatesInFloatingWindow = showAvailableFates;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("停止导航##fate-stop-navigation"))
+        {
+            vnav.Stop();
+        }
+
+        var fates = GetAvailableFates();
+        if (fates.Length == 0)
+        {
+            ImGui.Spacing();
+            ImGui.TextDisabled("当前地图没有可参与的 FATE。 ");
+            return;
+        }
+
+        ImGui.Spacing();
+        ImGui.TextDisabled($"当前可参与 {fates.Length} 个 FATE");
+        foreach (var fate in fates)
+        {
+            ImGui.TextUnformatted($"{fate.Name}  {FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"导航##fate-assistant-nav-{fate.FateId}"))
+            {
+                NavigateToFate(fate);
+            }
+        }
     }
 
     private static void DrawSettingsSectionHeader(string title, string note)
@@ -2657,10 +2752,7 @@ public sealed class PluginUI
                 configuration.Save();
             }
 
-            ImGui.EndChild();
-            return;
         }
-
         ImGui.EndChild();
     }
 
@@ -2896,8 +2988,8 @@ public sealed class PluginUI
                 ImGui.TextDisabled("当前背包没有物品。");
             }
 
-            ImGui.EndChild();
         }
+        ImGui.EndChild();
 
         ImGui.EndPopup();
     }
@@ -3633,6 +3725,11 @@ public sealed class PluginUI
         ImGui.TextColored(new Vector4(0.95f, 0.45f, 0.25f, 1f), "狩猎助手");
         ImGui.SameLine();
         ImGui.TextDisabled(configuration.HuntAssistantEnabled ? "已启用" : "未启用");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("停止导航##floating-hunt-stop-navigation"))
+        {
+            vnav.Stop();
+        }
         ImGui.TextUnformatted(string.IsNullOrWhiteSpace(configuration.HuntLeaderName)
             ? "车头：未指定"
             : $"车头：{configuration.HuntLeaderName}");

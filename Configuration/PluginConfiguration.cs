@@ -19,6 +19,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool AutoHideCompletedFloatingItems { get; set; } = true;
     public bool NavigateToFlagDirectly { get; set; } = true;
     public bool HuntAssistantEnabled { get; set; }
+    public bool HuntAssistantEchoLeaderMessages { get; set; }
     public bool ShowHuntAssistantInFloatingWindow { get; set; } = true;
     public string HuntLeaderName { get; set; } = string.Empty;
     public float HuntTargetHeight { get; set; } = 50f;

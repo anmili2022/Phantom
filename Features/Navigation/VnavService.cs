@@ -34,9 +34,12 @@ public sealed class VnavService : IDisposable
     private uint pendingTerritoryType;
     private Vector3? pendingAetherytePosition;
     private bool pendingFly;
+    private bool pendingAutoDismount = true;
     private DateTime pendingStartedUtc;
+    private float pendingElevation;
     private Vector3? pendingMoveTarget;
     private bool pendingMoveFly;
+    private bool pendingMoveAutoDismount = true;
     private DateTime pendingMoveStartedUtc;
     private Vector3? activeMoveTarget;
     private DateTime lastDismountAttemptUtc = DateTime.MinValue;
@@ -101,15 +104,43 @@ public sealed class VnavService : IDisposable
         try
         {
             var snapped = SnapToNavmesh(targetPos);
-            if (snapped.HasValue)
+            if (!snapped.HasValue)
             {
-                StartMove(snapped.Value, fly);
+                DalamudApi.Log.Warning("vnavmesh could not snap to FATE position; trying the raw FATE position.");
+                PrintEcho("FATE 目标点不在当前网格范围，尝试直接导航到 FATE 坐标。 ");
+                StartMove(targetPos, fly);
+            }
+            else
+            {
+                var player = DalamudApi.ObjectTable.LocalPlayer;
+                var targetAetheryte = GetNearestCurrentTerritoryAetherytePosition(snapped.Value);
+                if (player != null && targetAetheryte.HasValue)
+                {
+                    var playerToAetheryte = Vector2.Distance(
+                        new Vector2(player.Position.X, player.Position.Z),
+                        new Vector2(targetAetheryte.Value.X, targetAetheryte.Value.Z));
+                    var targetToAetheryte = Vector2.Distance(
+                        new Vector2(snapped.Value.X, snapped.Value.Z),
+                        new Vector2(targetAetheryte.Value.X, targetAetheryte.Value.Z));
+
+                    if (playerToAetheryte >= targetToAetheryte)
+                    {
+                        TeleportAndNavigate(snapped.Value, fly);
+                        PrintEcho($"FATE 导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，先传送再导航。 ");
+                    }
+                    else
+                    {
+                        StartMove(snapped.Value, fly);
+                        PrintEcho($"FATE 导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，直接导航。 ");
+                    }
+                }
+                else
+                {
+                    StartMove(snapped.Value, fly);
+                }
+
                 return;
             }
-
-            DalamudApi.Log.Warning("vnavmesh could not snap to FATE position; trying the raw FATE position.");
-            PrintEcho("FATE 目标点不在当前网格范围，尝试直接导航到 FATE 坐标。 ");
-            StartMove(targetPos, fly);
         }
         catch (Exception ex)
         {
@@ -118,13 +149,42 @@ public sealed class VnavService : IDisposable
         }
     }
 
-    public void NavigateToHuntTarget(Vector3 targetPos, float height)
+    public void NavigateToHuntTarget(uint territoryType, Vector3 targetPos, float height)
     {
         try
         {
+            var currentTerritory = DalamudApi.ClientState.TerritoryType;
+            if (currentTerritory != territoryType
+                && TryTeleportToTerritory(territoryType, targetPos, true, height, false))
+            {
+                PrintEcho($"狩猎目标位于地图 {territoryType}，已请求 Lifestream 传送。 ");
+                return;
+            }
+
             var groundTarget = SnapToNavmesh(targetPos) ?? targetPos;
+            var player = DalamudApi.ObjectTable.LocalPlayer;
+            var targetAetheryte = GetNearestCurrentTerritoryAetherytePosition(groundTarget);
+            if (player != null && targetAetheryte.HasValue)
+            {
+                var playerToAetheryte = Vector2.Distance(
+                    new Vector2(player.Position.X, player.Position.Z),
+                    new Vector2(targetAetheryte.Value.X, targetAetheryte.Value.Z));
+                var targetToAetheryte = Vector2.Distance(
+                    new Vector2(groundTarget.X, groundTarget.Z),
+                    new Vector2(targetAetheryte.Value.X, targetAetheryte.Value.Z));
+
+                if (playerToAetheryte >= targetToAetheryte
+                    && TryTeleportToTerritory(currentTerritory, groundTarget, true, height, false))
+                {
+                    PrintEcho($"狩猎导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，先传送再导航。 ");
+                    return;
+                }
+
+                PrintEcho($"狩猎导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，直接导航。 ");
+            }
+
             var elevatedTarget = new Vector3(groundTarget.X, groundTarget.Y + Math.Clamp(height, 0f, 200f), groundTarget.Z);
-            StartMove(elevatedTarget, true);
+            StartMove(elevatedTarget, true, false);
         }
         catch (Exception ex)
         {
@@ -136,7 +196,7 @@ public sealed class VnavService : IDisposable
     public bool TryResolveMapLinkPosition(uint territoryType, uint mapId, float mapX, float mapY, out Vector3 position)
     {
         position = default;
-        if (territoryType == 0 || territoryType != DalamudApi.ClientState.TerritoryType)
+        if (territoryType == 0)
         {
             return false;
         }
@@ -414,7 +474,7 @@ public sealed class VnavService : IDisposable
         return (pos - 1024f) / (scale / 100f);
     }
 
-    private bool TryTeleportToTerritory(uint territoryType, Vector3 target, bool fly)
+    private bool TryTeleportToTerritory(uint territoryType, Vector3 target, bool fly, float elevation = 0f, bool autoDismount = true)
     {
         if (!EnsureLifestreamIpc() || teleport == null)
         {
@@ -453,6 +513,8 @@ public sealed class VnavService : IDisposable
         pendingTerritoryType = territoryType;
         pendingAetherytePosition = TryFindAetherytePosition(aetheryteId, out var aetherytePosition) ? aetherytePosition : null;
         pendingFly = fly;
+        pendingElevation = Math.Clamp(elevation, 0f, 200f);
+        pendingAutoDismount = autoDismount;
         pendingStartedUtc = DateTime.UtcNow;
         PrintEcho($"已请求传送到目标地图 {territoryType}，等待读图完成后继续导航。 ");
         return true;
@@ -629,9 +691,13 @@ public sealed class VnavService : IDisposable
 
         var target = pendingTarget.Value;
         var fly = pendingFly;
+        var elevation = pendingElevation;
+        var autoDismount = pendingAutoDismount;
         pendingTarget = null;
         pendingTerritoryType = 0;
         pendingAetherytePosition = null;
+        pendingElevation = 0f;
+        pendingAutoDismount = true;
         var snapped = SnapToNavmesh(target);
         if (!snapped.HasValue)
         {
@@ -640,7 +706,10 @@ public sealed class VnavService : IDisposable
             return;
         }
 
-        StartMove(snapped.Value, fly);
+        var finalTarget = elevation > 0f
+            ? new Vector3(snapped.Value.X, snapped.Value.Y + elevation, snapped.Value.Z)
+            : snapped.Value;
+        StartMove(finalTarget, fly, autoDismount);
     }
 
     private void TeleportTuliyollalOccultVillage()
@@ -890,17 +959,17 @@ public sealed class VnavService : IDisposable
         return true;
     }
 
-    private void StartMove(Vector3 target, bool fly)
+    private void StartMove(Vector3 target, bool fly, bool autoDismount = true)
     {
-        if (QueueMountBeforeMove(target, fly))
+        if (QueueMountBeforeMove(target, fly, autoDismount))
         {
             return;
         }
 
-        StartPathfind(target, fly);
+        StartPathfind(target, fly, autoDismount);
     }
 
-    private bool QueueMountBeforeMove(Vector3 target, bool fly)
+    private bool QueueMountBeforeMove(Vector3 target, bool fly, bool autoDismount)
     {
         if (!fly)
         {
@@ -916,6 +985,7 @@ public sealed class VnavService : IDisposable
 
         pendingMoveTarget = target;
         pendingMoveFly = fly;
+        pendingMoveAutoDismount = autoDismount;
         pendingMoveStartedUtc = DateTime.UtcNow;
         lastMountAttemptUtc = DateTime.MinValue;
         PrintEcho("导航准备：尝试上坐骑；若 8 秒内未成功，将直接发起 vnavmesh 导航。 ");
@@ -932,12 +1002,13 @@ public sealed class VnavService : IDisposable
         var now = DateTime.UtcNow;
         var target = pendingMoveTarget.Value;
         var fly = pendingMoveFly;
+        var autoDismount = pendingMoveAutoDismount;
 
         if (DalamudApi.Condition[ConditionFlag.Mounted])
         {
             pendingMoveTarget = null;
             PrintEcho("已自动上坐骑，发起 vnavmesh 导航。 ");
-            StartPathfind(target, fly);
+            StartPathfind(target, fly, autoDismount);
             return;
         }
 
@@ -945,7 +1016,7 @@ public sealed class VnavService : IDisposable
             || DalamudApi.ObjectTable.LocalPlayer is not { IsDead: false })
         {
             pendingMoveTarget = null;
-            StartPathfind(target, fly);
+            StartPathfind(target, fly, autoDismount);
             return;
         }
 
@@ -958,7 +1029,7 @@ public sealed class VnavService : IDisposable
         if (now - pendingMoveStartedUtc > TimeSpan.FromSeconds(8))
         {
             pendingMoveTarget = null;
-            StartPathfind(target, fly);
+            StartPathfind(target, fly, autoDismount);
             return;
         }
 
@@ -1021,7 +1092,9 @@ public sealed class VnavService : IDisposable
         pendingTarget = null;
         pendingTerritoryType = 0;
         pendingAetherytePosition = null;
+        pendingElevation = 0f;
         pendingMoveTarget = null;
+        pendingMoveAutoDismount = true;
         activeMoveTarget = null;
         activeMoveArrivalLogged = false;
         occultRouteStep = OccultVillageRouteStep.None;
@@ -1031,7 +1104,7 @@ public sealed class VnavService : IDisposable
         try { stop.InvokeAction(); } catch { }
     }
 
-    private void StartPathfind(Vector3 target, bool fly)
+    private void StartPathfind(Vector3 target, bool fly, bool autoDismount = true)
     {
         try
         {
@@ -1051,7 +1124,7 @@ public sealed class VnavService : IDisposable
             }
             else
             {
-                activeMoveTarget = fly ? target : null;
+                activeMoveTarget = fly && autoDismount ? target : null;
                 activeMoveArrivalLogged = false;
                 lastDismountAttemptUtc = DateTime.MinValue;
             }
