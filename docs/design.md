@@ -1,6 +1,6 @@
 # 肝武助手设计文档
 
-> 当前版本：0.1.20.0 | 更新日期：2026-08-05
+> 当前版本：0.1.20.0 | 更新日期：2026-08-06
 
 ## 目标
 
@@ -137,7 +137,7 @@
 - `Progress`：键为资料项 Key，值为当前进度。
 - `CompletedTasks`：已完成的一次性流程 Key（含秘影目标、讨伐任务）。
 - `FloatingSecretTerritoryType` / `FloatingManualMode`：悬浮窗当前地图与手动模式。
-- `ShowSecretTargetsInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗目标显示选项。
+- `ShowSecretTargetsInFloatingWindow` / `ShowSecretDutiesInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗显示选项（秘影指定目标、迷宫/讨伐任务分组、自动隐藏已完成项）。
 - `ShowAvailableFatesInFloatingWindow`：在悬浮窗显示当前地图可参与的 FATE 及导航按钮。
 - `HuntAssistantEchoLeaderMessages`：测试开关，以 Echo/默语复述指定车头在任意频道的发言，用于诊断聊天监听和车头匹配。
 - `NavigateToFlagDirectly`：前往 Flag 时使用直接前往还是导航前往。
@@ -360,7 +360,7 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 左侧角色状态上方依次提供“前往幻境村”和“反馈与建议”按钮；后者在默认浏览器打开 Discord 反馈频道。启用状态只读显示，插件默认启用且不在幻武页重复提供开关。
 - 武器工坊栏目顺序为古武、魂武、优武、义武、曼武、雅武、幻武、天钢、莫雯、宇宙、绝武和妖表联动。
 - 右侧显示当前系列内容；幻境武器页面顶部为横向阶段页签。
-- 幻武页面顶部只保留当前阶段进度重置操作，不显示全局导航和悬浮窗选项。
+- 幻武页面顶部提供当前阶段进度重置、Wiki 跳转、“监控幻武”与“自动标记击杀”开关，不显示全局导航选项。
 - 设置页包含“常用设置”“导航设置”“前往 Flag”和同步工具；“危命助手”与“狩猎助手”作为 Tools 下的独立栏目。
 - 阶段页签使用自绘按钮，选中项为深青背景、亮青边框和左侧高亮条，未选中项使用更暗的武器进度卡片配色。
 - 阶段页签只使用 `InvisibleButton` 作为布局占位，背景和文字通过窗口 DrawList 绘制，避免 `SameLine` 产生阶梯状错位。
@@ -381,7 +381,7 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 左侧角色状态上方“前往幻境村”按钮 → `VnavService.GoToOccultVillage()`。
 - 左侧“反馈与建议”按钮 → 打开 <https://discord.com/channels/1258981591124938762/1533030634623074466>。
 - 武器进度总览（按职业/阶段/角色维度，含物品名片段匹配与图标）。
-- 悬浮窗显示选项：是否显示秘影目标、自动隐藏已完成项；秘影迷宫/讨伐任务不在悬浮窗显示。
+- 悬浮窗显示选项：是否在悬浮窗显示秘影指定目标、迷宫/讨伐任务分组，以及是否自动隐藏已完成项。
 - “危命助手”页面提供“在悬浮窗显示可参与 FATE”开关；开启后悬浮窗按距离列出当前地图处于准备/进行中的未完成 FATE，每项提供导航按钮和停止导航按钮。
 - 设置页在常用设置与 DEBUG 区域之间提供“整理背包”区域，包含“选择物品”和“整理背包”按钮，并显示当前已选择的物品种类数量。物品选择弹窗使用固定尺寸和内部滚动列表，避免物品较多时撑大窗口。
 - 悬浮窗最上方显示“当前可参与 FATE”，按距离列出当前地图处于准备/进行中的未完成 FATE，每项提供导航按钮。
@@ -393,8 +393,11 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 车头 Flag 会通过 `FFXIVClientStructs` 的 `AgentMap.SetFlagMapMarker` 写入游戏地图，不调用 `IGameGui.OpenMapWithMapLink`，因此只设置地图标记而不自动打开地图。该接口使用世界坐标，必须传入经过 `Map.OffsetX`、`Map.OffsetY` 和 `Map.SizeFactor` 换算后的目标世界坐标。
 - Lifestream 传送完成后，若 vnavmesh 仍处于地图网格缓存/加载状态，会保留待导航目标并持续重试；必须确认读图结束、Lifestream 空闲、达到传送后的稳定等待时间且 vnavmesh 可用后，才开始后续导航。不能因首次近邻网格查询失败而丢弃目标。
 - 狩猎助手页面和悬浮窗均提供停止导航按钮，可取消传送等待、自动上坐骑等待和 vnavmesh 路径；测试开关可用 Echo/默语复述车头任意频道发言。
-- 幻武页面的 Wiki 按钮右侧提供“监控幻武”（原悬浮窗开关）和“自动标记击杀”开关。
+- 幻武页面的 Wiki 按钮右侧提供“监控幻武”和“自动标记击杀”开关。“监控幻武”只统一控制“秘影指定目标”与“迷宫/讨伐任务”两个显示开关（点击时一起切换，勾选状态取二者或），不再控制整个悬浮窗的显隐。
 - 在蜃景幻界新月岛南征之章（`TerritoryType = 1252`）和北征之章（`TerritoryType = 1346`）点击 FATE 导航或“最近 FATE”时，不执行导航，提示“【新月岛地图】请使用【新月岛史官】插件。”；优雷卡四张地图（`732`、`763`、`795`、`827`）及博兹雅南方战线、扎杜诺尔（`920`、`975`）执行相同操作时，提示“【博兹雅/优雷卡】暂不支持该地图。”。以上八个地图 ID 均已由游戏内 DEBUG 输出确认。
+- 悬浮窗可自由拉大拉小：不再使用自动适应尺寸，窗口带最小尺寸约束（240×120），内容超出窗口高度时出现滚动条；幻武监控、狩猎助手、危命助手三张卡片宽度跟随窗口宽度。
+- 幻武监控卡片高度跟随窗口纵向拉伸，占满剩余高度（最低 120px，内部内容超出时卡片内滚动）；狩猎助手与危命助手卡片保持固定高度，不随窗口变化。
+- 幻武监控、狩猎助手、危命助手三张卡片标题行的“停止导航”按钮均右对齐贴边，与行内“展开/收起”按钮使用相同的右侧对齐方式。
 
 ### 妖表联动页面
 

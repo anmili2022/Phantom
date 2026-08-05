@@ -86,6 +86,8 @@ public sealed class PluginUI
     private bool showWeaponProgressTab = true;
     private string? progressSeriesKey = "phantom";
     private readonly HashSet<string> stageSelectedSeries = new(StringComparer.Ordinal);
+    private bool floatingPhantomTargetsOpen;
+    private bool floatingPhantomDutiesOpen;
     private string backpackOrganizeSearch = string.Empty;
     private List<BackpackItemSummary> backpackOrganizeItems = new();
 
@@ -645,10 +647,11 @@ public sealed class PluginUI
         ImGui.SameLine();
         DrawWikiButton("打开幻境武器 Wiki", "phantom", "https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
         ImGui.SameLine();
-        var monitorPhantom = configuration.ShowFloatingObjectiveWindow;
+        var monitorPhantom = configuration.ShowSecretTargetsInFloatingWindow || configuration.ShowSecretDutiesInFloatingWindow;
         if (ImGui.Checkbox("监控幻武##phantom-floating-window", ref monitorPhantom))
         {
-            configuration.ShowFloatingObjectiveWindow = monitorPhantom;
+            configuration.ShowSecretTargetsInFloatingWindow = monitorPhantom;
+            configuration.ShowSecretDutiesInFloatingWindow = monitorPhantom;
             configuration.Save();
         }
 
@@ -2549,6 +2552,7 @@ public sealed class PluginUI
         DrawSettingsSectionHeader("常用设置", "即时生效");
         if (ImGui.BeginTable("settings-common-grid", 2, ImGuiTableFlags.SizingStretchSame))
         {
+            DrawSettingCard("悬浮窗", "显示或隐藏悬浮目标窗", configuration.ShowFloatingObjectiveWindow, "floating-window", value => configuration.ShowFloatingObjectiveWindow = value);
             DrawSettingCard("自动隐藏已完成项目", "减少悬浮窗中的已完成条目", configuration.AutoHideCompletedFloatingItems, "auto-hide", value => configuration.AutoHideCompletedFloatingItems = value);
             ImGui.EndTable();
         }
@@ -3330,7 +3334,7 @@ public sealed class PluginUI
             var header = completed == total
                 ? $"{group.Name} 已全部完成（{completed}/{total}）"
                 : $"{group.Name} ({completed}/{total})";
-            if (!ImGui.CollapsingHeader($"{header}##{group.Key}", ImGuiTreeNodeFlags.DefaultOpen))
+            if (!ImGui.CollapsingHeader($"{header}##{group.Key}"))
             {
                 continue;
             }
@@ -3441,7 +3445,7 @@ public sealed class PluginUI
             var doneStr = completed == 4 && fateCount >= 5
                 ? $"{group.Key} 已全部完成（{completed}/4, {Math.Min(fateCount, 5)}/5）"
                 : $"{group.Key} ({completed}/4, {Math.Min(fateCount, 5)}/5)";
-            if (!ImGui.CollapsingHeader($"{doneStr}##secret-zone-{group.Key}", ImGuiTreeNodeFlags.DefaultOpen))
+            if (!ImGui.CollapsingHeader($"{doneStr}##secret-zone-{group.Key}"))
             {
                 continue;
             }
@@ -3557,10 +3561,10 @@ public sealed class PluginUI
             targets = GetFloatingSecretTargets();
         }
 
-        ImGui.SetNextWindowSize(new Vector2(300, 0), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(300, 360), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(240, 120), new Vector2(float.MaxValue, float.MaxValue));
         var floatingOpen = configuration.ShowFloatingObjectiveWindow;
-        if (!ImGui.Begin("肝武助手##floating-secret-targets", ref floatingOpen,
-                ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoScrollbar))
+        if (!ImGui.Begin("肝武助手##floating-secret-targets", ref floatingOpen))
         {
             if (configuration.ShowFloatingObjectiveWindow != floatingOpen)
             {
@@ -3578,8 +3582,6 @@ public sealed class PluginUI
             configuration.Save();
         }
 
-        DrawFloatingContextMenu();
-
         if (configuration.ShowHuntAssistantInFloatingWindow)
         {
             DrawFloatingHuntAssistant();
@@ -3592,26 +3594,74 @@ public sealed class PluginUI
             ImGui.Separator();
         }
 
-        if (configuration.ShowSecretTargetsInFloatingWindow)
+        if (configuration.ShowSecretTargetsInFloatingWindow || configuration.ShowSecretDutiesInFloatingWindow)
         {
-            var zone = targets[0].Zone;
-            var completed = targets.Count(target => configuration.CompletedTasks.Contains(target.Key));
-            var targetTerritory = targets[0].TerritoryType;
-            var fateCount = GetSecretFateCount(targetTerritory);
-            ImGui.TextUnformatted(territory == targetTerritory && !configuration.FloatingManualMode ? zone : $"{zone}");
+            DrawFloatingPhantomMonitor(targets, territory);
+        }
+
+        DrawFloatingContextMenu();
+        ImGui.End();
+    }
+
+    private void DrawFloatingPhantomMonitor(PhantomWeaponTarget[] targets, uint territory)
+    {
+        var targetTerritory = targets.Length > 0 ? targets[0].TerritoryType : 0;
+        var completedTargets = targets.Count(target => configuration.CompletedTasks.Contains(target.Key));
+        var fateCount = GetSecretFateCount(targetTerritory);
+        var dutyCount = PhantomWeaponGuide.SecretDutyGroups.Sum(group => group.Duties.Count);
+        var completedDuties = PhantomWeaponGuide.SecretDutyGroups.Sum(group => group.Duties.Count(duty => configuration.CompletedTasks.Contains(duty.Key)));
+        var total = 9 + dutyCount;
+        var completed = completedTargets + Math.Min(fateCount, 5) + completedDuties;
+
+        var cardHeight = Math.Max(ImGui.GetContentRegionAvail().Y, 120f);
+        if (ImGui.BeginChild("floating-phantom-monitor-card", new Vector2(-1f, cardHeight), true))
+        {
+            ImGui.TextColored(new Vector4(0.42f, 0.84f, 0.79f, 1f), "幻武监控");
             ImGui.SameLine();
-            if (ImGui.SmallButton("停止导航##float-stop-nav"))
+            ImGui.TextColored(new Vector4(0.62f, 0.95f, 0.72f, 1f), $"{completed} / {total}");
+            ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
+            if (ImGui.SmallButton("停止导航##floating-phantom-stop-navigation"))
             {
                 vnav.Stop();
             }
+            ImGui.Separator();
 
-        ImGui.SameLine();
+            if (targets.Length > 0 && configuration.ShowSecretTargetsInFloatingWindow)
+            {
+                DrawFloatingPhantomTargetRow(targets, territory, targetTerritory, completedTargets, fateCount);
+                ImGui.Separator();
+            }
+
+            if (configuration.ShowSecretDutiesInFloatingWindow)
+            {
+                DrawFloatingPhantomDutyRow(completedDuties, dutyCount);
+            }
+        }
+        ImGui.EndChild();
+    }
+
+    private void DrawFloatingPhantomTargetRow(PhantomWeaponTarget[] targets, uint territory, uint targetTerritory, int completed, int fateCount)
+    {
+        ImGui.TextUnformatted("秘影指定目标");
+        ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 44f);
+        if (ImGui.SmallButton(floatingPhantomTargetsOpen ? "收起##floating-phantom-targets-toggle" : "展开##floating-phantom-targets-toggle"))
+        {
+            floatingPhantomTargetsOpen = !floatingPhantomTargetsOpen;
+        }
+
+        ImGui.TextDisabled($"{targets[0].Zone} · {completed} / 4 目标 · FATE {Math.Min(fateCount, 5)} / 5");
+        ImGui.ProgressBar((completed + Math.Min(fateCount, 5)) / 9f, new Vector2(-1, 0), $"{completed + Math.Min(fateCount, 5)} / 9");
+
+        if (!floatingPhantomTargetsOpen)
+        {
+            return;
+        }
+
         if (ImGui.SmallButton("<##float-prev-zone"))
         {
             configuration.FloatingManualMode = true;
             SwitchFloatingSecretZone(-1);
             configuration.Save();
-            ImGui.End();
             return;
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("切换上一张");
@@ -3622,7 +3672,6 @@ public sealed class PluginUI
             configuration.FloatingManualMode = true;
             SwitchFloatingSecretZone(1);
             configuration.Save();
-            ImGui.End();
             return;
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("切换下一张");
@@ -3632,12 +3681,12 @@ public sealed class PluginUI
         {
             configuration.FloatingManualMode = false;
             configuration.Save();
-            ImGui.End();
             return;
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("切换到当前地图");
 
-            ImGui.ProgressBar((completed + Math.Min(fateCount, 5)) / 9f, new Vector2(-1, 0), $"{completed + Math.Min(fateCount, 5)}/9");
+        ImGui.SameLine();
+        ImGui.TextDisabled(territory == targetTerritory && !configuration.FloatingManualMode ? "当前地图" : targets[0].Zone);
 
         ImGui.TextUnformatted($"金牌 FATE {Math.Min(fateCount, 5)}/5");
         ImGui.SameLine();
@@ -3711,18 +3760,34 @@ public sealed class PluginUI
             }
         }
 
-            if (completed == targets.Length && fateCount >= 5)
-            {
-                ImGui.TextUnformatted("当前地图秘影目标已完成。");
-            }
+        if (completed == targets.Length && fateCount >= 5)
+        {
+            ImGui.TextUnformatted("当前地图秘影目标已完成。");
+        }
+    }
+
+    private void DrawFloatingPhantomDutyRow(int completed, int dutyCount)
+    {
+        ImGui.TextUnformatted("迷宫/讨伐任务");
+        ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 44f);
+        if (ImGui.SmallButton(floatingPhantomDutiesOpen ? "收起##floating-phantom-duties-toggle" : "展开##floating-phantom-duties-toggle"))
+        {
+            floatingPhantomDutiesOpen = !floatingPhantomDutiesOpen;
         }
 
-        ImGui.End();
+        ImGui.TextDisabled($"{completed} / {dutyCount} 完成");
+
+        if (!floatingPhantomDutiesOpen)
+        {
+            return;
+        }
+
+        DrawFloatingSecretDuties();
     }
 
     private void DrawFloatingHuntAssistant()
     {
-        if (ImGui.BeginChild("floating-hunt-card", new Vector2(284f, 72f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        if (ImGui.BeginChild("floating-hunt-card", new Vector2(-1f, 72f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
             var accent = configuration.HuntAssistantEnabled
                 ? new Vector4(0.95f, 0.45f, 0.25f, 1f)
@@ -3731,7 +3796,7 @@ public sealed class PluginUI
             ImGui.SameLine();
             ImGui.TextColored(configuration.HuntAssistantEnabled ? new Vector4(0.42f, 0.88f, 0.58f, 1f) : new Vector4(0.65f, 0.67f, 0.70f, 1f),
                 configuration.HuntAssistantEnabled ? "ONLINE" : "OFFLINE");
-            ImGui.SameLine();
+            ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
             if (ImGui.SmallButton("停止导航##floating-hunt-stop-navigation"))
             {
                 vnav.Stop();
@@ -3751,12 +3816,12 @@ public sealed class PluginUI
     {
         var fates = GetAvailableFates();
         var height = Math.Min(44f + Math.Max(fates.Length, 1) * 26f, 252f);
-        if (ImGui.BeginChild("floating-fate-card", new Vector2(284f, height), true, ImGuiWindowFlags.NoScrollbar))
+        if (ImGui.BeginChild("floating-fate-card", new Vector2(-1f, height), true, ImGuiWindowFlags.NoScrollbar))
         {
             ImGui.TextColored(new Vector4(1f, 0.82f, 0.24f, 1f), "危命助手");
             ImGui.SameLine();
             ImGui.TextDisabled(fates.Length == 0 ? "当前地图" : $"{fates.Length} 个可参与");
-            ImGui.SameLine();
+            ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
             if (ImGui.SmallButton("停止导航##floating-fates-stop-nav"))
             {
                 vnav.Stop();
@@ -3867,7 +3932,6 @@ public sealed class PluginUI
     private void DrawFloatingSecretDuties()
     {
         ImGui.Separator();
-        ImGui.TextUnformatted("迷宫/讨伐");
         var anyVisible = false;
         foreach (var group in PhantomWeaponGuide.SecretDutyGroups)
         {
@@ -3920,7 +3984,13 @@ public sealed class PluginUI
 
     private void DrawFloatingContextMenu()
     {
-        if (!ImGui.BeginPopupContextWindow("floating-secret-targets-context", ImGuiPopupFlags.MouseButtonRight))
+        if (ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)
+            && ImGui.IsMouseReleased(ImGuiMouseButton.Right))
+        {
+            ImGui.OpenPopup("floating-secret-targets-context");
+        }
+
+        if (!ImGui.BeginPopup("floating-secret-targets-context"))
         {
             return;
         }
