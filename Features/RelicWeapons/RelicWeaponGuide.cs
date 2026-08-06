@@ -250,7 +250,7 @@ public static class RelicWeaponGuide
         new PhantomWeaponJob("war", "战士", StageItems("绝境龙神斧", "勇悍斧·究极", "绝境天雷神斧", "绝境苍穹之斧", "绝境欧米茄战斧", "绝境伊甸之晨战斧", "帕拉佐钻石大斧")),
         new PhantomWeaponJob("drg", "龙骑士", StageItems("绝境龙神枪", "穿心枪盖博尔格·究极", "绝境先锋枪隆格米安特", "绝境苍穹之戟", "绝境欧米茄三尖枪", "绝境伊甸之晨战戟", "帕拉佐钻石战戟")),
         new PhantomWeaponJob("brd", "吟游诗人", StageItems("绝境龙神弓", "月神之弓·究极", "绝境甘狄拔神弓", "绝境苍穹之弓", "绝境欧米茄长弓", "绝境伊甸之晨骑兵弓", "帕拉佐钻石长弓")),
-        new PhantomWeaponJob("nin", "忍者", StageItems("绝境龙神匕首", "吉光·究极", "绝境神无", "绝境苍穹之刀", "绝境欧米茄扎戈斧镰", "绝境伊甸之晨左手剑", "帕拉佐钻石小刀")),
+        new PhantomWeaponJob("nin", "忍者", StageItems("绝境龙神匕首", "吉光·究极", "绝境神无", "绝境苍穹之刀", "绝境欧米茄夺命镰", "绝境伊甸之晨左手剑", "帕拉佐钻石小刀")),
         new PhantomWeaponJob("drk", "暗黑骑士", StageItems("绝境龙神大剑", "死亡使者·究极", "绝境诺统", "绝境苍穹之大剑", "绝境欧米茄大剑", "绝境伊甸之晨双手剑", "帕拉佐钻石巨剑")),
         new PhantomWeaponJob("mch", "机工士", StageItems("绝境龙神手炮", "费迪南德·究极", "绝境末日", "绝境苍穹之火", "绝境欧米茄短铳", "绝境伊甸之晨手枪", "帕拉佐钻石火枪")),
         new PhantomWeaponJob("whm", "白魔法师", StageItems("绝境龙神牧杖", "酒神杖·究极", "绝境天威杖", "绝境苍穹之幻杖", "绝境欧米茄牧杖", "绝境伊甸之晨牧杖", "帕拉佐钻石幻杖")),
@@ -263,7 +263,7 @@ public static class RelicWeaponGuide
         new PhantomWeaponJob("gnb", "绝枪战士", StageItems(string.Empty, string.Empty, "绝境无序", "绝境苍穹之枪刃", "绝境欧米茄刺刀", "绝境伊甸之晨枪刃", "帕拉佐钻石刺刀")),
         new PhantomWeaponJob("dnc", "舞者", StageItems(string.Empty, string.Empty, "绝境锻造神环刃", "绝境苍穹之战轮", "绝境欧米茄圆月轮", "绝境伊甸之晨圆月轮", "帕拉佐钻石圆月轮")),
         new PhantomWeaponJob("sge", "贤者", StageItems(string.Empty, string.Empty, string.Empty, "绝境苍穹之蛇石针", "绝境欧米茄飞翼", "绝境伊甸之晨振空摆", "帕拉佐钻石飞翼")),
-        new PhantomWeaponJob("rpr", "钐镰客", StageItems(string.Empty, string.Empty, string.Empty, "绝境苍穹之夺命镰", "绝境欧米茄夺命镰", "绝境伊甸之晨夺命镰", "帕拉佐钻石战镰")),
+        new PhantomWeaponJob("rpr", "钐镰客", StageItems(string.Empty, string.Empty, string.Empty, "绝境苍穹之夺命镰", "绝境欧米茄扎戈斧镰", "绝境伊甸之晨夺命镰", "帕拉佐钻石战镰")),
         new PhantomWeaponJob("vpr", "蝰蛇剑士", StageItems(string.Empty, string.Empty, string.Empty, string.Empty, "绝境欧米茄双牙", "绝境伊甸之晨双牙", "帕拉佐钻石双军刀")),
         new PhantomWeaponJob("pct", "绘灵法师", StageItems(string.Empty, string.Empty, string.Empty, string.Empty, "绝境欧米茄圆笔", "绝境伊甸之晨圆笔", "帕拉佐钻石扇形笔")),
     };

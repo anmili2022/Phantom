@@ -3892,7 +3892,7 @@ public sealed class PluginUI
         if (aetherytePosition.HasValue)
         {
             var aetheryteDistance = Vector2.Distance(new Vector2(aetherytePosition.Value.X, aetherytePosition.Value.Z), new Vector2(target.X, target.Z));
-            if (playerDistance > aetheryteDistance)
+            if (playerDistance >= aetheryteDistance)
             {
                 vnav.NavigateToFate(target, configuration.UseFlightNavigation);
                 PrintNavigationLog($"导航到 FATE：{fate.Name}。");

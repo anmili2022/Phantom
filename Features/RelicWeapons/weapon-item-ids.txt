@@ -812,7 +812,7 @@ ultimate|mnk|ultimate-top|39165|绝境欧米茄拳套
 ultimate|war|ultimate-top|39166|绝境欧米茄战斧
 ultimate|drg|ultimate-top|39167|绝境欧米茄三尖枪
 ultimate|brd|ultimate-top|39168|绝境欧米茄长弓
-ultimate|nin|ultimate-top|39182|绝境欧米茄扎戈斧镰
+ultimate|nin|ultimate-top|39169|绝境欧米茄夺命镰
 ultimate|drk|ultimate-top|39170|绝境欧米茄大剑
 ultimate|mch|ultimate-top|39171|绝境欧米茄短铳
 ultimate|whm|ultimate-top|39172|绝境欧米茄牧杖
@@ -825,7 +825,7 @@ ultimate|rdm|ultimate-top|39178|绝境欧米茄小剑
 ultimate|gnb|ultimate-top|39179|绝境欧米茄刺刀
 ultimate|dnc|ultimate-top|39180|绝境欧米茄圆月轮
 ultimate|sge|ultimate-top|39181|绝境欧米茄飞翼
-ultimate|rpr|ultimate-top|39169|绝境欧米茄夺命镰
+ultimate|rpr|ultimate-top|39182|绝境欧米茄扎戈斧镰
 ultimate|vpr|ultimate-top|43642|绝境欧米茄双牙
 ultimate|pct|ultimate-top|43663|绝境欧米茄圆笔
 ultimate|pld|ultimate-fru|44721|绝境伊甸之晨手半剑

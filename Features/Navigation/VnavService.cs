@@ -117,22 +117,22 @@ public sealed class VnavService : IDisposable
                 var targetAetheryte = GetNearestCurrentTerritoryAetherytePosition(snapped.Value);
                 if (player != null && targetAetheryte.HasValue)
                 {
-                    var playerToAetheryte = Vector2.Distance(
+                    var playerToTarget = Vector2.Distance(
                         new Vector2(player.Position.X, player.Position.Z),
-                        new Vector2(targetAetheryte.Value.X, targetAetheryte.Value.Z));
+                        new Vector2(snapped.Value.X, snapped.Value.Z));
                     var targetToAetheryte = Vector2.Distance(
                         new Vector2(snapped.Value.X, snapped.Value.Z),
                         new Vector2(targetAetheryte.Value.X, targetAetheryte.Value.Z));
 
-                    if (playerToAetheryte >= targetToAetheryte)
+                    if (playerToTarget >= targetToAetheryte)
                     {
                         TeleportAndNavigate(snapped.Value, fly);
-                        PrintEcho($"FATE 导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，先传送再导航。 ");
+                        PrintEcho($"FATE 导航：角色到目标 {playerToTarget:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，先传送再导航。 ");
                     }
                     else
                     {
                         StartMove(snapped.Value, fly);
-                        PrintEcho($"FATE 导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，直接导航。 ");
+                        PrintEcho($"FATE 导航：角色到目标 {playerToTarget:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，直接导航。 ");
                     }
                 }
                 else
