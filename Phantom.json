@@ -14,6 +14,6 @@
   "InternalName": "Phantom",
   "IconUrl": "https://raw.githubusercontent.com/anmili2022/Phantom/main/images/icon.png",
   "ApplicableVersion": "any",
-  "AssemblyVersion": "0.1.22.0",
+  "AssemblyVersion": "0.1.23.0",
   "DalamudApiLevel": 15
 }
