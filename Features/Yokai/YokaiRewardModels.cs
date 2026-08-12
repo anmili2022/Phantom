@@ -5,7 +5,8 @@ public sealed record YokaiRewardDefinition(
     string Name,
     string Category,
     string ItemNameFragment,
-    IReadOnlyList<string>? AdditionalItemNameFragments = null)
+    IReadOnlyList<string>? AdditionalItemNameFragments = null,
+    uint? MountId = null)
 {
     public IReadOnlyList<string> ItemNameFragments
         => [ItemNameFragment, .. AdditionalItemNameFragments ?? []];

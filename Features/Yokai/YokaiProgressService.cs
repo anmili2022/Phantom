@@ -51,7 +51,7 @@ public sealed class YokaiProgressService
                     .Distinct()
                     .ToArray();
                 var owned = definition.Category == YokaiWatchGuide.MountCategory
-                    ? IsMountRewardUnlocked(items.Where(item => matchedIds.Contains(item.RowId)))
+                    ? IsMountRewardUnlocked(definition.MountId, items.Where(item => matchedIds.Contains(item.RowId)))
                     : definition.Category == YokaiWatchGuide.PortraitCategory
                         ? IsItemUnlocked(items.Where(item => matchedIds.Contains(item.RowId)))
                     : definition.Category == YokaiWatchGuide.MinionCategory
@@ -255,12 +255,17 @@ public sealed class YokaiProgressService
         return result;
     }
 
-    private static unsafe bool IsMountRewardUnlocked(IEnumerable<Item> items)
+    private static unsafe bool IsMountRewardUnlocked(uint? mountId, IEnumerable<Item> items)
     {
         var playerState = PlayerState.Instance();
         if (playerState == null)
         {
             return false;
+        }
+
+        if (mountId is > 0 && playerState->IsMountUnlocked(mountId.Value))
+        {
+            return true;
         }
 
         foreach (var item in items)
@@ -271,8 +276,8 @@ public sealed class YokaiProgressService
                 continue;
             }
 
-            var mountId = action.Data[0];
-            if (mountId > 0 && playerState->IsMountUnlocked(mountId))
+            var itemMountId = action.Data[0];
+            if (itemMountId > 0 && playerState->IsMountUnlocked(itemMountId))
             {
                 return true;
             }

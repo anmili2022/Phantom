@@ -15,7 +15,7 @@ public static class YokaiWatchGuide
         new("watch", "妖怪手表", WatchCategory, "妖怪手表"),
         new("mount-vespa", "维斯帕号", MountCategory, "维斯帕号钥匙"),
         new("mount-vespa-advance", "维斯帕前进号", MountCategory, "维斯帕前进号钥匙"),
-        new("mount-jibanyan-sofa", "地缚猫沙发", MountCategory, "地缚猫沙发钥匙"),
+        new("mount-jibanyan-sofa", "地缚猫沙发", MountCategory, "地缚猫沙发钥匙", MountId: 228),
         new("portrait", "肖像教材：妖怪手表", PortraitCategory, "肖像教材：妖怪手表"),
 
         new("minion-jibanyan", "地缚猫", MinionCategory, "地缚猫"),
