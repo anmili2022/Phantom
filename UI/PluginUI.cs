@@ -5,6 +5,7 @@ using Dalamud.Interface.Internal;
 using Dalamud.Interface.Textures;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
 using System.Diagnostics;
 using System.Numerics;
@@ -90,8 +91,29 @@ public sealed class PluginUI
     private bool floatingPhantomDutiesOpen;
     private string backpackOrganizeSearch = string.Empty;
     private List<BackpackItemSummary> backpackOrganizeItems = new();
+    private PendingBackpackMove? pendingBackpackMove;
+    private readonly Dictionary<uint, int> backpackMovedByItem = new();
+    private readonly HashSet<uint> backpackSkippedItemIds = new();
+    private bool backpackOrganizerRunning;
+    private bool backpackOrganizerWaitingForSaddlebag;
+    private bool backpackOrganizerWaitingForSaddlebagWindow;
+    private DateTime backpackOrganizerStartedUtc;
+    private DateTime backpackOrganizerReadyUtc;
 
     private sealed record BackpackItemSummary(uint ItemId, string Name, int Quantity);
+    private sealed record PendingBackpackMove(
+        InventoryType SourceType,
+        int SourceSlot,
+        InventoryType TargetType,
+        int TargetSlot,
+        uint ItemId,
+        uint RawItemId,
+        int SourceQuantity,
+        int TargetQuantity,
+        DateTime StartedUtc,
+        DateTime? ConfirmedUtc = null,
+        DateTime? SourceChangedUtc = null,
+        int SourceReducedQuantity = 0);
 
     private static readonly InventoryType[] BackpackOrganizeSources =
     {
@@ -120,6 +142,7 @@ public sealed class PluginUI
 
     public void Draw()
     {
+        ProcessBackpackOrganizer();
         DrawFloatingObjectiveWindow();
 
         if (!isMainWindowOpen)
@@ -2930,7 +2953,7 @@ public sealed class PluginUI
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "整理背包");
-        ImGui.TextDisabled("按 itemid 选择物品，将当前背包中的全部数量尽可能放入鞍囊。");
+        ImGui.TextDisabled("按 itemid 选择物品，优先合并到鞍囊已有的同物品、同品质未满堆。");
 
         if (ImGui.Button("选择物品##backpack-organizer-select"))
         {
@@ -2940,9 +2963,18 @@ public sealed class PluginUI
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("整理背包##backpack-organizer-run"))
+        var organizerWasRunning = backpackOrganizerRunning;
+        if (organizerWasRunning)
+        {
+            ImGui.BeginDisabled();
+        }
+        if (ImGui.Button(organizerWasRunning ? "整理中...##backpack-organizer-run" : "整理背包##backpack-organizer-run"))
         {
             OrganizeBackpack();
+        }
+        if (organizerWasRunning)
+        {
+            ImGui.EndDisabled();
         }
 
         ImGui.SameLine();
@@ -2960,7 +2992,9 @@ public sealed class PluginUI
         ImGui.Separator();
         if (ImGui.BeginChild("backpack-organizer-item-list", new Vector2(0f, 0f), false))
         {
-            foreach (var item in backpackOrganizeItems)
+            foreach (var item in backpackOrganizeItems
+                .OrderByDescending(item => configuration.BackpackOrganizeItemIds.Contains(item.ItemId))
+                .ThenBy(item => item.Name, StringComparer.Ordinal))
             {
                 if (!string.IsNullOrWhiteSpace(backpackOrganizeSearch)
                     && !item.Name.Contains(backpackOrganizeSearch, StringComparison.OrdinalIgnoreCase))
@@ -3052,11 +3086,151 @@ public sealed class PluginUI
             return;
         }
 
-        var movedByItem = new Dictionary<uint, int>();
+        backpackMovedByItem.Clear();
+        backpackSkippedItemIds.Clear();
+        pendingBackpackMove = null;
+        backpackOrganizerRunning = true;
+        backpackOrganizerStartedUtc = DateTime.UtcNow;
+        backpackOrganizerReadyUtc = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+        backpackOrganizerWaitingForSaddlebagWindow = !IsSaddlebagWindowOpen();
+        backpackOrganizerWaitingForSaddlebag = !BackpackOrganizeTargets.Any(targetType => IsInventoryContainerLoaded(inventoryManager, targetType));
+        if (backpackOrganizerWaitingForSaddlebagWindow)
+        {
+            try
+            {
+                DalamudApi.Commands.ProcessCommand("/陆行鸟鞍囊");
+                PrintChat("正在打开陆行鸟鞍囊；加载完成后会自动开始整理。");
+            }
+            catch (Exception ex)
+            {
+                FinishBackpackOrganizer($"无法打开陆行鸟鞍囊，整理已停止：{ex.Message}");
+                return;
+            }
+        }
+        else
+        {
+            PrintChat("开始整理背包。请保持陆行鸟鞍囊开启，插件会逐件确认服务器移动结果。");
+        }
+
+        ProcessBackpackOrganizer();
+    }
+
+    private unsafe void ProcessBackpackOrganizer()
+    {
+        if (!backpackOrganizerRunning)
+        {
+            return;
+        }
+
+        var inventoryManager = InventoryManager.Instance();
+        if (inventoryManager == null)
+        {
+            FinishBackpackOrganizer("无法访问当前背包，整理已停止。");
+            return;
+        }
+
+        var saddlebagWindowOpen = IsSaddlebagWindowOpen();
+        var saddlebagLoaded = BackpackOrganizeTargets.Any(targetType => IsInventoryContainerLoaded(inventoryManager, targetType));
+        if (!saddlebagWindowOpen || !saddlebagLoaded)
+        {
+            if ((backpackOrganizerWaitingForSaddlebagWindow || backpackOrganizerWaitingForSaddlebag)
+                && DateTime.UtcNow - backpackOrganizerStartedUtc < TimeSpan.FromSeconds(10))
+            {
+                return;
+            }
+
+            FinishBackpackOrganizer(backpackOrganizerWaitingForSaddlebagWindow
+                ? "等待陆行鸟鞍囊窗口打开超时，整理已停止。"
+                : "陆行鸟鞍囊已关闭或未加载，整理已停止。");
+            return;
+        }
+
+        if (backpackOrganizerWaitingForSaddlebagWindow || backpackOrganizerWaitingForSaddlebag)
+        {
+            backpackOrganizerWaitingForSaddlebagWindow = false;
+            backpackOrganizerWaitingForSaddlebag = false;
+            backpackOrganizerReadyUtc = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+            PrintChat("陆行鸟鞍囊已打开并加载，开始逐件整理。请保持鞍囊开启。");
+            return;
+        }
+
+        if (DateTime.UtcNow < backpackOrganizerReadyUtc)
+        {
+            return;
+        }
+
+        if (pendingBackpackMove is { } pending)
+        {
+            var source = inventoryManager->GetInventoryContainer(pending.SourceType);
+            var target = inventoryManager->GetInventoryContainer(pending.TargetType);
+            if (source == null || target == null || !source->IsLoaded || !target->IsLoaded)
+            {
+                FinishBackpackOrganizer("背包或鞍囊数据已卸载，整理已停止。");
+                return;
+            }
+
+            var sourceItem = source->GetInventorySlot(pending.SourceSlot);
+            var targetItem = target->GetInventorySlot(pending.TargetSlot);
+            var sourceQuantity = sourceItem->ItemId == pending.RawItemId ? sourceItem->Quantity : 0;
+            var targetQuantity = targetItem->ItemId == pending.RawItemId ? targetItem->Quantity : 0;
+            var sourceReduced = Math.Max(0, pending.SourceQuantity - sourceQuantity);
+            var targetIncreased = Math.Max(0, targetQuantity - pending.TargetQuantity);
+            var confirmedMoved = Math.Min(sourceReduced, targetIncreased);
+
+            if (confirmedMoved > 0)
+            {
+                var confirmedUtc = pending.ConfirmedUtc ?? DateTime.UtcNow;
+                if (DateTime.UtcNow - confirmedUtc >= TimeSpan.FromMilliseconds(250))
+                {
+                    backpackMovedByItem[pending.ItemId] = backpackMovedByItem.GetValueOrDefault(pending.ItemId) + confirmedMoved;
+                    pendingBackpackMove = null;
+                }
+                else if (!pending.ConfirmedUtc.HasValue)
+                {
+                    pendingBackpackMove = pending with { ConfirmedUtc = confirmedUtc };
+                }
+
+                return;
+            }
+
+            if (sourceReduced > 0)
+            {
+                var sourceChangedUtc = pending.SourceChangedUtc ?? DateTime.UtcNow;
+                if (DateTime.UtcNow - sourceChangedUtc >= TimeSpan.FromMilliseconds(750))
+                {
+                    backpackMovedByItem[pending.ItemId] = backpackMovedByItem.GetValueOrDefault(pending.ItemId) + sourceReduced;
+                    pendingBackpackMove = null;
+                }
+                else if (!pending.SourceChangedUtc.HasValue || pending.SourceReducedQuantity != sourceReduced)
+                {
+                    pendingBackpackMove = pending with
+                    {
+                        SourceChangedUtc = DateTime.UtcNow,
+                        SourceReducedQuantity = sourceReduced,
+                    };
+                }
+
+                return;
+            }
+
+            if (pending.SourceChangedUtc.HasValue)
+            {
+                pendingBackpackMove = pending with { SourceChangedUtc = null, SourceReducedQuantity = 0 };
+            }
+
+            if (DateTime.UtcNow - pending.StartedUtc >= TimeSpan.FromSeconds(8))
+            {
+                var name = GetBackpackOrganizerItemName(pending.ItemId);
+                FinishBackpackOrganizer($"{name}（ID {pending.ItemId}）移动未获服务器确认，整理已停止。物品仍以服务器库存为准。");
+            }
+
+            return;
+        }
+
         foreach (var sourceType in BackpackOrganizeSources)
         {
             var source = inventoryManager->GetInventoryContainer(sourceType);
-            if (source == null)
+            if (source == null || !source->IsLoaded)
             {
                 continue;
             }
@@ -3070,51 +3244,116 @@ public sealed class PluginUI
                     continue;
                 }
 
-                var remaining = item->Quantity;
-                foreach (var targetType in BackpackOrganizeTargets)
+                var stackSize = GetBackpackOrganizerStackSize(itemId);
+                for (var targetPass = 0; targetPass < 2; targetPass++)
                 {
-                    var target = inventoryManager->GetInventoryContainer(targetType);
-                    if (target == null)
+                    foreach (var targetType in BackpackOrganizeTargets)
                     {
-                        continue;
-                    }
-
-                    for (var targetSlot = 0; targetSlot < target->Size && remaining > 0; targetSlot++)
-                    {
-                        var before = remaining;
-                        var destination = target->GetInventorySlot(targetSlot);
-                        if (NormalizeItemId(destination->ItemId) != 0 && NormalizeItemId(destination->ItemId) != itemId)
+                        var target = inventoryManager->GetInventoryContainer(targetType);
+                        if (target == null || !target->IsLoaded)
                         {
                             continue;
                         }
 
-                        inventoryManager->MoveItemSlot(
-                            sourceType,
-                            (ushort)sourceSlot,
-                            targetType,
-                            (ushort)targetSlot,
-                            false);
-                        var after = source->GetInventorySlot(sourceSlot)->Quantity;
-                        var moved = before - after;
-                        if (moved > 0)
+                        for (var targetSlot = 0; targetSlot < target->Size; targetSlot++)
                         {
-                            movedByItem[itemId] = movedByItem.GetValueOrDefault(itemId) + moved;
-                            remaining = after;
+                            var destination = target->GetInventorySlot(targetSlot);
+                            var isPartialStack = destination->ItemId == item->ItemId && destination->Quantity < stackSize;
+                            var isEmptySlot = destination->ItemId == 0;
+                            if ((targetPass == 0 && !isPartialStack) || (targetPass == 1 && !isEmptySlot))
+                            {
+                                continue;
+                            }
+
+                            var sourceQuantity = item->Quantity;
+                            var targetQuantity = destination->Quantity;
+                            var result = inventoryManager->MoveItemSlot(
+                                sourceType,
+                                (ushort)sourceSlot,
+                                targetType,
+                                (ushort)targetSlot,
+                                true);
+                            if (result < 0)
+                            {
+                                var name = GetBackpackOrganizerItemName(itemId);
+                                FinishBackpackOrganizer($"{name}（ID {itemId}）移动请求被客户端拒绝，整理已停止。");
+                                return;
+                            }
+
+                            pendingBackpackMove = new PendingBackpackMove(
+                                sourceType,
+                                sourceSlot,
+                                targetType,
+                                targetSlot,
+                                itemId,
+                                item->ItemId,
+                                sourceQuantity,
+                                targetQuantity,
+                                DateTime.UtcNow);
+                            return;
                         }
                     }
                 }
+
+                backpackSkippedItemIds.Add(itemId);
             }
         }
 
+        FinishBackpackOrganizer(null);
+    }
+
+    private unsafe void FinishBackpackOrganizer(string? error)
+    {
+        backpackOrganizerRunning = false;
+        backpackOrganizerWaitingForSaddlebag = false;
+        backpackOrganizerWaitingForSaddlebagWindow = false;
+        pendingBackpackMove = null;
         var summaries = ReadBackpackItemSummaries().ToDictionary(item => item.ItemId);
-        foreach (var itemId in configuration.BackpackOrganizeItemIds)
+        foreach (var itemId in backpackMovedByItem.Keys.OrderBy(GetBackpackOrganizerItemName, StringComparer.Ordinal))
         {
-            movedByItem.TryGetValue(itemId, out var moved);
+            backpackMovedByItem.TryGetValue(itemId, out var moved);
             summaries.TryGetValue(itemId, out var left);
-            var name = left?.Name ?? itemId.ToString();
-            var remaining = left?.Quantity ?? 0;
-            PrintChat($"{name}：已转移 {moved}，剩余 {remaining}");
+            var name = GetBackpackOrganizerItemName(itemId);
+            var remaining = string.IsNullOrWhiteSpace(error) ? (left?.Quantity ?? 0).ToString() : "未确认";
+            PrintChat($"{name}（ID {itemId}）：已确认转移 {moved}，背包剩余 {remaining}");
         }
+
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            PrintChat(error);
+        }
+        else
+        {
+            PrintChat($"整理背包完成：已移动 {backpackMovedByItem.Count} 种，跳过 {backpackSkippedItemIds.Count} 种。跳过项在鞍囊中没有可用空间，仍保留在普通背包。");
+        }
+    }
+
+    private static unsafe bool IsSaddlebagWindowOpen()
+    {
+        var regular = (AtkUnitBase*)DalamudApi.GameGui.GetAddonByName("InventoryBuddy", 1).Address;
+        var premium = (AtkUnitBase*)DalamudApi.GameGui.GetAddonByName("InventoryBuddy2", 1).Address;
+        return (regular != null && regular->IsVisible)
+            || (premium != null && premium->IsVisible);
+    }
+
+    private static unsafe bool IsInventoryContainerLoaded(InventoryManager* inventoryManager, InventoryType inventoryType)
+    {
+        var container = inventoryManager->GetInventoryContainer(inventoryType);
+        return container != null && container->IsLoaded;
+    }
+
+    private static int GetBackpackOrganizerStackSize(uint itemId)
+    {
+        var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+        return items.TryGetRow(itemId, out var item) ? (int)Math.Max(1u, item.StackSize) : 1;
+    }
+
+    private static string GetBackpackOrganizerItemName(uint itemId)
+    {
+        var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+        return items.TryGetRow(itemId, out var item) && !item.Name.IsEmpty
+            ? item.Name.ExtractText()
+            : "未知物品";
     }
 
     private static unsafe string GetItemFinderDebugText()
@@ -4092,6 +4331,24 @@ public sealed class PluginUI
         foreach (var task in stage.Tasks)
         {
             configuration.CompletedTasks.Remove(task.Key);
+        }
+
+        if (stage.Key == "secret")
+        {
+            foreach (var target in PhantomWeaponGuide.SecretTargets)
+            {
+                configuration.CompletedTasks.Remove(target.Key);
+            }
+
+            foreach (var duty in PhantomWeaponGuide.SecretDutyGroups.SelectMany(group => group.Duties))
+            {
+                configuration.CompletedTasks.Remove(duty.Key);
+            }
+
+            foreach (var territoryType in PhantomWeaponGuide.SecretTargets.Select(target => target.TerritoryType).Distinct())
+            {
+                configuration.Progress.Remove(GetSecretFateKey(territoryType));
+            }
         }
 
         configuration.Save();

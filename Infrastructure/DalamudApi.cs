@@ -19,6 +19,7 @@ internal sealed class DalamudApi
     [PluginService] public static IDataManager DataManager { get; private set; } = null!;
     [PluginService] public static IFramework Framework { get; private set; } = null!;
     [PluginService] public static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] public static IGameGui GameGui { get; private set; } = null!;
     [PluginService] public static ICommandManager Commands { get; private set; } = null!;
     [PluginService] public static IPluginLog Log { get; private set; } = null!;
     [PluginService] public static IFateTable FateTable { get; private set; } = null!;
