@@ -5,6 +5,7 @@ namespace Phantom;
 public sealed class PhantomPlugin : IDalamudPlugin
 {
     private const string CommandName = "/phantom";
+    private const string ChineseCommandName = "/肝武";
     private readonly VnavService vnav;
     private readonly SecretKillTracker killTracker;
     private readonly FateTracker fateTracker;
@@ -32,6 +33,10 @@ public sealed class PhantomPlugin : IDalamudPlugin
         {
             HelpMessage = "打开幻境武器助手。"
         });
+        DalamudApi.Commands.AddHandler(ChineseCommandName, new Dalamud.Game.Command.CommandInfo(OnCommand)
+        {
+            HelpMessage = "打开肝武助手。"
+        });
 
         pluginInterface.UiBuilder.Draw += ui.Draw;
         pluginInterface.UiBuilder.OpenMainUi += ui.OpenMainWindow;
@@ -46,6 +51,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         DalamudApi.PluginInterface.UiBuilder.OpenMainUi -= ui.OpenMainWindow;
         DalamudApi.PluginInterface.UiBuilder.OpenConfigUi -= ui.OpenMainWindow;
         DalamudApi.Commands.RemoveHandler(CommandName);
+        DalamudApi.Commands.RemoveHandler(ChineseCommandName);
         killTracker.Dispose();
         fateTracker.Dispose();
         huntAssistant.Dispose();

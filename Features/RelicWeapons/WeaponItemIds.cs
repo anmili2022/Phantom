@@ -12,6 +12,11 @@ public static class WeaponItemIds
             ? mapping
             : throw new ArgumentOutOfRangeException(nameof(seriesKey), seriesKey, "No fixed Item.RowId mapping is available for this series.");
 
+    public static IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<uint>> GetOrEmpty(string seriesKey)
+        => Mappings.TryGetValue(seriesKey, out var mapping)
+            ? mapping
+            : new Dictionary<(string JobKey, string StageKey), IReadOnlyList<uint>>();
+
     private static IReadOnlyDictionary<string, IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<uint>>> Load()
     {
         using var stream = typeof(WeaponItemIds).Assembly.GetManifestResourceStream(ResourceName)
@@ -43,7 +48,7 @@ public static class WeaponItemIds
                     .GroupBy(entry => (entry.JobKey, entry.StageKey))
                     .ToDictionary(
                         entry => entry.Key,
-                        entry => (IReadOnlyList<uint>)entry.Select(value => value.ItemId).ToArray()),
+                        entry => (IReadOnlyList<uint>)entry.Select(value => value.ItemId).Distinct().ToArray()),
                 StringComparer.Ordinal);
     }
 }

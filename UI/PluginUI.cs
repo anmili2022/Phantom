@@ -39,6 +39,7 @@ public sealed class PluginUI
         ("splendorous", "莫雯 · Splendorous", "-"),
         ("cosmic", "宇宙 · Cosmic", "-"),
         ("ultimate", "绝武 · Ultimate", "-"),
+        ("deep-dungeon", "深武 · Deep Dungeon", "-"),
         ("yokai", "妖表联动", "37"),
         ("settings", "设置", "-"),
         ("fate", "危命助手", "-"),
@@ -80,6 +81,7 @@ public sealed class PluginUI
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? skysteelToolItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? splendorousToolItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? ultimateWeaponItemLookup;
+    private readonly Dictionary<string, Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>> deepDungeonWeaponItemLookups = new(StringComparer.Ordinal);
     private IReadOnlyList<YokaiRewardProgress> yokaiResults = Array.Empty<YokaiRewardProgress>();
     private readonly YokaiProgressService yokaiProgress = new();
     private bool isMainWindowOpen;
@@ -87,6 +89,7 @@ public sealed class PluginUI
     private bool showWeaponProgressTab = true;
     private string? progressSeriesKey = "phantom";
     private readonly HashSet<string> stageSelectedSeries = new(StringComparer.Ordinal);
+    private int selectedDeepDungeonIndex;
     private bool floatingPhantomTargetsOpen;
     private bool floatingPhantomDutiesOpen;
     private string backpackOrganizeSearch = string.Empty;
@@ -306,6 +309,11 @@ public sealed class PluginUI
             return GetOwnedWeaponCount("ultimate", RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages, GetUltimateWeaponItemLookup()).ToString();
         }
 
+        if (section.Key == "deep-dungeon")
+        {
+            return DeepDungeonWeaponGuide.Series.Sum(series => GetOwnedStageCount(series.SeriesKey, series.Jobs, series.Stages, GetDeepDungeonWeaponItemLookup(series))).ToString();
+        }
+
         if (RelicWeaponGuide.Series.ContainsKey(section.Key))
         {
             return "-";
@@ -344,6 +352,7 @@ public sealed class PluginUI
             "splendorous" => FontAwesomeIcon.Wrench,
             "cosmic" => FontAwesomeIcon.Rocket,
             "ultimate" => FontAwesomeIcon.Trophy,
+            "deep-dungeon" => FontAwesomeIcon.Archway,
             "yokai" => FontAwesomeIcon.Paw,
             "settings" => FontAwesomeIcon.Cog,
             "fate" => FontAwesomeIcon.Flag,
@@ -414,6 +423,9 @@ public sealed class PluginUI
             case "manderville":
                 DrawMandervilleWorkspace();
                 break;
+            case "deep-dungeon":
+                DrawDeepDungeonWeaponWorkspace();
+                break;
             case "settings":
                 DrawSettingsWorkspace();
                 break;
@@ -457,7 +469,7 @@ public sealed class PluginUI
             : new Dictionary<string, List<uint>>();
         var series = GetOverviewSeries();
         var ownedJobs = series.Sum(entry => CountOwnedJobs(entry.SeriesKey, entry.Jobs, entry.Stages, entry.ItemLookup, syncedItems));
-        var totalJobs = series.Sum(entry => entry.Jobs.Count);
+        var totalJobs = series.Sum(GetOverviewTotal);
         var ultimateOwned = CountOwnedStages("ultimate", RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages, GetUltimateWeaponItemLookup(), syncedItems);
         var ultimateTotal = RelicWeaponGuide.UltimateWeaponJobs.Sum(job => RelicWeaponGuide.UltimateProgressStages.Count(stage => GetUltimateWeaponItemLookup().ContainsKey((job.Key, stage.Key))));
         var yokaiOwned = characterKey.Length > 0 && configuration.YokaiOwnedRewardKeysByCharacter.TryGetValue(characterKey, out var yokaiKeys) ? yokaiKeys.Count : 0;
@@ -465,7 +477,7 @@ public sealed class PluginUI
 
         if (ImGui.BeginTable("weapon-hub-summary", 4, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
         {
-            DrawSummaryCard("职业收藏", $"{ownedJobs}/{totalJobs}", "各系列至少持有一个阶段");
+            DrawSummaryCard("武器收藏", $"{ownedJobs}/{totalJobs}", "深武按独立职业阶段格统计");
             DrawSummaryCard("绝武收藏", $"{ultimateOwned}/{ultimateTotal}", "七个绝本独立统计");
             DrawSummaryCard("妖表奖励", $"{yokaiOwned}/{YokaiWatchGuide.Rewards.Count}", "宠物、武器与坐骑");
             var syncTime = characterKey.Length > 0 && configuration.WeaponProgressSyncTimes.TryGetValue(characterKey, out var time) ? time : "未同步";
@@ -536,7 +548,8 @@ public sealed class PluginUI
         ImGui.SetCursorScreenPos(cursor + new Vector2(0f, size.Y + 8f));
     }
 
-    private IReadOnlyList<OverviewSeries> GetOverviewSeries() => new[]
+    private IReadOnlyList<OverviewSeries> GetOverviewSeries()
+        => new[]
     {
         new OverviewSeries("zodiac", "zodiac", "古武", "Zodiac", RelicWeaponGuide.ZodiacWeaponJobs, RelicWeaponGuide.ZodiacProgressStages, GetZodiacWeaponItemLookup()),
         new OverviewSeries("anima", "anima", "魂武", "Anima", RelicWeaponGuide.AnimaWeaponJobs, RelicWeaponGuide.AnimaProgressStages, GetAnimaWeaponItemLookup()),
@@ -549,7 +562,7 @@ public sealed class PluginUI
         new OverviewSeries("splendorous", "splendorous", "莫雯工具", "Splendorous", RelicWeaponGuide.SplendorousToolJobs, RelicWeaponGuide.SplendorousProgressStages, GetSplendorousToolItemLookup()),
         new OverviewSeries("cosmic", "cosmic", "宇宙工具", "Cosmic", RelicWeaponGuide.CosmicToolJobs, RelicWeaponGuide.CosmicProgressStages, GetCosmicToolItemLookup()),
         new OverviewSeries("ultimate", "ultimate", "绝境战武器", "7 个绝本", RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages, GetUltimateWeaponItemLookup()),
-    };
+    }.Concat(DeepDungeonWeaponGuide.Series.Select(series => new OverviewSeries("deep-dungeon", series.SeriesKey, series.Name, $"{series.Version} / 等级 {series.EntryLevel}", series.Jobs, series.Stages, GetDeepDungeonWeaponItemLookup(series)))).ToArray();
 
     private static int CountOwnedJobs(
         string seriesKey,
@@ -557,7 +570,14 @@ public sealed class PluginUI
         IReadOnlyList<PhantomWeaponProgressStage> stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
         IReadOnlyDictionary<string, List<uint>> syncedItems)
-        => jobs.Count(job => GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems) != null);
+        => seriesKey.StartsWith("deep-dungeon-", StringComparison.Ordinal)
+            ? jobs.Sum(job => stages.Count(stage => IsStageOwned(seriesKey, job, stage, itemLookup, syncedItems)))
+            : jobs.Count(job => GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems) != null);
+
+    private static int GetOverviewTotal(OverviewSeries entry)
+        => entry.SeriesKey.StartsWith("deep-dungeon-", StringComparison.Ordinal)
+            ? entry.Jobs.Count * entry.Stages.Count
+            : entry.Jobs.Count;
 
     private static int CountOwnedStages(
         string seriesKey,
@@ -567,6 +587,21 @@ public sealed class PluginUI
         IReadOnlyDictionary<string, List<uint>> syncedItems)
         => jobs.Sum(job => stages.Count(stage => GetSyncedStageItems(seriesKey, job, stage, itemLookup, syncedItems).Any()));
 
+    private int GetOwnedStageCount(
+        string seriesKey,
+        IReadOnlyList<PhantomWeaponJob> jobs,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup)
+    {
+        var characterKey = GetCurrentCharacterKey();
+        if (characterKey.Length == 0 || !configuration.WeaponProgressItemsByCharacter.TryGetValue(characterKey, out var syncedItems))
+        {
+            return 0;
+        }
+
+        return jobs.Sum(job => stages.Count(stage => IsStageOwned(seriesKey, job, stage, itemLookup, syncedItems)));
+    }
+
     private void DrawOverviewSeriesCard(OverviewSeries entry, int owned)
     {
         ImGui.TableNextColumn();
@@ -574,7 +609,8 @@ public sealed class PluginUI
         var width = Math.Max(220f, ImGui.GetColumnWidth() - 8f);
         var size = new Vector2(width, 82f);
         var drawList = ImGui.GetWindowDrawList();
-        var ratio = entry.Jobs.Count == 0 ? 0f : owned / (float)entry.Jobs.Count;
+        var total = GetOverviewTotal(entry);
+        var ratio = total == 0 ? 0f : owned / (float)total;
         var accent = entry.SeriesKey == "ultimate"
             ? new Vector4(0.66f, 0.58f, 0.91f, 1f)
             : IsToolSeries(entry.SeriesKey)
@@ -591,7 +627,7 @@ public sealed class PluginUI
         ImGui.SetCursorScreenPos(cursor + new Vector2(12f, 32f));
         ImGui.TextDisabled(entry.Note);
         ImGui.SetCursorScreenPos(cursor + new Vector2(width - 60f, 12f));
-        ImGui.TextColored(accent, $"{owned}/{entry.Jobs.Count}");
+        ImGui.TextColored(accent, $"{owned}/{total}");
         ImGui.SetCursorScreenPos(cursor);
         if (ImGui.InvisibleButton($"overview-series-{entry.SeriesKey}", size))
         {
@@ -600,7 +636,7 @@ public sealed class PluginUI
 
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip($"{entry.Name}\n已持有职业 {owned}/{entry.Jobs.Count}\n点击进入系列页面");
+            ImGui.SetTooltip($"{entry.Name}\n已持有 {(entry.SeriesKey.StartsWith("deep-dungeon-", StringComparison.Ordinal) ? "职业阶段格" : "职业")} {owned}/{total}\n点击进入系列页面");
         }
 
         ImGui.SetCursorScreenPos(cursor + new Vector2(0f, size.Y + 6f));
@@ -875,6 +911,51 @@ public sealed class PluginUI
         DrawWikiButton("打开优雅武器兑换 Wiki", "elegant", "https://ff14.huijiwiki.com/wiki/%E7%89%A9%E5%93%81:%E5%85%A8%E5%A4%A9%E5%BC%BA%E5%8C%96%E8%8D%AF");
         ImGui.Separator();
         DrawElegantWeaponProgressPanel();
+    }
+
+    private void DrawDeepDungeonWeaponWorkspace()
+    {
+        selectedDeepDungeonIndex = Math.Clamp(selectedDeepDungeonIndex, 0, DeepDungeonWeaponGuide.Series.Count - 1);
+        for (var i = 0; i < DeepDungeonWeaponGuide.Series.Count; i++)
+        {
+            var dungeon = DeepDungeonWeaponGuide.Series[i];
+            if (DrawContentTabButton($"deep-dungeon-{dungeon.Key}", dungeon.Name, selectedDeepDungeonIndex == i))
+            {
+                selectedDeepDungeonIndex = i;
+            }
+
+            if (i < DeepDungeonWeaponGuide.Series.Count - 1)
+            {
+                ImGui.SameLine(0f, 4f);
+            }
+        }
+
+        var series = DeepDungeonWeaponGuide.Series[selectedDeepDungeonIndex];
+        ImGui.Separator();
+        ImGui.TextWrapped(series.Summary);
+        ImGui.TextDisabled($"{series.EnglishName} / 版本 {series.Version} / 进入等级 {series.EntryLevel}");
+        ImGui.SameLine();
+        DrawWikiButton($"打开{series.Name} Wiki", series.SeriesKey, series.SourceUrl);
+        ImGui.SameLine();
+        if (ImGui.Button("DEBUG 导出全部深武 ID##export-all-deep-dungeon"))
+        {
+            ExportAllDeepDungeonWeaponItemIds();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("导出四个深层迷宫全部 7 组武器的 Item ID，预期共 154 条（含骑士盾牌）。");
+        }
+        ImGui.Separator();
+        DrawWeaponProgressPanel(
+            series.SeriesKey,
+            series.Name,
+            series.Jobs,
+            series.Stages,
+            GetDeepDungeonWeaponItemLookup(series),
+            _ => true,
+            _ => $"当前实际持有 {GetOwnedStageCount(series.SeriesKey, series.Jobs, series.Stages, GetDeepDungeonWeaponItemLookup(series))}/{series.Jobs.Count * series.Stages.Count} 个职业阶段格；骑士必须同时持有剑盾才计入。",
+            independentStages: true);
     }
 
     private bool IsSeriesProgressActive(string seriesKey)
@@ -1211,7 +1292,8 @@ public sealed class PluginUI
         Func<PhantomWeaponProgressStage, bool> isCompleteStage,
         Func<int, string> footerText,
         IReadOnlyList<PhantomWeaponJob>? syncJobs = null,
-        IReadOnlyList<PhantomWeaponProgressStage>? syncStages = null)
+        IReadOnlyList<PhantomWeaponProgressStage>? syncStages = null,
+        bool independentStages = false)
     {
         var characterKey = GetCurrentCharacterKey();
         var canSync = characterKey.Length > 0;
@@ -1265,7 +1347,9 @@ public sealed class PluginUI
         foreach (var job in jobs)
         {
             var highestStage = GetHighestSyncedStage(seriesKey, job, stages, itemLookup, syncedItems);
-            if (highestStage != null && isCompleteStage(highestStage))
+            if (independentStages
+                ? stages.Any(stage => isCompleteStage(stage) && IsStageOwned(seriesKey, job, stage, itemLookup, syncedItems))
+                : highestStage != null && isCompleteStage(highestStage))
             {
                 completedJobs++;
             }
@@ -1424,6 +1508,38 @@ public sealed class PluginUI
         return ultimateWeaponItemLookup;
     }
 
+    private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> GetDeepDungeonWeaponItemLookup(DeepDungeonWeaponSeries series)
+    {
+        if (!deepDungeonWeaponItemLookups.TryGetValue(series.SeriesKey, out var lookup))
+        {
+            var itemIds = WeaponItemIds.GetOrEmpty(series.SeriesKey).ToDictionary(entry => entry.Key, entry => entry.Value);
+            var debugPath = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "deep-dungeon-weapon-item-ids.txt");
+            if (File.Exists(debugPath))
+            {
+                foreach (var line in File.ReadAllLines(debugPath))
+                {
+                    var fields = line.Split('|', 5);
+                    if (fields.Length != 5
+                        || fields[0] != series.SeriesKey
+                        || !uint.TryParse(fields[3], out var itemId))
+                    {
+                        continue;
+                    }
+
+                    var key = (fields[1], fields[2]);
+                    itemIds[key] = itemIds.TryGetValue(key, out var existing)
+                        ? existing.Concat(new[] { itemId }).Distinct().ToArray()
+                        : new[] { itemId };
+                }
+            }
+
+            lookup = BuildWeaponItemLookupById(DalamudApi.DataManager.GetExcelSheet<Item>(), itemIds);
+            deepDungeonWeaponItemLookups[series.SeriesKey] = lookup;
+        }
+
+        return lookup;
+    }
+
     private static bool IsToolSeries(string seriesKey)
         => seriesKey is "cosmic" or "skysteel" or "splendorous";
 
@@ -1434,10 +1550,15 @@ public sealed class PluginUI
         IReadOnlyList<PhantomWeaponProgressStage> stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup)
     {
-        var ownedItemIds = GetOwnedWeaponItemIds();
         var synced = configuration.WeaponProgressItemsByCharacter.TryGetValue(characterKey, out var stored)
             ? new Dictionary<string, List<uint>>(stored)
             : new Dictionary<string, List<uint>>();
+        if (itemLookup.Count == 0)
+        {
+            return synced;
+        }
+
+        var ownedItemIds = GetOwnedWeaponItemIds();
         foreach (var key in synced.Keys.Where(key => key.StartsWith($"{seriesKey}:", StringComparison.Ordinal)).ToArray())
         {
             synced.Remove(key);
@@ -1595,6 +1716,10 @@ public sealed class PluginUI
             "splendorous" => "莫雯",
             "cosmic" => "宇宙",
             "ultimate" => "绝武",
+            "deep-dungeon-palace" => "深武·死者宫殿",
+            "deep-dungeon-heaven-on-high" => "深武·天之御柱",
+            "deep-dungeon-eureka-orthos" => "深武·正统优雷卡",
+            "deep-dungeon-pilgrims-traverse" => "深武·朝圣交错路",
             _ => seriesKey,
         };
 
@@ -2007,10 +2132,27 @@ public sealed class PluginUI
         IReadOnlyDictionary<string, List<uint>> syncedItems)
     {
         return stages
-            .Where(stage => itemLookup.TryGetValue((job.Key, stage.Key), out var items)
-                && TryGetSyncedItemIds(seriesKey, job, stage, syncedItems, out var itemIds)
-                && items.Any(item => itemIds.Contains(item.RowId)))
+            .Where(stage => IsStageOwned(seriesKey, job, stage, itemLookup, syncedItems))
             .LastOrDefault();
+    }
+
+    private static bool IsStageOwned(
+        string seriesKey,
+        PhantomWeaponJob job,
+        PhantomWeaponProgressStage stage,
+        IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
+        IReadOnlyDictionary<string, List<uint>> syncedItems)
+    {
+        if (!itemLookup.TryGetValue((job.Key, stage.Key), out var items)
+            || items.Count == 0
+            || !TryGetSyncedItemIds(seriesKey, job, stage, syncedItems, out var itemIds))
+        {
+            return false;
+        }
+
+        return seriesKey.StartsWith("deep-dungeon-", StringComparison.Ordinal) && job.Key == "pld"
+            ? items.All(item => itemIds.Contains(item.RowId))
+            : items.Any(item => itemIds.Contains(item.RowId));
     }
 
     private void DrawWeaponProgressCell(
@@ -2025,9 +2167,7 @@ public sealed class PluginUI
         var size = new Vector2(58, 58);
         var items = itemLookup.TryGetValue((job.Key, stage.Key), out var matchedItems) ? matchedItems : Array.Empty<Item>();
         var itemAvailable = items.Count > 0;
-        var owned = itemAvailable
-            && TryGetSyncedItemIds(seriesKey, job, stage, syncedItems, out var itemIds)
-            && items.Any(item => itemIds.Contains(item.RowId));
+        var owned = IsStageOwned(seriesKey, job, stage, itemLookup, syncedItems);
         var drawList = ImGui.GetWindowDrawList();
         var bgColor = owned
             ? (isHighest ? ImGui.GetColorU32(new Vector4(0.18f, 0.45f, 0.48f, 0.72f)) : ImGui.GetColorU32(new Vector4(0.18f, 0.24f, 0.30f, 0.58f)))
@@ -2221,8 +2361,8 @@ public sealed class PluginUI
         {
             var start = pos + new Vector2(i * (segmentWidth + gap), 0f);
             var end = start + new Vector2(segmentWidth, 6f);
-            var isFilled = seriesKey == "ultimate"
-                ? GetSyncedStageItems(seriesKey, job, stages[i], itemLookup, syncedItems).Any()
+            var isFilled = seriesKey == "ultimate" || seriesKey.StartsWith("deep-dungeon-", StringComparison.Ordinal)
+                ? IsStageOwned(seriesKey, job, stages[i], itemLookup, syncedItems)
                 : i < filled;
             var color = isFilled
                 ? GetStageColor(stages[i].Key, 0.92f)
@@ -2250,7 +2390,7 @@ public sealed class PluginUI
             var stage = stages[i];
             var ownedItems = GetSyncedStageItems(seriesKey, job, stage, itemLookup, syncedItems).ToArray();
             var stageNames = job.StageItemNames[i];
-            var hasStage = ownedItems.Length > 0;
+            var hasStage = IsStageOwned(seriesKey, job, stage, itemLookup, syncedItems);
             ImGui.TextColored(hasStage ? GetStageColor(stage.Key, 1f) : new Vector4(0.48f, 0.50f, 0.57f, 1f), stage.Name);
             ImGui.SameLine(64f);
             if (hasStage)
@@ -2259,7 +2399,15 @@ public sealed class PluginUI
             }
             else
             {
-                ImGui.TextColored(new Vector4(0.52f, 0.54f, 0.60f, 1f), string.Join(" + ", stageNames));
+                var partialNames = ownedItems.Select(item => $"{item.Name.ExtractText()}（已有）").ToArray();
+                var expectedNames = itemLookup.TryGetValue((job.Key, stage.Key), out var expectedItems)
+                    ? expectedItems.Select(item => item.Name.ExtractText()).ToArray()
+                    : stageNames;
+                ImGui.TextColored(
+                    new Vector4(0.52f, 0.54f, 0.60f, 1f),
+                    partialNames.Length > 0
+                        ? $"{string.Join(" + ", partialNames)} + 缺少其余部件"
+                        : string.Join(" + ", expectedNames));
             }
         }
 
@@ -2902,6 +3050,81 @@ public sealed class PluginUI
             DalamudApi.Log.Error(ex, "Failed to export Phantom item IDs.");
             PrintChat($"导出幻武 Item.RowId 失败：{ex.Message}");
         }
+    }
+
+    private void ExportAllDeepDungeonWeaponItemIds()
+    {
+        var groups = new[]
+        {
+            (Series: "deep-dungeon-palace", Stage: "palace-padjali", Start: 15181u, End: 15194u, Extra: new[] { 20456u, 20457u, 27347u, 27348u, 35756u, 35774u, 43633u, 43654u }),
+            (Series: "deep-dungeon-palace", Stage: "palace-kinna", Start: 16152u, End: 16165u, Extra: new[] { 20458u, 20459u, 27349u, 27350u, 35757u, 35775u, 43634u, 43655u }),
+            (Series: "deep-dungeon-heaven-on-high", Stage: "heaven-on-high-empyrean", Start: 22977u, End: 22992u, Extra: new[] { 27379u, 27380u, 35759u, 35777u, 43635u, 43656u }),
+            (Series: "deep-dungeon-eureka-orthos", Stage: "eureka-orthos-orthos", Start: 39184u, End: 39203u, Extra: new[] { 43636u, 43657u }),
+            (Series: "deep-dungeon-eureka-orthos", Stage: "eureka-orthos-enaretos", Start: 39204u, End: 39223u, Extra: new[] { 43637u, 43658u }),
+            (Series: "deep-dungeon-pilgrims-traverse", Stage: "pilgrims-traverse-illuminated", Start: 47028u, End: 47049u, Extra: Array.Empty<uint>()),
+            (Series: "deep-dungeon-pilgrims-traverse", Stage: "pilgrims-traverse-ceremonial", Start: 47050u, End: 47071u, Extra: Array.Empty<uint>()),
+        };
+
+        try
+        {
+            var itemSheet = DalamudApi.DataManager.GetExcelSheet<Item>();
+            var lines = new List<string> { "# SeriesKey|JobKey|StageKey|Item.RowId|ItemName" };
+            var unmapped = new List<string>();
+            foreach (var group in groups)
+            {
+                var itemIds = Enumerable.Range((int)group.Start, (int)(group.End - group.Start + 1))
+                    .Select(value => (uint)value)
+                    .Concat(group.Extra);
+                foreach (var itemId in itemIds)
+                {
+                    if (!itemSheet.TryGetRow(itemId, out var item))
+                    {
+                        unmapped.Add($"缺少物品表行 {itemId}");
+                        continue;
+                    }
+
+                    var jobKey = GetDeepDungeonItemJobKey(item);
+                    if (jobKey == null)
+                    {
+                        unmapped.Add($"无法识别职业 {itemId} {item.Name.ExtractText()}");
+                        continue;
+                    }
+
+                    lines.Add($"{group.Series}|{jobKey}|{group.Stage}|{itemId}|{item.Name.ExtractText()}");
+                }
+            }
+
+            var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "deep-dungeon-weapon-item-ids.txt");
+            File.WriteAllLines(path, lines);
+            deepDungeonWeaponItemLookups.Clear();
+            PrintChat($"已导出全部深武 Item.RowId：映射 {lines.Count - 1} 条，待确认 {unmapped.Count} 条。文件：{path}");
+            foreach (var message in unmapped)
+            {
+                PrintChat($"DEBUG [深武] {message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Error(ex, "Failed to export deep dungeon weapon item IDs.");
+            PrintChat($"导出全部深武 Item.RowId 失败：{ex.Message}");
+        }
+    }
+
+    private static string? GetDeepDungeonItemJobKey(Item item)
+    {
+        var jobs = new[]
+        {
+            (Key: "pld", Property: "PLD"), (Key: "mnk", Property: "MNK"), (Key: "war", Property: "WAR"),
+            (Key: "drg", Property: "DRG"), (Key: "brd", Property: "BRD"), (Key: "whm", Property: "WHM"),
+            (Key: "blm", Property: "BLM"), (Key: "smn", Property: "SMN"), (Key: "sch", Property: "SCH"),
+            (Key: "nin", Property: "NIN"), (Key: "mch", Property: "MCH"), (Key: "drk", Property: "DRK"),
+            (Key: "ast", Property: "AST"), (Key: "sam", Property: "SAM"), (Key: "rdm", Property: "RDM"),
+            (Key: "gnb", Property: "GNB"), (Key: "dnc", Property: "DNC"), (Key: "rpr", Property: "RPR"),
+            (Key: "sge", Property: "SGE"), (Key: "vpr", Property: "VPR"), (Key: "pct", Property: "PCT"),
+        };
+        var category = item.ClassJobCategory.Value;
+        var categoryType = category.GetType();
+        return jobs.FirstOrDefault(job => categoryType.GetProperty(job.Property)?.GetValue(category) is true).Key;
     }
 
     private static void ExportElegantWeaponItemIds()
