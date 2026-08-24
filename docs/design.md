@@ -146,6 +146,8 @@
 - `FloatingSecretTerritoryType` / `FloatingManualMode`：悬浮窗当前地图与手动模式。
 - `ShowSecretTargetsInFloatingWindow` / `ShowSecretDutiesInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗显示选项（秘影指定目标、迷宫/讨伐任务分组、自动隐藏已完成项）。
 - `ShowAvailableFatesInFloatingWindow`：在悬浮窗显示当前地图可参与的 FATE 及导航按钮。
+- `ShowZodiacMonitorInFloatingWindow`：是否在悬浮窗显示古武监控卡片。
+- `FloatingZodiacJobKey` / `FloatingZodiacStageKey`：悬浮窗古武监控当前选择的职业和阶段。
 - `HuntAssistantEchoLeaderMessages`：测试开关，以 Echo/默语复述指定车头在任意频道的发言，用于诊断聊天监听和车头匹配。
 - `NavigateToFlagDirectly`：前往 Flag 时使用直接前往还是导航前往。
 - `HuntAssistantEnabled`：是否监听指定车头发送的狩猎 Flag。
@@ -184,6 +186,12 @@
 - 现有危命助手会将当前角色/职业所选文书中名称匹配的 FATE 显示为 `FATE 名称【文书名】`；这是显示标记，不会写入通用 Phantom FATE 进度。
 - `ZodiacMonsterTracker` 复用聊天监听，按当前角色、职业和所选文书累计目标怪物击杀，每个目标需要 3 次；不确定的聊天文本不自动标记。
 - 本我阶段提供 12 个独立光阶段，完成数保存到 `RequirementProgress["zodiac-zeta-mahatma"]`。
+- 古武页面 Wiki 按钮右侧提供“监控古武”开关，控制是否在悬浮窗显示古武进度和目标；悬浮窗同时显示幻武监控和古武监控时，两个独立卡片按顺序排列，互不覆盖。
+- 悬浮窗古武监控卡片可独立选择职业和古武阶段（古武、天极、魂晶、魂灵、新星、镇魂、黄道、本我）；阶段内容读取当前角色/职业的独立进度。
+- 古武监控显示：魂晶地区完成数、黄道十二文书完成数和当前文书完成数；其他阶段显示阶段材料进度。
+- 古武监控根据当前阶段显示“下一步”：魂晶显示下一个地区 FATE，魂灵显示当前文书的下一个敌人/副本/FATE/理符，其他阶段显示下一个未完成任务或材料。
+- 古武监控的“下一步”目标提供“前往”按钮：魂晶传送到目标地图；敌人、FATE 和理符导航到首个可用坐标；副本和无坐标材料只显示目标文字。
+- 古武监控卡片标题可点击折叠/展开，第一行提供“停止导航”按钮；幻武监控同样支持标题折叠。两张卡片同时开启时分别保留自己的折叠状态和内容。
 - 下一步按顺序完成：继续核对剩余 Wiki 坐标和特殊前置条件；实现 FATE 完成自动识别；进入游戏实际验证击杀文本、坐标换算、NPC/FATE 导航和 Lifestream 传送。
 
 ## 总览与库存同步

@@ -92,6 +92,8 @@ public sealed class PluginUI
     private int selectedDeepDungeonIndex;
     private bool floatingPhantomTargetsOpen;
     private bool floatingPhantomDutiesOpen;
+    private bool floatingZodiacMonitorOpen = true;
+    private bool floatingPhantomMonitorOpen = true;
     private string backpackOrganizeSearch = string.Empty;
     private List<BackpackItemSummary> backpackOrganizeItems = new();
     private PendingBackpackMove? pendingBackpackMove;
@@ -761,6 +763,14 @@ public sealed class PluginUI
         }
         if (series.Key == "zodiac")
         {
+            ImGui.SameLine();
+            var monitorZodiac = configuration.ShowZodiacMonitorInFloatingWindow;
+            if (ImGui.Checkbox("监控古武##zodiac-floating-window", ref monitorZodiac))
+            {
+                configuration.ShowZodiacMonitorInFloatingWindow = monitorZodiac;
+                configuration.Save();
+            }
+
             ImGui.SameLine();
             DrawZodiacCurrentCoordinateButton();
         }
@@ -3221,6 +3231,7 @@ public sealed class PluginUI
         {
             DrawSettingCard("悬浮窗", "显示或隐藏悬浮目标窗", configuration.ShowFloatingObjectiveWindow, "floating-window", value => configuration.ShowFloatingObjectiveWindow = value);
             DrawSettingCard("自动隐藏已完成项目", "减少悬浮窗中的已完成条目", configuration.AutoHideCompletedFloatingItems, "auto-hide", value => configuration.AutoHideCompletedFloatingItems = value);
+            DrawSettingCard("古武监控", "在悬浮窗显示当前角色古武阶段进度", configuration.ShowZodiacMonitorInFloatingWindow, "zodiac-monitor", value => configuration.ShowZodiacMonitorInFloatingWindow = value);
             ImGui.EndTable();
         }
 
@@ -4576,6 +4587,15 @@ public sealed class PluginUI
             ImGui.Separator();
         }
 
+        if (configuration.ShowZodiacMonitorInFloatingWindow)
+        {
+            DrawFloatingZodiacMonitor();
+            if (configuration.ShowSecretTargetsInFloatingWindow || configuration.ShowSecretDutiesInFloatingWindow)
+            {
+                ImGui.Separator();
+            }
+        }
+
         if (configuration.ShowSecretTargetsInFloatingWindow || configuration.ShowSecretDutiesInFloatingWindow)
         {
             DrawFloatingPhantomMonitor(targets, territory);
@@ -4583,6 +4603,230 @@ public sealed class PluginUI
 
         DrawFloatingContextMenu();
         ImGui.End();
+    }
+
+    private void DrawFloatingZodiacMonitor()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        if (string.IsNullOrWhiteSpace(characterKey))
+        {
+            ImGui.TextDisabled("古武监控：未登录角色");
+            return;
+        }
+
+        var selectedJob = RelicWeaponGuide.ZodiacWeaponJobs.FirstOrDefault(job => job.Key == configuration.FloatingZodiacJobKey)
+            ?? RelicWeaponGuide.ZodiacWeaponJobs[0];
+        var selectedStage = RelicWeaponGuide.ZodiacProgressStages.FirstOrDefault(stage => stage.Key == configuration.FloatingZodiacStageKey)
+            ?? RelicWeaponGuide.ZodiacProgressStages[0];
+
+        if (selectedJob.Key != configuration.FloatingZodiacJobKey)
+        {
+            configuration.FloatingZodiacJobKey = selectedJob.Key;
+        }
+
+        if (selectedStage.Key != configuration.FloatingZodiacStageKey)
+        {
+            configuration.FloatingZodiacStageKey = selectedStage.Key;
+        }
+
+        if (!configuration.ZodiacProgressByCharacter.TryGetValue(characterKey, out var characterProgress)
+            || !characterProgress.Jobs.TryGetValue(selectedJob.Key, out var progress))
+        {
+            progress = new ZodiacJobProgress();
+        }
+
+        var monitorHeight = floatingZodiacMonitorOpen ? (selectedStage.Key == "zodiac-animus" ? 190f : 154f) : 34f;
+        if (ImGui.BeginChild("floating-zodiac-monitor", new Vector2(-1f, monitorHeight), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.35f, 0.88f, 0.82f, 1f));
+            if (ImGui.Selectable($"古武监控##floating-zodiac-monitor-header", false, ImGuiSelectableFlags.AllowDoubleClick, new Vector2(76f, 22f)))
+            {
+                floatingZodiacMonitorOpen = !floatingZodiacMonitorOpen;
+            }
+            ImGui.PopStyleColor();
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip("古武监控\n显示当前角色和所选职业的古武阶段进度、下一步目标及可用导航。点击标题可折叠或展开卡片。");
+            }
+
+            ImGui.SameLine();
+            ImGui.TextDisabled(floatingZodiacMonitorOpen ? "收起" : "展开");
+            ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
+            if (ImGui.SmallButton("停止导航##floating-zodiac-stop-navigation"))
+            {
+                vnav.Stop();
+            }
+            if (!floatingZodiacMonitorOpen)
+            {
+                ImGui.EndChild();
+                return;
+            }
+
+            ImGui.SameLine();
+            ImGui.TextDisabled($"{selectedJob.Name} · {selectedStage.Name}");
+
+            ImGui.SetNextItemWidth(125f);
+            if (ImGui.BeginCombo("##floating-zodiac-job", selectedJob.Name))
+            {
+                foreach (var job in RelicWeaponGuide.ZodiacWeaponJobs)
+                {
+                    var active = job.Key == selectedJob.Key;
+                    if (ImGui.Selectable($"{job.Name}##floating-zodiac-job-{job.Key}", active))
+                    {
+                        configuration.FloatingZodiacJobKey = job.Key;
+                        configuration.Save();
+                    }
+
+                    if (active) ImGui.SetItemDefaultFocus();
+                }
+
+                ImGui.EndCombo();
+            }
+
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(125f);
+            if (ImGui.BeginCombo("##floating-zodiac-stage", selectedStage.Name))
+            {
+                foreach (var stage in RelicWeaponGuide.ZodiacProgressStages)
+                {
+                    var active = stage.Key == selectedStage.Key;
+                    if (ImGui.Selectable($"{stage.Name}##floating-zodiac-stage-{stage.Key}", active))
+                    {
+                        configuration.FloatingZodiacStageKey = stage.Key;
+                        configuration.Save();
+                    }
+
+                    if (active) ImGui.SetItemDefaultFocus();
+                }
+
+                ImGui.EndCombo();
+            }
+
+            DrawFloatingZodiacStageSummary(selectedStage.Key, progress);
+        }
+
+        ImGui.EndChild();
+    }
+
+    private void DrawFloatingZodiacStageSummary(string stageKey, ZodiacJobProgress progress)
+    {
+        if (stageKey == "zodiac-atma")
+        {
+            var completed = ZodiacGuide.AtmaTerritories.Count(objective => progress.CompletedObjectives.Contains(objective.Key));
+            ImGui.TextDisabled($"魂晶地区 FATE：{completed}/{ZodiacGuide.AtmaTerritories.Count}");
+            ImGui.ProgressBar((float)completed / ZodiacGuide.AtmaTerritories.Count, new Vector2(-1f, 0f), $"{completed}/{ZodiacGuide.AtmaTerritories.Count}");
+            var next = ZodiacGuide.AtmaTerritories.FirstOrDefault(objective => !progress.CompletedObjectives.Contains(objective.Key));
+            DrawFloatingZodiacNextStep(
+                next == null ? "魂晶阶段已完成" : $"前往 {next.Zone}，完成任意 FATE 获取{next.Name}",
+                next == null ? null : () => vnav.TeleportToMap(next.Zone));
+            return;
+        }
+
+        if (stageKey == "zodiac-animus")
+        {
+            var completed = Math.Min(progress.CompletedBooks.Count, ZodiacGuide.AnimusBooks.Count);
+            ImGui.TextDisabled($"黄道十二文书：{completed}/{ZodiacGuide.AnimusBooks.Count}");
+            ImGui.ProgressBar((float)completed / ZodiacGuide.AnimusBooks.Count, new Vector2(-1f, 0f), $"{completed}/{ZodiacGuide.AnimusBooks.Count}");
+            var selectedBook = ZodiacGuide.AnimusBooks.FirstOrDefault(book => book.Key == progress.SelectedBookKey);
+            if (selectedBook != null)
+            {
+                var targetCount = selectedBook.Monsters.Count + selectedBook.Duties.Count + selectedBook.Fates.Count + selectedBook.Leves.Count;
+                var targetCompleted = selectedBook.Monsters.Count(objective => progress.CompletedObjectives.Contains(objective.Key))
+                    + selectedBook.Duties.Count(objective => progress.CompletedObjectives.Contains(objective.Key))
+                    + selectedBook.Fates.Count(objective => progress.CompletedObjectives.Contains(objective.Key))
+                    + selectedBook.Leves.Count(objective => progress.CompletedObjectives.Contains(objective.Key));
+                ImGui.TextDisabled($"当前文书：{selectedBook.Name} {targetCompleted}/{targetCount}");
+                DrawFloatingZodiacNextBookStep(selectedBook, progress);
+            }
+            else
+            {
+                DrawFloatingZodiacNextStep("选择一本未完成的黄道十二文书", null);
+            }
+
+            return;
+        }
+
+        var stage = RelicWeaponGuide.Series["zodiac"].Stages.FirstOrDefault(candidate => candidate.Key == stageKey);
+        if (stage == null)
+        {
+            return;
+        }
+
+        foreach (var requirement in stage.Requirements)
+        {
+            var current = progress.RequirementProgress.GetValueOrDefault(requirement.Key);
+            ImGui.TextDisabled($"{requirement.Name}：{Math.Clamp(current, 0, requirement.Needed)}/{requirement.Needed}");
+        }
+
+        var nextTask = stage.Tasks.FirstOrDefault(task => !progress.CompletedObjectives.Contains(task.Key));
+        if (nextTask != null)
+        {
+            DrawFloatingZodiacNextStep(nextTask.Name, null);
+            return;
+        }
+
+        var nextRequirement = stage.Requirements.FirstOrDefault(requirement =>
+            progress.RequirementProgress.GetValueOrDefault(requirement.Key) < requirement.Needed);
+        DrawFloatingZodiacNextStep(nextRequirement == null
+            ? "当前阶段已完成"
+            : $"完成 {nextRequirement.Name}（{Math.Clamp(progress.RequirementProgress.GetValueOrDefault(nextRequirement.Key), 0, nextRequirement.Needed)}/{nextRequirement.Needed}）", null);
+    }
+
+    private void DrawFloatingZodiacNextBookStep(ZodiacBookGuide book, ZodiacJobProgress progress)
+    {
+        var nextMonster = book.Monsters.FirstOrDefault(objective => !progress.CompletedObjectives.Contains(objective.Key));
+        if (nextMonster != null)
+        {
+            var count = progress.RequirementProgress.GetValueOrDefault(nextMonster.Key);
+            DrawFloatingZodiacNextStep($"讨伐 {nextMonster.Name}（{Math.Clamp(count, 0, nextMonster.Needed)}/{nextMonster.Needed}）", () => NavigateToZodiacCoordinate(nextMonster.Zone, nextMonster.Coordinates?.FirstOrDefault()));
+            return;
+        }
+
+        var nextDuty = book.Duties.FirstOrDefault(objective => !progress.CompletedObjectives.Contains(objective.Key));
+        if (nextDuty != null)
+        {
+            DrawFloatingZodiacNextStep($"完成副本：{nextDuty.Name}", null);
+            return;
+        }
+
+        var nextFate = book.Fates.FirstOrDefault(objective => !progress.CompletedObjectives.Contains(objective.Key));
+        if (nextFate != null)
+        {
+            DrawFloatingZodiacNextStep($"完成 FATE：{nextFate.Name}", () => NavigateToZodiacCoordinate(nextFate.Zone, nextFate.MapX > 0f ? new ZodiacCoordinate(nextFate.MapX, nextFate.MapY) : null));
+            return;
+        }
+
+        var nextLeve = book.Leves.FirstOrDefault(objective => !progress.CompletedObjectives.Contains(objective.Key));
+        DrawFloatingZodiacNextStep(
+            nextLeve == null ? "当前文书已完成" : $"完成理符：{nextLeve.Name}",
+            nextLeve == null || nextLeve.MapX <= 0f ? null : () => NavigateToZodiacCoordinate(nextLeve.Zone, new ZodiacCoordinate(nextLeve.MapX, nextLeve.MapY)));
+    }
+
+    private void NavigateToZodiacCoordinate(string zone, ZodiacCoordinate? coordinate)
+    {
+        if (coordinate == null)
+        {
+            vnav.TeleportToMap(zone);
+            return;
+        }
+
+        vnav.NavigateToMapCoordinate(zone, coordinate.MapX, coordinate.MapY);
+    }
+
+    private static void DrawFloatingZodiacNextStep(string text, System.Action? navigate)
+    {
+        ImGui.TextColored(new Vector4(1f, 0.82f, 0.28f, 1f), "下一步");
+        ImGui.SameLine();
+        ImGui.TextWrapped(text);
+        if (navigate != null)
+        {
+            ImGui.SameLine();
+            if (ImGui.SmallButton("前往##floating-zodiac-next"))
+            {
+                navigate();
+            }
+        }
     }
 
     private void DrawFloatingPhantomMonitor(PhantomWeaponTarget[] targets, uint territory)
@@ -4595,10 +4839,29 @@ public sealed class PluginUI
         var total = 9 + dutyCount;
         var completed = completedTargets + Math.Min(fateCount, 5) + completedDuties;
 
-        var cardHeight = Math.Max(ImGui.GetContentRegionAvail().Y, 120f);
+        var cardHeight = floatingPhantomMonitorOpen ? Math.Max(ImGui.GetContentRegionAvail().Y, 120f) : 34f;
         if (ImGui.BeginChild("floating-phantom-monitor-card", new Vector2(-1f, cardHeight), true))
         {
-            ImGui.TextColored(new Vector4(0.42f, 0.84f, 0.79f, 1f), "幻武监控");
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.45f, 0.70f, 0.98f, 1f));
+            if (ImGui.Selectable("幻武监控##floating-phantom-monitor-header", false, ImGuiSelectableFlags.AllowDoubleClick, new Vector2(76f, 22f)))
+            {
+                floatingPhantomMonitorOpen = !floatingPhantomMonitorOpen;
+            }
+            ImGui.PopStyleColor();
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip("幻武监控\n显示当前秘影阶段的指定目标、金牌 FATE 和迷宫/讨伐任务进度。点击标题可折叠或展开卡片。");
+            }
+
+            ImGui.SameLine();
+            ImGui.TextDisabled(floatingPhantomMonitorOpen ? "收起" : "展开");
+            if (!floatingPhantomMonitorOpen)
+            {
+                ImGui.EndChild();
+                return;
+            }
+
             ImGui.SameLine();
             ImGui.TextColored(new Vector4(0.62f, 0.95f, 0.72f, 1f), $"{completed} / {total}");
             ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
