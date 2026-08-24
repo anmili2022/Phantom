@@ -34,6 +34,11 @@
 - 绝武覆盖绝巴哈、绝神兵、绝亚、绝龙诗、绝欧米茄、绝伊甸和绝妖星；每个绝本有独立页签，并提供七阶段总进度。
 - 雇员武器通过 `ItemFinderModule.RetainerInventories` 客户端缓存扫描。
 - 前往幻境村的独立导航入口。
+- 古武阶段页提供职业选择，材料进度和一次性任务按“角色 + 职业”独立保存，不再写入通用 `Progress` / `CompletedTasks`。
+- 古武魂晶阶段已增加 12 个地区 FATE 手动完成表；黄道十二文书阶段已增加 9 本文书的按职业完成状态和当前文书选择。
+- 文书目标的怪物、FATE 和理符行增加“传送到地图”按钮；按钮只传送到目标地图，不使用不确定坐标导航。副本行不显示地图传送按钮。
+- 每本文书显示指定敌人/副本/FATE/理符四类完成数和总进度；完成全部 19 个目标时自动加入当前职业的 `CompletedBooks`。
+- 选中文书的匹配 FATE 会合并到现有危命助手列表，并在名称后追加 `【文书名】`；该标记不改变原危命助手的全局进度。
 
 ### 目录结构
 
@@ -117,7 +122,26 @@ PhantomWeaponTarget  // 秘影目标
 - WeaponProgressItemsByCharacter // 按角色保存各系列同步到的 Item RowId
 - WeaponProgressSyncTimes   // 按角色保存最近同步时间
 - YokaiOwnedRewardKeysByCharacter // 按角色保存妖表奖励
+- ZodiacProgressByCharacter // 按角色、职业保存古武制作进度
+- SelectedZodiacJobKey      // 当前选择的古武职业
+- FateAssistantEnabled      // 古武 FATE 助手开关（基础字段已添加，助手尚未接入）
 ```
+
+### 古武独立进度（2026-08-24）
+
+- `Features/RelicWeapons/ZodiacProgressModels.cs` 定义角色、职业、文书和各类目标模型。
+- `Features/RelicWeapons/ZodiacGuide.cs` 保存 12 个魂晶地区和 9 本黄道文书的静态目标数据。
+- `ZodiacCharacterProgress.Jobs[jobKey]` 保存各职业的 `ZodiacJobProgress`。
+- `RequirementProgress` 保存阶段材料/数值进度；`CompletedObjectives` 保存阶段一次性任务和后续目标勾选。
+- UI 使用当前角色 ContentId 作为首选键，未取得 ContentId 时回退到“角色名@服务器”。未登录时不创建进度容器。
+- 古武阶段材料、任务和本文书目标均已接入按角色/职业独立存储；FATE 列表标记和指定怪物自动追踪已接入，FATE 自动完成识别仍待实现。
+- 新增 `ZodiacMonsterTracker`：当前角色、当前古武职业和当前文书匹配时，根据聊天中的击败文本累计指定怪物击杀次数，达到 3 次后自动勾选；无法可靠识别的情况仍可手动勾选。
+- 本我阶段新增 12 个独立光阶段勾选，并将总数写入当前职业的 `RequirementProgress["zodiac-zeta-mahatma"]`。
+- `ZodiacGuide.AtmaTerritories` 已录入 12 个魂晶地区：中拉诺西亚、拉诺西亚低地、西拉诺西亚、拉诺西亚高地、拉诺西亚外地、黑衣森林中央/东部/北部林区、西萨纳兰、中萨纳兰、东萨纳兰、南萨纳兰。
+- `ZodiacGuide.AnimusBooks` 已录入 9 本文书：火天/水天/风天第一、第二卷，以及火狱、水狱、土天第一卷；每本包含 10 个指定敌人、3 个副本、3 个 FATE 和 3 个理符目标。
+- 目标中部分坐标来自 Wiki 的路线或范围描述，当前用于展示和手动勾选，不作为未经确认的单点导航坐标。
+- Wiki 核对资料已确认每本文书包含 10 个指定敌人、3 个副本、3 个 FATE 和 3 个理符；部分坐标是路线或范围描述，不能直接当作单点导航坐标。
+- 最近验证：`dotnet build` 成功，0 错误；本机 Dalamud 引用目录缺少部分显式 DLL，保留 20 条既有解析警告。
 
 ---
 

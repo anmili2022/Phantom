@@ -16,6 +16,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowSecretTargetsInFloatingWindow { get; set; } = true;
     public bool ShowSecretDutiesInFloatingWindow { get; set; } = true;
     public bool ShowAvailableFatesInFloatingWindow { get; set; } = true;
+    public bool FateAssistantEnabled { get; set; }
     public bool AutoHideCompletedFloatingItems { get; set; } = true;
     public bool NavigateToFlagDirectly { get; set; } = true;
     public bool HuntAssistantEnabled { get; set; }
@@ -40,6 +41,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public Dictionary<string, string> WeaponProgressSyncTimes { get; set; } = new();
     public Dictionary<string, List<string>> YokaiOwnedRewardKeysByCharacter { get; set; } = new();
     public Dictionary<string, string> YokaiSyncTimesByCharacter { get; set; } = new();
+    public Dictionary<string, ZodiacCharacterProgress> ZodiacProgressByCharacter { get; set; } = new();
+    public string SelectedZodiacJobKey { get; set; } = "pld";
     public bool HideOwnedYokaiRewards { get; set; }
     public bool DebugLogSyncedItemLocations { get; set; }
     public bool DebugLogMissingItemLocations { get; set; }

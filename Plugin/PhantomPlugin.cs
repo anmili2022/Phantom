@@ -9,6 +9,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
     private readonly VnavService vnav;
     private readonly SecretKillTracker killTracker;
     private readonly FateTracker fateTracker;
+    private readonly ZodiacMonsterTracker zodiacMonsterTracker;
     private readonly HuntAssistant huntAssistant;
     private readonly PluginUI ui;
 
@@ -26,6 +27,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         vnav = new VnavService(pluginInterface, Configuration);
         killTracker = new SecretKillTracker(Configuration);
         fateTracker = new FateTracker(Configuration);
+        zodiacMonsterTracker = new ZodiacMonsterTracker(Configuration);
         huntAssistant = new HuntAssistant(Configuration, vnav);
         ui = new PluginUI(Configuration, vnav);
 
@@ -54,6 +56,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         DalamudApi.Commands.RemoveHandler(ChineseCommandName);
         killTracker.Dispose();
         fateTracker.Dispose();
+        zodiacMonsterTracker.Dispose();
         huntAssistant.Dispose();
         vnav.Dispose();
         Configuration.Save();

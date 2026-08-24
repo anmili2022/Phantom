@@ -741,6 +741,13 @@ public sealed class PluginUI
             configuration.SelectedRelicStageIndexes[series.Key] = selectedIndex;
         }
 
+        ZodiacJobProgress? zodiacProgress = null;
+        if (series.Key == "zodiac")
+        {
+            zodiacProgress = DrawZodiacJobSelector();
+            ImGui.Spacing();
+        }
+
         ImGui.TextWrapped(series.Summary);
         ImGui.TextDisabled(series.EnglishName);
         ImGui.SameLine();
@@ -751,6 +758,11 @@ public sealed class PluginUI
             ImGui.SameLine();
             var secondaryLabel = series.Key == "zodiac" ? "打开黄道武器Wiki" : $"打开{series.Name} Wiki 2";
             DrawWikiButton(secondaryLabel, $"{series.Key}-secondary", series.SecondarySourceUrl);
+        }
+        if (series.Key == "zodiac")
+        {
+            ImGui.SameLine();
+            DrawZodiacCurrentCoordinateButton();
         }
         ImGui.Separator();
 
@@ -848,8 +860,492 @@ public sealed class PluginUI
         }
         else
         {
-            DrawStage(stages[selectedIndex]);
+            var zodiacRequirements = zodiacProgress?.RequirementProgress;
+            var zodiacObjectives = zodiacProgress?.CompletedObjectives;
+            if (series.Key == "zodiac" && zodiacProgress == null)
+            {
+                zodiacRequirements = new Dictionary<string, int>(StringComparer.Ordinal);
+                zodiacObjectives = new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            DrawStage(stages[selectedIndex], zodiacRequirements, zodiacObjectives);
+            if (series.Key == "zodiac" && zodiacProgress != null)
+            {
+                DrawZodiacObjectives(stages[selectedIndex].Key, zodiacProgress);
+                if (stages[selectedIndex].Key == "zodiac-zeta")
+                {
+                    DrawZodiacZetaProgress(zodiacProgress);
+                }
+            }
         }
+    }
+
+    private ZodiacJobProgress? DrawZodiacJobSelector()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        if (string.IsNullOrWhiteSpace(characterKey))
+        {
+            ImGui.TextDisabled("登录角色后可记录按角色、按职业拆分的古武制作进度。");
+            return null;
+        }
+
+        var selectedJob = RelicWeaponGuide.ZodiacWeaponJobs
+            .FirstOrDefault(job => job.Key == configuration.SelectedZodiacJobKey)
+            ?? RelicWeaponGuide.ZodiacWeaponJobs[0];
+        if (selectedJob.Key != configuration.SelectedZodiacJobKey)
+        {
+            configuration.SelectedZodiacJobKey = selectedJob.Key;
+            configuration.Save();
+        }
+
+        ImGui.TextUnformatted("制作职业");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(180f);
+        if (ImGui.BeginCombo("##zodiac-job", selectedJob.Name))
+        {
+            foreach (var job in RelicWeaponGuide.ZodiacWeaponJobs)
+            {
+                var selected = job.Key == selectedJob.Key;
+                if (ImGui.Selectable($"{job.Name}##zodiac-job-{job.Key}", selected))
+                {
+                    configuration.SelectedZodiacJobKey = job.Key;
+                    selectedJob = job;
+                    configuration.Save();
+                }
+
+                if (selected)
+                {
+                    ImGui.SetItemDefaultFocus();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        if (!configuration.ZodiacProgressByCharacter.TryGetValue(characterKey, out var characterProgress))
+        {
+            characterProgress = new ZodiacCharacterProgress();
+            configuration.ZodiacProgressByCharacter[characterKey] = characterProgress;
+        }
+
+        if (!characterProgress.Jobs.TryGetValue(selectedJob.Key, out var jobProgress))
+        {
+            jobProgress = new ZodiacJobProgress();
+            characterProgress.Jobs[selectedJob.Key] = jobProgress;
+        }
+
+        ImGui.SameLine();
+        ImGui.TextDisabled($"{GetCurrentCharacterLabel()} · 独立保存");
+        return jobProgress;
+    }
+
+    private void DrawZodiacObjectives(string stageKey, ZodiacJobProgress progress)
+    {
+        if (stageKey == "zodiac-atma")
+        {
+            ImGui.Spacing();
+            ImGui.TextUnformatted("魂晶地区 FATE");
+            ImGui.TextDisabled("装备天极武器后，在对应地区完成任意 FATE，有概率获得该地区魂晶。");
+            if (ImGui.BeginTable("zodiac-atma-objectives", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+            {
+                ImGui.TableSetupColumn("完成", ImGuiTableColumnFlags.WidthFixed, 56f);
+                ImGui.TableSetupColumn("地区", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("操作", ImGuiTableColumnFlags.WidthFixed, 112f);
+                ImGui.TableHeadersRow();
+                foreach (var objective in ZodiacGuide.AtmaTerritories)
+                {
+                    var done = progress.CompletedObjectives.Contains(objective.Key);
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    if (ImGui.Checkbox($"##zodiac-atma-{objective.Key}", ref done))
+                    {
+                        if (done)
+                        {
+                            progress.CompletedObjectives.Add(objective.Key);
+                        }
+                        else
+                        {
+                            progress.CompletedObjectives.Remove(objective.Key);
+                        }
+
+                        configuration.Save();
+                    }
+
+                    ImGui.TableNextColumn();
+                    ImGui.TextUnformatted($"{objective.Name} · {objective.Zone}");
+                    ImGui.TableNextColumn();
+                    if (ImGui.SmallButton($"传送到地图##zodiac-atma-teleport-{objective.Key}"))
+                    {
+                        vnav.TeleportToMap(objective.Zone);
+                    }
+                }
+
+                ImGui.EndTable();
+            }
+        }
+        else if (stageKey == "zodiac-animus")
+        {
+            ImGui.Spacing();
+            ImGui.TextUnformatted("黄道十二文书");
+            ImGui.TextDisabled("每本书包含 10 个指定敌人、3 个副本、3 个 FATE 和 3 个理符目标。");
+            ImGui.TextDisabled($"已完成文书：{progress.CompletedBooks.Count}/{ZodiacGuide.AnimusBooks.Count}");
+            if (ImGui.BeginTable("zodiac-animus-books", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+            {
+                for (var index = 0; index < ZodiacGuide.AnimusBooks.Count; index++)
+                {
+                    if (index % 3 == 0)
+                    {
+                        ImGui.TableNextRow();
+                    }
+
+                    ImGui.TableNextColumn();
+                    var book = ZodiacGuide.AnimusBooks[index];
+                    var done = progress.CompletedBooks.Contains(book.Key);
+                    if (ImGui.Checkbox($"##zodiac-book-{book.Key}", ref done))
+                    {
+                        if (done)
+                        {
+                            progress.CompletedBooks.Add(book.Key);
+                        }
+                        else
+                        {
+                            progress.CompletedBooks.Remove(book.Key);
+                        }
+
+                        configuration.Save();
+                    }
+
+                    ImGui.SameLine(0f, 4f);
+                    ImGui.TextUnformatted(book.Name);
+                    ImGui.SameLine(0f, 8f);
+                    var active = progress.SelectedBookKey == book.Key;
+                    if (ImGui.RadioButton($"##zodiac-book-select-{book.Key}", active))
+                    {
+                        progress.SelectedBookKey = book.Key;
+                        configuration.Save();
+                    }
+
+                    ImGui.SameLine(0f, 3f);
+                    ImGui.TextDisabled("选择");
+                }
+
+                ImGui.EndTable();
+            }
+
+            var selectedBook = ZodiacGuide.AnimusBooks.FirstOrDefault(book => book.Key == progress.SelectedBookKey);
+            if (selectedBook != null)
+            {
+                ImGui.Spacing();
+                ImGui.TextUnformatted($"当前文书：{selectedBook.Name}");
+                DrawZodiacBookProgressSummary(selectedBook, progress.CompletedObjectives, progress.CompletedBooks);
+                DrawZodiacBookObjectives(selectedBook, progress.CompletedObjectives);
+            }
+        }
+    }
+
+    private void DrawZodiacBookProgressSummary(
+        ZodiacBookGuide book,
+        HashSet<string> completedObjectives,
+        HashSet<string> completedBooks)
+    {
+        var monsters = book.Monsters.Count(objective => completedObjectives.Contains(objective.Key));
+        var duties = book.Duties.Count(objective => completedObjectives.Contains(objective.Key));
+        var fates = book.Fates.Count(objective => completedObjectives.Contains(objective.Key));
+        var leves = book.Leves.Count(objective => completedObjectives.Contains(objective.Key));
+        var total = book.Monsters.Count + book.Duties.Count + book.Fates.Count + book.Leves.Count;
+        var completed = monsters + duties + fates + leves;
+        ImGui.TextDisabled($"敌人 {monsters}/{book.Monsters.Count}  ·  副本 {duties}/{book.Duties.Count}  ·  FATE {fates}/{book.Fates.Count}  ·  理符 {leves}/{book.Leves.Count}  ·  总计 {completed}/{total}");
+        ImGui.ProgressBar(total == 0 ? 0f : (float)completed / total, new Vector2(-1f, 0f), $"{completed}/{total}");
+        if (completed == total && total > 0 && completedBooks.Add(book.Key))
+        {
+            configuration.Save();
+        }
+    }
+
+    private void DrawZodiacBookObjectives(ZodiacBookGuide book, HashSet<string> completedObjectives)
+    {
+        var customCoordinates = GetZodiacUserCoordinates();
+        var monsters = book.Monsters.Select(objective => new ZodiacObjectiveRow(objective.Key, $"{objective.Name} · {objective.Zone}", objective.Zone, FormatZodiacLocation(objective.LocationNotes, MergeZodiacCoordinates(objective.Key, objective.Coordinates, customCoordinates)), MergeZodiacCoordinates(objective.Key, objective.Coordinates, customCoordinates))).ToArray();
+        var duties = book.Duties.Select(objective => new ZodiacObjectiveRow(objective.Key, objective.Name, string.Empty, objective.LocationNotes, null)).ToArray();
+        var fates = book.Fates.Select(objective => new ZodiacObjectiveRow(objective.Key, $"{objective.Name} · {objective.Zone}", objective.Zone, objective.LocationNotes, objective.MapX > 0f ? new[] { new ZodiacCoordinate(objective.MapX, objective.MapY, "FATE") } : null, objective.PrerequisiteNpcName, objective.PrerequisiteNpcZone, objective.PrerequisiteNpcMapX, objective.PrerequisiteNpcMapY)).ToArray();
+        var leves = book.Leves.Select(objective => new ZodiacObjectiveRow(objective.Key, $"{objective.Name} · {objective.Zone}", objective.Zone, $"等级 {objective.Level}。{objective.LocationNotes}", objective.MapX > 0f ? new[] { new ZodiacCoordinate(objective.MapX, objective.MapY, "NPC") } : null)).ToArray();
+        DrawZodiacObjectiveSection("指定敌人", monsters, completedObjectives);
+        DrawZodiacObjectiveSection("指定副本", duties, completedObjectives);
+        DrawZodiacObjectiveSection("指定 FATE", fates, completedObjectives);
+        DrawZodiacObjectiveSection("指定理符", leves, completedObjectives);
+    }
+
+    private sealed record ZodiacObjectiveRow(string Key, string Label, string Zone, string Notes, IReadOnlyList<ZodiacCoordinate>? Coordinates, string? NpcName = null, string? NpcZone = null, float NpcX = 0f, float NpcY = 0f);
+
+    private void DrawZodiacCurrentCoordinateButton()
+    {
+        if (!ImGui.SmallButton("获取当前坐标##zodiac-current-coordinate"))
+        {
+            return;
+        }
+
+        if (!vnav.TryGetCurrentMapCoordinate(out var zoneName, out var mapX, out var mapY))
+        {
+            PrintChat("[古武] 无法读取当前地图坐标，请确认已进入野外地图。 ");
+            return;
+        }
+
+        var coordinate = $"{zoneName} ({mapX:0.0}, {mapY:0.0})";
+        ImGui.SetClipboardText(coordinate);
+        PrintChat($"[古武] 当前坐标已复制：{coordinate}");
+    }
+
+    private Dictionary<string, List<ZodiacCoordinate>> GetZodiacUserCoordinates()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        return configuration.ZodiacProgressByCharacter.TryGetValue(characterKey, out var characterProgress)
+            && characterProgress.Jobs.TryGetValue(configuration.SelectedZodiacJobKey, out var jobProgress)
+            ? jobProgress.UserCoordinates
+            : new Dictionary<string, List<ZodiacCoordinate>>(StringComparer.Ordinal);
+    }
+
+    private static IReadOnlyList<ZodiacCoordinate>? MergeZodiacCoordinates(
+        string key,
+        IReadOnlyList<ZodiacCoordinate>? wikiCoordinates,
+        Dictionary<string, List<ZodiacCoordinate>> userCoordinates)
+    {
+        var merged = new List<ZodiacCoordinate>();
+        if (wikiCoordinates != null)
+        {
+            merged.AddRange(wikiCoordinates);
+        }
+
+        if (userCoordinates.TryGetValue(key, out var custom))
+        {
+            merged.AddRange(custom);
+        }
+
+        return merged.Count == 0 ? null : merged;
+    }
+
+    private static string FormatZodiacLocation(string notes, IReadOnlyList<ZodiacCoordinate>? coordinates)
+    {
+        if (coordinates is { Count: > 0 })
+        {
+            return $"坐标：{string.Join("、", coordinates)}";
+        }
+
+        return notes;
+    }
+
+    private void DrawZodiacObjectiveSection(
+        string title,
+        IEnumerable<ZodiacObjectiveRow> objectives,
+        HashSet<string> completedObjectives)
+    {
+        var rows = objectives.ToArray();
+        ImGui.Spacing();
+        var completed = rows.Count(row => completedObjectives.Contains(row.Key));
+        if (!ImGui.CollapsingHeader($"{title} ({completed}/{rows.Length})##zodiac-objectives-header-{title}", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            return;
+        }
+
+        if (ImGui.BeginTable($"zodiac-objectives-{title}", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+        {
+            ImGui.TableSetupColumn("完成", ImGuiTableColumnFlags.WidthFixed, 56f);
+            ImGui.TableSetupColumn("目标", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("操作", ImGuiTableColumnFlags.WidthFixed, 176f);
+            ImGui.TableHeadersRow();
+            foreach (var row in rows)
+            {
+                var done = completedObjectives.Contains(row.Key);
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                if (ImGui.Checkbox($"##zodiac-detail-{row.Key}", ref done))
+                {
+                    if (done)
+                    {
+                        completedObjectives.Add(row.Key);
+                    }
+                    else
+                    {
+                        completedObjectives.Remove(row.Key);
+                    }
+
+                    configuration.Save();
+                }
+
+                ImGui.TableNextColumn();
+                var objectiveProgress = GetZodiacObjectiveProgress(row.Key);
+                ImGui.TextWrapped(objectiveProgress > 0 ? $"{row.Label}  ({objectiveProgress}/3)" : row.Label);
+                if (!string.IsNullOrWhiteSpace(row.Notes))
+                {
+                    ImGui.TextDisabled(row.Notes);
+                }
+
+                ImGui.TableNextColumn();
+                if (!string.IsNullOrWhiteSpace(row.Zone) && !row.Zone.StartsWith("未知", StringComparison.Ordinal))
+                {
+                    if (ImGui.SmallButton($"传送到地图##zodiac-teleport-{row.Key}"))
+                    {
+                        vnav.TeleportToMap(row.Zone);
+                    }
+
+                    if (row.Coordinates is { Count: > 0 })
+                    {
+                        ImGui.SameLine(0f, 6f);
+                        var coordinateButtonLabel = title == "指定理符" ? "NPC导航" : "坐标导航";
+                        if (ImGui.SmallButton($"{coordinateButtonLabel}##zodiac-coordinate-{row.Key}"))
+                        {
+                            ImGui.OpenPopup($"zodiac-coordinate-menu-{row.Key}");
+                        }
+
+                        if (ImGui.BeginPopup($"zodiac-coordinate-menu-{row.Key}"))
+                        {
+                            ImGui.TextUnformatted("选择刷新点");
+                            ImGui.Separator();
+                            for (var coordinateIndex = 0; coordinateIndex < row.Coordinates.Count; coordinateIndex++)
+                            {
+                                var coordinate = row.Coordinates[coordinateIndex];
+                                var label = coordinate.Note == null
+                                    ? $"({coordinate.MapX:0.0}, {coordinate.MapY:0.0})"
+                                    : $"({coordinate.MapX:0.0}, {coordinate.MapY:0.0}) {coordinate.Note}";
+                                if (ImGui.Selectable($"前往 {label}##zodiac-coordinate-select-{row.Key}-{coordinateIndex}"))
+                                {
+                                    vnav.NavigateToMapCoordinate(row.Zone, coordinate.MapX, coordinate.MapY);
+                                }
+                            }
+
+                            ImGui.EndPopup();
+                        }
+                    }
+
+                }
+            }
+
+            ImGui.EndTable();
+        }
+    }
+
+    private int GetZodiacObjectiveProgress(string key)
+    {
+        var characterKey = GetCurrentCharacterKey();
+        return configuration.ZodiacProgressByCharacter.TryGetValue(characterKey, out var characterProgress)
+            && characterProgress.Jobs.TryGetValue(configuration.SelectedZodiacJobKey, out var jobProgress)
+            ? jobProgress.RequirementProgress.GetValueOrDefault(key)
+            : 0;
+    }
+
+    private void SaveCurrentZodiacCoordinate(string objectiveKey, string expectedZone)
+    {
+        if (!vnav.TryGetCurrentMapCoordinate(out var zoneName, out var mapX, out var mapY))
+        {
+            PrintChat("[古武] 无法读取当前地图坐标，请确认已进入野外地图。 ");
+            return;
+        }
+
+        if (!string.Equals(zoneName, expectedZone, StringComparison.Ordinal))
+        {
+            PrintChat($"[古武] 当前地图是“{zoneName}”，目标地图是“{expectedZone}”，未保存坐标。 ");
+            return;
+        }
+
+        var characterKey = GetCurrentCharacterKey();
+        if (string.IsNullOrWhiteSpace(characterKey)
+            || !configuration.ZodiacProgressByCharacter.TryGetValue(characterKey, out var characterProgress)
+            || !characterProgress.Jobs.TryGetValue(configuration.SelectedZodiacJobKey, out var jobProgress))
+        {
+            PrintChat("[古武] 当前角色进度尚未初始化，未保存坐标。 ");
+            return;
+        }
+
+        if (!jobProgress.UserCoordinates.TryGetValue(objectiveKey, out var coordinates))
+        {
+            coordinates = new List<ZodiacCoordinate>();
+            jobProgress.UserCoordinates[objectiveKey] = coordinates;
+        }
+
+        var duplicate = coordinates.Any(coordinate =>
+            Math.Abs(coordinate.MapX - mapX) < 0.05f && Math.Abs(coordinate.MapY - mapY) < 0.05f);
+        if (!duplicate)
+        {
+            coordinates.Add(new ZodiacCoordinate(mapX, mapY, "用户提交"));
+            configuration.Save();
+        }
+
+        PrintChat(duplicate
+            ? $"[古武] 坐标 ({mapX:0.0}, {mapY:0.0}) 已存在。"
+            : $"[古武] 已为当前目标保存坐标 ({mapX:0.0}, {mapY:0.0})。 ");
+    }
+
+    private void DrawZodiacZetaProgress(ZodiacJobProgress progress)
+    {
+        const int total = 12;
+        var completed = 0;
+        ImGui.Spacing();
+        ImGui.TextUnformatted("本我光阶段");
+        ImGui.TextDisabled("每个本我阶段单独记录；完成 12 个阶段后，本我进度完成。");
+        if (ImGui.BeginTable("zodiac-zeta-mahatma", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+        {
+            ImGui.TableSetupColumn("完成", ImGuiTableColumnFlags.WidthFixed, 56f);
+            ImGui.TableSetupColumn("阶段", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("状态", ImGuiTableColumnFlags.WidthFixed, 90f);
+            ImGui.TableHeadersRow();
+            for (var index = 1; index <= total; index++)
+            {
+                var key = $"zodiac-zeta-mahatma-{index}";
+                var done = progress.CompletedObjectives.Contains(key);
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                if (ImGui.Checkbox($"##{key}", ref done))
+                {
+                    if (done)
+                    {
+                        progress.CompletedObjectives.Add(key);
+                    }
+                    else
+                    {
+                        progress.CompletedObjectives.Remove(key);
+                    }
+
+                    configuration.Save();
+                }
+
+                if (done)
+                {
+                    completed++;
+                }
+
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted($"本我光阶段 {index}");
+                ImGui.TableNextColumn();
+                ImGui.TextDisabled(done ? "完成" : "未完成");
+            }
+
+            ImGui.EndTable();
+        }
+
+        progress.RequirementProgress["zodiac-zeta-mahatma"] = completed;
+        ImGui.ProgressBar((float)completed / total, new Vector2(-1f, 0f), $"{completed}/{total}");
+    }
+
+    private void DrawZodiacObjectiveRow(string key, string label, HashSet<string> completedObjectives)
+    {
+        var done = completedObjectives.Contains(key);
+        ImGui.TableNextRow();
+        ImGui.TableNextColumn();
+        if (ImGui.Checkbox($"##zodiac-objective-{key}", ref done))
+        {
+            if (done)
+            {
+                completedObjectives.Add(key);
+            }
+            else
+            {
+                completedObjectives.Remove(key);
+            }
+
+            configuration.Save();
+        }
+
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(label);
     }
 
     private void DrawMandervilleWorkspace()
@@ -2896,7 +3392,7 @@ public sealed class PluginUI
         ImGui.TextDisabled($"当前可参与 {fates.Length} 个 FATE");
         foreach (var fate in fates)
         {
-            ImGui.TextUnformatted($"{fate.Name}  {FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
+            ImGui.TextUnformatted($"{GetFateDisplayName(fate)}  {FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
             ImGui.SameLine();
             if (ImGui.SmallButton($"导航##fate-assistant-nav-{fate.FateId}"))
             {
@@ -3516,6 +4012,7 @@ public sealed class PluginUI
                             return;
                         }
                     }
+
                 }
 
                 backpackSkippedItemIds.Add(itemId);
@@ -3681,18 +4178,24 @@ public sealed class PluginUI
         PrintChat($"[导航日志] {message}");
     }
 
-    private void DrawStage(PhantomWeaponStage stage)
+    private void DrawStage(
+        PhantomWeaponStage stage,
+        Dictionary<string, int>? progress = null,
+        HashSet<string>? completedTasks = null)
     {
+        progress ??= configuration.Progress;
+        completedTasks ??= configuration.CompletedTasks;
+
         ImGui.TextUnformatted($"{stage.ItemLevel}  {stage.Quest}");
         ImGui.TextWrapped(stage.Summary);
 
         ImGui.Spacing();
-        DrawTasks(stage);
+        DrawTasks(stage, completedTasks);
 
         ImGui.Spacing();
         if (stage.Key != "secret")
         {
-            DrawRequirements(stage);
+            DrawRequirements(stage, progress);
         }
 
         if (stage.RepeatableRewards.Count > 0)
@@ -3720,7 +4223,7 @@ public sealed class PluginUI
         }
     }
 
-    private void DrawTasks(PhantomWeaponStage stage)
+    private void DrawTasks(PhantomWeaponStage stage, HashSet<string> completedTasks)
     {
         if (stage.Tasks.Count == 0)
         {
@@ -3735,16 +4238,16 @@ public sealed class PluginUI
 
         foreach (var task in stage.Tasks)
         {
-            var done = configuration.CompletedTasks.Contains(task.Key);
+            var done = completedTasks.Contains(task.Key);
             if (ImGui.Checkbox($"[仅一次] {task.Name}##{task.Key}", ref done))
             {
                 if (done)
                 {
-                    configuration.CompletedTasks.Add(task.Key);
+                    completedTasks.Add(task.Key);
                 }
                 else
                 {
-                    configuration.CompletedTasks.Remove(task.Key);
+                    completedTasks.Remove(task.Key);
                 }
 
                 configuration.Save();
@@ -3754,7 +4257,7 @@ public sealed class PluginUI
         }
     }
 
-    private void DrawRequirements(PhantomWeaponStage stage)
+    private void DrawRequirements(PhantomWeaponStage stage, Dictionary<string, int> progress)
     {
         ImGui.TextUnformatted("材料与进度");
         if (ImGui.BeginTable($"requirements-{stage.Key}", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
@@ -3766,7 +4269,7 @@ public sealed class PluginUI
 
             foreach (var requirement in stage.Requirements)
             {
-                DrawRequirementRow(requirement);
+                DrawRequirementRow(requirement, progress);
             }
 
             ImGui.EndTable();
@@ -3841,9 +4344,10 @@ public sealed class PluginUI
         ImGui.TextWrapped(duty.Name);
     }
 
-    private void DrawRequirementRow(PhantomWeaponRequirement requirement)
+    private void DrawRequirementRow(PhantomWeaponRequirement requirement, Dictionary<string, int> progress)
     {
-        var current = configuration.Progress.GetValueOrDefault(requirement.Key);
+        var isZodiacBookProgress = requirement.Key == "zodiac-animus-books";
+        var current = isZodiacBookProgress ? GetCompletedZodiacBookCount() : progress.GetValueOrDefault(requirement.Key);
         current = Math.Clamp(current, 0, requirement.Needed);
 
         ImGui.TableNextRow();
@@ -3851,11 +4355,18 @@ public sealed class PluginUI
         ImGui.TextWrapped(requirement.Name);
 
         ImGui.TableNextColumn();
-        ImGui.SetNextItemWidth(-1);
-        if (ImGui.InputInt($"##progress-{requirement.Key}", ref current, 1, Math.Max(10, requirement.Needed / 10)))
+        if (isZodiacBookProgress)
         {
-            configuration.Progress[requirement.Key] = Math.Clamp(current, 0, requirement.Needed);
-            configuration.Save();
+            ImGui.TextDisabled("由下方文书完成状态自动计算");
+        }
+        else
+        {
+            ImGui.SetNextItemWidth(-1);
+            if (ImGui.InputInt($"##progress-{requirement.Key}", ref current, 1, Math.Max(10, requirement.Needed / 10)))
+            {
+                progress[requirement.Key] = Math.Clamp(current, 0, requirement.Needed);
+                configuration.Save();
+            }
         }
 
         var fraction = requirement.Needed == 0 ? 1f : Math.Clamp((float)current / requirement.Needed, 0f, 1f);
@@ -3863,6 +4374,15 @@ public sealed class PluginUI
 
         ImGui.TableNextColumn();
         ImGui.TextWrapped($"剩余 {Math.Max(0, requirement.Needed - current)}。{requirement.Source}");
+    }
+
+    private int GetCompletedZodiacBookCount()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        return configuration.ZodiacProgressByCharacter.TryGetValue(characterKey, out var characterProgress)
+            && characterProgress.Jobs.TryGetValue(configuration.SelectedZodiacJobKey, out var jobProgress)
+            ? Math.Min(jobProgress.CompletedBooks.Count, ZodiacGuide.AnimusBooks.Count)
+            : 0;
     }
 
     private void DrawRewards(PhantomWeaponStage stage)
@@ -4298,7 +4818,7 @@ public sealed class PluginUI
 
             foreach (var fate in fates)
             {
-                ImGui.TextUnformatted($"{fate.Name}");
+                ImGui.TextUnformatted(GetFateDisplayName(fate));
                 ImGui.SameLine();
                 ImGui.TextDisabled($"{FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
                 ImGui.SameLine();
@@ -4325,6 +4845,34 @@ public sealed class PluginUI
             .ThenBy(fate => fate.TimeRemaining < 0 ? long.MaxValue : fate.TimeRemaining)
             .Take(8)
             .ToArray();
+    }
+
+    private string GetFateDisplayName(IFate fate)
+    {
+        var fateName = fate.Name.ToString();
+        var book = GetSelectedZodiacBook();
+        if (book != null && book.Fates.Any(objective =>
+                fateName.Contains(objective.Name, StringComparison.OrdinalIgnoreCase)
+                || objective.Name.Contains(fateName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return $"{fateName}【{book.Name}】";
+        }
+
+        return fateName;
+    }
+
+    private ZodiacBookGuide? GetSelectedZodiacBook()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        if (string.IsNullOrWhiteSpace(characterKey)
+            || !configuration.ZodiacProgressByCharacter.TryGetValue(characterKey, out var characterProgress)
+            || !characterProgress.Jobs.TryGetValue(configuration.SelectedZodiacJobKey, out var jobProgress)
+            || string.IsNullOrWhiteSpace(jobProgress.SelectedBookKey))
+        {
+            return null;
+        }
+
+        return ZodiacGuide.AnimusBooks.FirstOrDefault(book => book.Key == jobProgress.SelectedBookKey);
     }
 
     private void NavigateToFate(IFate fate)

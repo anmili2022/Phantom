@@ -71,6 +71,8 @@
 - `Features/Yokai/YokaiProgressService.cs`：妖表奖励扫描，支持背包、关键道具、装备栏、兵装库、鞍囊、收藏柜、投影台和雇员缓存。
 - `Features/Manderville/MandervilleWeaponGuide.cs`：曼德维尔武器四阶段任务与材料资料。
 - `Features/RelicWeapons/RelicWeaponGuide.cs`：雅武、古武、魂武、优武、义武、天钢、莫雯、宇宙和绝武的阶段资料。
+- `Features/RelicWeapons/ZodiacProgressModels.cs`：古武角色/职业独立进度，以及怪物、FATE、副本、理符和黄道十二文书目标模型。
+- `Features/RelicWeapons/ZodiacGuide.cs`：12 个魂晶地区和 9 本黄道文书的静态目标数据。
 - `Features/RelicWeapons/WeaponItemIds.cs` / `Features/RelicWeapons/weapon-item-ids.txt`：雅武、古武至绝武十个系列的固定 `Item.RowId` 映射及其加载器。
 - `docs/`：设计文档、使用说明（usage.html）、发布指南（release.md）、幻境村路由移植指南（occult-village-route-porting.md）。
 
@@ -154,11 +156,35 @@
 - `GroupWeaponProgressByRole` / `ShowWeaponProgressIcons`：武器进度总览选项。
 - `WeaponProgressByCharacter` / `WeaponProgressItemsByCharacter` / `WeaponProgressSyncTimes`：按角色维度的武器进度总览数据。
 - `YokaiOwnedRewardKeysByCharacter` / `YokaiSyncTimesByCharacter`：按角色维度保存妖表奖励和同步时间。
+- `ZodiacProgressByCharacter`：按角色、职业保存古武制作进度；材料数值写入 `RequirementProgress`，任务/目标勾选写入 `CompletedObjectives`。
+- `SelectedZodiacJobKey`：古武阶段页当前选择的职业，默认骑士 `pld`。
+- `FateAssistantEnabled`：古武 FATE 助手开关；当前只有配置字段，尚未接入助手生命周期和 UI。
 - `HideOwnedYokaiRewards`：妖表页面是否隐藏已获得奖励。
 - `DebugLogSyncedItemLocations`：同步时是否在聊天栏输出候选物品的库存位置或“未找到”状态。
 - `DebugLogMissingItemLocations`：是否输出未找到的候选物品；仅在 `DebugLogSyncedItemLocations` 开启时显示和生效。
 - `BackpackOrganizeItemIds`：用户选择的待整理物品 `itemid` 集合；选择结果持久化保存，物品暂时不在背包中时仍保留。
 - `TuliyollalAetheryteId`：旧配置字段（默认 13），幻境村路由当前使用固定常量 216，不再读取此字段。
+
+### 古武专属进度
+
+- 古武阶段页复用 `PhantomWeaponStage` 的显示结构，但材料和任务不再复用全局 `Progress` / `CompletedTasks`。
+- UI 先按当前角色取得 `ZodiacCharacterProgress`，再按所选职业取得 `ZodiacJobProgress`；切换职业会立即切换整套手填进度。
+- 未登录时只展示提示，不创建空角色键，避免多个未登录会话共享错误数据。
+- `CompletedBooks`、`SelectedBookKey` 和文书四类目标模型已接入黄道十二文书页面。
+- `ZodiacGuide.AtmaTerritories` 已提供 12 个魂晶地区的任意 FATE 手动完成目标。
+- `ZodiacGuide.AnimusBooks` 已提供 9 本黄道文书的 10 个指定敌人、3 个副本、3 个 FATE 和 3 个理符目标；目标完成状态按角色/职业保存。
+- 文书指定敌人已录入 Wiki 核对过的多个刷新坐标；路线型、范围型或缺少明确地点的坐标以文字说明展示，不伪造单点。
+- 文书怪物、FATE 和理符目标支持按地图名称请求 Lifestream 传送；目标地图由客户端 Lumina `Map` 表解析，无法解析时保留手动传送方式。
+- 有明确坐标的敌人和 FATE 支持从坐标菜单选择具体刷新点并导航；FATE 的前置 NPC 坐标可单独导航。
+- 理符目标保存接取 NPC 的地图和坐标，使用 `NPC导航` 前往接取点。
+- 古武页面顶部 Wiki 按钮右侧提供“获取当前坐标”，读取当前地图 `(X, Y)` 并复制到剪贴板，用于人工补充或核对 Wiki 坐标。
+- 文书页面显示每本书的敌人/副本/FATE/理符四类完成数和总进度，全部 19 个目标完成后自动加入 `CompletedBooks`。
+- 文书四类目标区块可折叠，标题显示各类完成数；指定目标的操作列提供地图传送、坐标导航或 NPC 导航。
+- 黄道十二文书材料项不再允许单独手填，`zodiac-animus-books` 直接由当前角色/职业的 `CompletedBooks` 派生，确保材料进度和文书勾选一致。
+- 现有危命助手会将当前角色/职业所选文书中名称匹配的 FATE 显示为 `FATE 名称【文书名】`；这是显示标记，不会写入通用 Phantom FATE 进度。
+- `ZodiacMonsterTracker` 复用聊天监听，按当前角色、职业和所选文书累计目标怪物击杀，每个目标需要 3 次；不确定的聊天文本不自动标记。
+- 本我阶段提供 12 个独立光阶段，完成数保存到 `RequirementProgress["zodiac-zeta-mahatma"]`。
+- 下一步按顺序完成：继续核对剩余 Wiki 坐标和特殊前置条件；实现 FATE 完成自动识别；进入游戏实际验证击杀文本、坐标换算、NPC/FATE 导航和 Lifestream 传送。
 
 ## 总览与库存同步
 

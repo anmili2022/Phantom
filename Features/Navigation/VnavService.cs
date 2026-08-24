@@ -219,6 +219,94 @@ public sealed class VnavService : IDisposable
         return true;
     }
 
+    public bool TeleportToMap(string zoneName)
+    {
+        if (string.IsNullOrWhiteSpace(zoneName))
+        {
+            PrintEcho("传送失败：目标地图名称为空。 ");
+            return false;
+        }
+
+        var map = DalamudApi.DataManager.GetExcelSheet<Map>()
+            .FirstOrDefault(candidate => candidate.TerritoryType.RowId != 0
+                && candidate.PlaceName.Value.Name.ExtractText().Equals(zoneName, StringComparison.Ordinal));
+        if (map.RowId == 0)
+        {
+            PrintEcho($"传送失败：客户端地图表中找不到“{zoneName}”。 ");
+            return false;
+        }
+
+        var territoryType = map.TerritoryType.RowId;
+        var target = new Vector3(0f, 0f, 0f);
+        if (!TryFindAetherytePosition(FindAetheryteForTerritory(territoryType), out target))
+        {
+            PrintEcho($"传送失败：地图“{zoneName}”没有可用以太水晶。 ");
+            return false;
+        }
+
+        return TryTeleportToTerritory(territoryType, target, configuration.UseFlightNavigation, autoDismount: false);
+    }
+
+    public bool NavigateToMapCoordinate(string zoneName, float mapX, float mapY)
+    {
+        if (string.IsNullOrWhiteSpace(zoneName))
+        {
+            PrintEcho("导航失败：目标地图名称为空。 ");
+            return false;
+        }
+
+        var map = DalamudApi.DataManager.GetExcelSheet<Map>()
+            .FirstOrDefault(candidate => candidate.TerritoryType.RowId != 0
+                && candidate.PlaceName.Value.Name.ExtractText().Equals(zoneName, StringComparison.Ordinal));
+        if (map.RowId == 0 || !TryResolveMapLinkPosition(map.TerritoryType.RowId, map.RowId, mapX, mapY, out var position))
+        {
+            PrintEcho($"导航失败：无法解析“{zoneName}”坐标 ({mapX:0.0}, {mapY:0.0})。 ");
+            return false;
+        }
+
+        var territoryType = map.TerritoryType.RowId;
+        if (DalamudApi.ClientState.TerritoryType != territoryType)
+        {
+            return TryTeleportToTerritory(territoryType, position, configuration.UseFlightNavigation);
+        }
+
+        var snapped = SnapToNavmesh(position);
+        if (!snapped.HasValue)
+        {
+            PrintEcho($"导航失败：坐标 ({mapX:0.0}, {mapY:0.0}) 附近没有可行走网格。 ");
+            return false;
+        }
+
+        StartMove(snapped.Value, configuration.UseFlightNavigation);
+        PrintEcho($"已开始导航到 {zoneName} ({mapX:0.0}, {mapY:0.0})。 ");
+        return true;
+    }
+
+    public bool TryGetCurrentMapCoordinate(out string zoneName, out float mapX, out float mapY)
+    {
+        zoneName = string.Empty;
+        mapX = 0f;
+        mapY = 0f;
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        var territoryType = DalamudApi.ClientState.TerritoryType;
+        if (player == null || territoryType == 0)
+        {
+            return false;
+        }
+
+        var map = DalamudApi.DataManager.GetExcelSheet<Map>()
+            .FirstOrDefault(candidate => candidate.TerritoryType.RowId == territoryType && candidate.SizeFactor > 0);
+        if (map.RowId == 0)
+        {
+            return false;
+        }
+
+        zoneName = map.PlaceName.Value.Name.ExtractText();
+        mapX = 0.02f * (map.OffsetX + 102400f / map.SizeFactor + player.Position.X) + 1f;
+        mapY = 0.02f * (map.OffsetY + 102400f / map.SizeFactor + player.Position.Z) + 1f;
+        return true;
+    }
+
     public void TeleportAndNavigate(Vector3 targetPos, bool fly)
     {
         var snapped = SnapToNavmesh(targetPos);
