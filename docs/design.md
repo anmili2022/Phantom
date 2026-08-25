@@ -55,8 +55,8 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.25.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.25.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前版本 0.1.29.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl、AssemblyVersion 0.1.29.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider、IGameGui）。
@@ -65,6 +65,7 @@
 - `Features/PhantomWeapons/SecretKillTracker.cs`：聊天击杀/讨伐任务/探索记忆自动标记。
 - `Features/PhantomWeapons/FateTracker.cs`：金牌 FATE 自动检测。
 - `Features/Navigation/VnavService.cs`：导航 IPC 服务，含幻境村路线状态机。
+- `Features/Duties/AutoDutyService.cs`：可选 AutoDuty IPC 集成，按副本名解析客户端副本数据并启动单次自动流程。
 - `Features/Hunt/HuntAssistant.cs`：狩猎车头 Flag 监听、地图链接坐标解析与自动飞行导航。
 - `UI/PluginUI.cs`：主窗口、左侧系列导航、自绘阶段页签、武器进度总览、妖表页面、悬浮窗和设置页。
 - `Features/Yokai/YokaiWatchGuide.cs`：妖表联动奖励定义。
@@ -150,6 +151,7 @@
 - `FloatingZodiacJobKey` / `FloatingZodiacStageKey`：悬浮窗古武监控当前选择的职业和阶段。
 - `HuntAssistantEchoLeaderMessages`：测试开关，以 Echo/默语复述指定车头在任意频道的发言，用于诊断聊天监听和车头匹配。
 - `NavigateToFlagDirectly`：前往 Flag 时使用直接前往还是导航前往。
+- `SetFlagOnNavigation`：具有明确世界坐标或地图坐标的插件导航是否同步设置游戏地图 Flag，默认开启；仅传送到地图不设置 Flag。
 - `HuntAssistantEnabled`：是否监听指定车头发送的狩猎 Flag。
 - `ShowHuntAssistantInFloatingWindow`：是否在悬浮窗显示狩猎助手状态。
 - `HuntLeaderName`：指定车头的角色名。
@@ -177,11 +179,16 @@
 - `ZodiacGuide.AnimusBooks` 已提供 9 本黄道文书的 10 个指定敌人、3 个副本、3 个 FATE 和 3 个理符目标；目标完成状态按角色/职业保存。
 - 文书指定敌人已录入 Wiki 核对过的多个刷新坐标；路线型、范围型或缺少明确地点的坐标以文字说明展示，不伪造单点。
 - 文书怪物、FATE 和理符目标支持按地图名称请求 Lifestream 传送；目标地图由客户端 Lumina `Map` 表解析，无法解析时保留手动传送方式。
+- “传送到地图”只调用 Lifestream，不登记后续移动目标；只有坐标、NPC、FATE 和世界坐标导航才在读图后继续调用 vnavmesh，避免角色传送后围绕大水晶移动。
 - 有明确坐标的敌人和 FATE 支持从坐标菜单选择具体刷新点并导航；FATE 的前置 NPC 坐标可单独导航。
-- 理符目标保存接取 NPC 的地图和坐标，使用 `NPC导航` 前往接取点。
+- 文书目标同时支持地图二维坐标和实测世界三维坐标。当前地图二维坐标导航以玩家当前高度开始查询 navmesh；跨地图导航在传送落地后以玩家高度重新查询，减少东拉诺西亚、库尔札斯中央高地等多层地图吸附到错误网格。
+- 拉诺西亚外地的武伽玛罗矿山目标使用实测洞口世界坐标 `(75.81, 52.79, -540.95)`；主页面先导航到洞口，并允许将洞内小怪刷新点逐个设为 Flag，不从洞外强行规划至地下网格。
+- 水天文书第一卷“朗咒巨人”使用三个实测世界坐标：`(-289.82, 292.68, 262.35)`、`(-403.18, 239.67, 279.30)`、`(-437.52, 245.89, 314.31)`。
+- 水狱文书第一卷 FATE“青磷大路”位于北萨纳兰，导航至慎重的商人 `(21.8, 29.4)`，与 NPC 对话触发。
+- 理符目标保存接取 NPC 的地图和坐标，使用 `NPC导航` 前往接取点；列表和悬浮窗显示 `[佣兵理符]` 或 `[军队理符·黑涡团/双蛇党/恒辉队]`，部队归属来自任务本身而非玩家所属军队。
 - 古武页面顶部 Wiki 按钮右侧提供“获取当前坐标”，读取当前地图 `(X, Y)` 并复制到剪贴板，用于人工补充或核对 Wiki 坐标。
 - 文书页面显示每本书的敌人/副本/FATE/理符四类完成数和总进度，全部 19 个目标完成后自动加入 `CompletedBooks`。
-- 文书四类目标区块可折叠，标题显示各类完成数；指定目标的操作列提供地图传送、坐标导航或 NPC 导航。
+- 文书四类目标区块可折叠，标题显示各类完成数；指定目标的操作列提供地图传送、坐标导航、NPC 导航、洞口/小怪操作或 `AD执行`。
 - 黄道十二文书材料项不再允许单独手填，`zodiac-animus-books` 直接由当前角色/职业的 `CompletedBooks` 派生，确保材料进度和文书勾选一致。
 - 现有危命助手会将当前角色/职业所选文书中名称匹配的 FATE 显示为 `FATE 名称【文书名】`；这是显示标记，不会写入通用 Phantom FATE 进度。
 - `ZodiacMonsterTracker` 复用聊天监听，按当前角色、职业和所选文书累计目标怪物击杀，每个目标需要 3 次；不确定的聊天文本不自动标记。
@@ -190,8 +197,9 @@
 - 悬浮窗古武监控卡片可独立选择职业和古武阶段（古武、天极、魂晶、魂灵、新星、镇魂、黄道、本我）；阶段内容读取当前角色/职业的独立进度。
 - 古武监控显示：魂晶地区完成数、黄道十二文书完成数和当前文书完成数；其他阶段显示阶段材料进度。
 - 古武监控根据当前阶段显示“下一步”：魂晶显示下一个地区 FATE，魂灵显示当前文书的下一个敌人/副本/FATE/理符，其他阶段显示下一个未完成任务或材料。
-- 古武监控的“下一步”目标提供“前往”按钮：魂晶传送到目标地图；敌人、FATE 和理符导航到首个可用坐标；副本和无坐标材料只显示目标文字。
+- 古武监控的“下一步”目标提供操作按钮：魂晶传送到目标地图；敌人、FATE 和理符导航到首个可用精确坐标；副本通过 `AD执行` 请求 AutoDuty 自动完成一次。
 - 古武监控卡片标题可点击折叠/展开，第一行提供“停止导航”按钮；幻武监控同样支持标题折叠。两张卡片同时开启时分别保留自己的折叠状态和内容。
+- UI 点击区域兼容性规则：不要使用固定宽度的 `Selectable` 作为短标题按钮。不同用户的字体、字体缩放、DPI 或窗口宽度可能使文字超出点击区域，或被同一行右侧控件覆盖，造成“文字可见但点击无效”。标题类交互统一使用按 `ImGui.CalcTextSize(label)` 动态计算宽度的 `Button`，并为同一行的状态文字和操作按钮预留空间。
 - 下一步按顺序完成：继续核对剩余 Wiki 坐标和特殊前置条件；实现 FATE 完成自动识别；进入游戏实际验证击杀文本、坐标换算、NPC/FATE 导航和 Lifestream 传送。
 
 ## 总览与库存同步
@@ -319,6 +327,25 @@ worldZ = 50f * mapY - map.OffsetY - 102400f / scale - 50f;
 
 1. 使用 Lifestream 传送到目标地图的推荐以太之光。
 2. 传送完成后使用 vnavmesh 导航到目标小怪位置。
+
+普通地图传送和目标导航必须保持语义分离：
+
+- `TeleportToMap` 只请求 Lifestream 传送，不保存 `pendingTarget`，因此读图完成后不会向大水晶再次移动。
+- 地图坐标、世界坐标、FATE、幻武目标和狩猎目标才保存真实目的地，并在读图稳定、Lifestream 空闲和 vnavmesh ready 后继续导航。
+- 开启 `SetFlagOnNavigation` 后，所有具有明确目的地的导航通过 `AgentMap.SetFlagMapMarker` 同步设置 Flag；游戏一次只能保留一个 Flag。
+- 仅传送到地图没有真实目的地，不设置 Flag。洞穴刷新点菜单可显式强制设置 Flag，供玩家进入洞穴后定位。
+
+## AutoDuty 联动
+
+`AutoDutyService` 将 AutoDuty 视为可选依赖，不直接引用其程序集：
+
+1. 从客户端 `ContentFinderCondition` 按标准化后的中文副本名解析 `TerritoryType`。
+2. 检查 `InstalledPlugins` 中 `InternalName == "AutoDuty"` 且插件已加载。
+3. 调用 `AutoDuty.ContentHasPath(uint)` 确认该副本存在可用路径。
+4. 调用 `AutoDuty.Run(uint, 1, false)` 启动一次完整自动流程，组队模式、战斗插件和其他行为沿用用户的 AutoDuty 配置。
+5. 无法解析副本、插件未加载、无路径或 IPC 异常时只输出明确提示，不执行替代自动操作。
+
+古武文书指定副本、幻武秘影副本主页面和悬浮窗均提供 `AD执行`。讨伐战等内容同样先由 `ContentHasPath` 判定，不假设 AutoDuty 必然支持。
 
 需要调用的 IPC 参考 `E:\git\Chronicler\Features\CrescentIsle\VnavService.cs`。
 

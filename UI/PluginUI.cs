@@ -14,6 +14,8 @@ namespace Phantom;
 
 public sealed class PluginUI
 {
+    private const string OuterLaNoscea = "拉诺西亚外地";
+    private static readonly ZodiacWorldCoordinate OuterLaNosceaMineEntrance = new(75.81f, 52.79f, -540.95f, "武伽玛罗矿山洞口");
     private sealed record OverviewSeries(
         string SectionKey,
         string SeriesKey,
@@ -69,6 +71,7 @@ public sealed class PluginUI
 
     private readonly PluginConfiguration configuration;
     private readonly VnavService vnav;
+    private readonly AutoDutyService autoDuty;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? weaponItemLookup;
     private Dictionary<string, IReadOnlyList<Item>>? phantomRewardWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? mandervilleWeaponItemLookup;
@@ -94,6 +97,8 @@ public sealed class PluginUI
     private bool floatingPhantomDutiesOpen;
     private bool floatingZodiacMonitorOpen = true;
     private bool floatingPhantomMonitorOpen = true;
+    private bool floatingFateAssistantOpen = true;
+    private bool floatingHuntAssistantOpen = true;
     private string backpackOrganizeSearch = string.Empty;
     private List<BackpackItemSummary> backpackOrganizeItems = new();
     private PendingBackpackMove? pendingBackpackMove;
@@ -134,10 +139,11 @@ public sealed class PluginUI
     private static readonly HashSet<uint> ChroniclerFateTerritories = new() { 1252, 1346 };
     private static readonly HashSet<uint> UnsupportedFateTerritories = new() { 732, 763, 795, 827, 920, 975 };
 
-    public PluginUI(PluginConfiguration configuration, VnavService vnav)
+    public PluginUI(PluginConfiguration configuration, VnavService vnav, AutoDutyService autoDuty)
     {
         this.configuration = configuration;
         this.vnav = vnav;
+        this.autoDuty = autoDuty;
     }
 
     public void OpenMainWindow()
@@ -1075,17 +1081,20 @@ public sealed class PluginUI
     private void DrawZodiacBookObjectives(ZodiacBookGuide book, HashSet<string> completedObjectives)
     {
         var customCoordinates = GetZodiacUserCoordinates();
-        var monsters = book.Monsters.Select(objective => new ZodiacObjectiveRow(objective.Key, $"{objective.Name} · {objective.Zone}", objective.Zone, FormatZodiacLocation(objective.LocationNotes, MergeZodiacCoordinates(objective.Key, objective.Coordinates, customCoordinates)), MergeZodiacCoordinates(objective.Key, objective.Coordinates, customCoordinates))).ToArray();
-        var duties = book.Duties.Select(objective => new ZodiacObjectiveRow(objective.Key, objective.Name, string.Empty, objective.LocationNotes, null)).ToArray();
+        var monsters = book.Monsters.Select(objective => new ZodiacObjectiveRow(objective.Key, $"{objective.Name} · {objective.Zone}", objective.Zone, FormatZodiacLocation(objective.LocationNotes, MergeZodiacCoordinates(objective.Key, objective.Coordinates, customCoordinates)), MergeZodiacCoordinates(objective.Key, objective.Coordinates, customCoordinates), WorldCoordinates: objective.WorldCoordinates)).ToArray();
+        var duties = book.Duties.Select(objective => new ZodiacObjectiveRow(objective.Key, objective.Name, string.Empty, objective.LocationNotes, null, DutyName: objective.Name)).ToArray();
         var fates = book.Fates.Select(objective => new ZodiacObjectiveRow(objective.Key, $"{objective.Name} · {objective.Zone}", objective.Zone, objective.LocationNotes, objective.MapX > 0f ? new[] { new ZodiacCoordinate(objective.MapX, objective.MapY, "FATE") } : null, objective.PrerequisiteNpcName, objective.PrerequisiteNpcZone, objective.PrerequisiteNpcMapX, objective.PrerequisiteNpcMapY)).ToArray();
-        var leves = book.Leves.Select(objective => new ZodiacObjectiveRow(objective.Key, $"{objective.Name} · {objective.Zone}", objective.Zone, $"等级 {objective.Level}。{objective.LocationNotes}", objective.MapX > 0f ? new[] { new ZodiacCoordinate(objective.MapX, objective.MapY, "NPC") } : null)).ToArray();
+        var leves = book.Leves.Select(objective => new ZodiacObjectiveRow(objective.Key, $"[{FormatLeveType(objective)}] {objective.Name} · {objective.Zone}", objective.Zone, $"等级 {objective.Level}。{objective.LocationNotes}", objective.MapX > 0f ? new[] { new ZodiacCoordinate(objective.MapX, objective.MapY, "NPC") } : null)).ToArray();
         DrawZodiacObjectiveSection("指定敌人", monsters, completedObjectives);
         DrawZodiacObjectiveSection("指定副本", duties, completedObjectives);
         DrawZodiacObjectiveSection("指定 FATE", fates, completedObjectives);
         DrawZodiacObjectiveSection("指定理符", leves, completedObjectives);
     }
 
-    private sealed record ZodiacObjectiveRow(string Key, string Label, string Zone, string Notes, IReadOnlyList<ZodiacCoordinate>? Coordinates, string? NpcName = null, string? NpcZone = null, float NpcX = 0f, float NpcY = 0f);
+    private sealed record ZodiacObjectiveRow(string Key, string Label, string Zone, string Notes, IReadOnlyList<ZodiacCoordinate>? Coordinates, string? NpcName = null, string? NpcZone = null, float NpcX = 0f, float NpcY = 0f, string? DutyName = null, IReadOnlyList<ZodiacWorldCoordinate>? WorldCoordinates = null);
+
+    private static string FormatLeveType(ZodiacLeveObjective objective)
+        => objective.GrandCompany == null ? objective.Category : $"{objective.Category}·{objective.GrandCompany}";
 
     private void DrawZodiacCurrentCoordinateButton()
     {
@@ -1190,6 +1199,15 @@ public sealed class PluginUI
                 }
 
                 ImGui.TableNextColumn();
+                if (row.DutyName != null)
+                {
+                    if (ImGui.SmallButton($"AD执行##zodiac-duty-ad-{row.Key}"))
+                    {
+                        autoDuty.Run(row.DutyName);
+                    }
+                    continue;
+                }
+
                 if (!string.IsNullOrWhiteSpace(row.Zone) && !row.Zone.StartsWith("未知", StringComparison.Ordinal))
                 {
                     if (ImGui.SmallButton($"传送到地图##zodiac-teleport-{row.Key}"))
@@ -1197,10 +1215,11 @@ public sealed class PluginUI
                         vnav.TeleportToMap(row.Zone);
                     }
 
-                    if (row.Coordinates is { Count: > 0 })
+                    if (row.Coordinates is { Count: > 0 } || row.WorldCoordinates is { Count: > 0 })
                     {
                         ImGui.SameLine(0f, 6f);
-                        var coordinateButtonLabel = title == "指定理符" ? "NPC导航" : "坐标导航";
+                        var isOuterLaNosceaMine = title == "指定敌人" && row.Zone == OuterLaNoscea;
+                        var coordinateButtonLabel = title == "指定理符" ? "NPC导航" : isOuterLaNosceaMine ? "洞口/小怪" : "坐标导航";
                         if (ImGui.SmallButton($"{coordinateButtonLabel}##zodiac-coordinate-{row.Key}"))
                         {
                             ImGui.OpenPopup($"zodiac-coordinate-menu-{row.Key}");
@@ -1208,17 +1227,52 @@ public sealed class PluginUI
 
                         if (ImGui.BeginPopup($"zodiac-coordinate-menu-{row.Key}"))
                         {
-                            ImGui.TextUnformatted("选择刷新点");
-                            ImGui.Separator();
-                            for (var coordinateIndex = 0; coordinateIndex < row.Coordinates.Count; coordinateIndex++)
+                            if (isOuterLaNosceaMine)
                             {
-                                var coordinate = row.Coordinates[coordinateIndex];
+                                if (ImGui.Selectable($"飞到洞口 W:({OuterLaNosceaMineEntrance.X:0.00}, {OuterLaNosceaMineEntrance.Y:0.00}, {OuterLaNosceaMineEntrance.Z:0.00})##zodiac-cave-entrance-{row.Key}"))
+                                {
+                                    vnav.NavigateToWorldCoordinate(row.Zone, new Vector3(OuterLaNosceaMineEntrance.X, OuterLaNosceaMineEntrance.Y, OuterLaNosceaMineEntrance.Z));
+                                }
+                                ImGui.Separator();
+                                ImGui.TextUnformatted("标记小怪刷新点");
+                            }
+                            else
+                            {
+                                ImGui.TextUnformatted("选择刷新点");
+                            }
+                            ImGui.Separator();
+                            for (var coordinateIndex = 0; coordinateIndex < (row.WorldCoordinates?.Count ?? 0); coordinateIndex++)
+                            {
+                                var coordinate = row.WorldCoordinates![coordinateIndex];
+                                var label = $"W:({coordinate.X:0.00}, {coordinate.Y:0.00}, {coordinate.Z:0.00})";
+                                if (ImGui.Selectable($"前往 {label}##zodiac-world-coordinate-select-{row.Key}-{coordinateIndex}"))
+                                {
+                                    vnav.NavigateToWorldCoordinate(row.Zone, new Vector3(coordinate.X, coordinate.Y, coordinate.Z));
+                                }
+                            }
+
+                            if (row.WorldCoordinates is { Count: > 0 } && row.Coordinates is { Count: > 0 })
+                            {
+                                ImGui.Separator();
+                                ImGui.TextDisabled("地图刷新点");
+                            }
+
+                            for (var coordinateIndex = 0; coordinateIndex < (row.Coordinates?.Count ?? 0); coordinateIndex++)
+                            {
+                                var coordinate = row.Coordinates![coordinateIndex];
                                 var label = coordinate.Note == null
                                     ? $"({coordinate.MapX:0.0}, {coordinate.MapY:0.0})"
                                     : $"({coordinate.MapX:0.0}, {coordinate.MapY:0.0}) {coordinate.Note}";
                                 if (ImGui.Selectable($"前往 {label}##zodiac-coordinate-select-{row.Key}-{coordinateIndex}"))
                                 {
-                                    vnav.NavigateToMapCoordinate(row.Zone, coordinate.MapX, coordinate.MapY);
+                                    if (isOuterLaNosceaMine)
+                                    {
+                                        vnav.SetMapFlag(row.Zone, coordinate.MapX, coordinate.MapY);
+                                    }
+                                    else
+                                    {
+                                        vnav.NavigateToMapCoordinate(row.Zone, coordinate.MapX, coordinate.MapY);
+                                    }
                                 }
                             }
 
@@ -3240,6 +3294,7 @@ public sealed class PluginUI
         {
             DrawSettingCard("飞行导航", "允许导航过程自动使用飞行", configuration.UseFlightNavigation, "flight", value => configuration.UseFlightNavigation = value);
             DrawSettingCard("导航日志", "在聊天栏显示导航过程与状态", configuration.ShowNavigationLogs, "navigation-logs", value => configuration.ShowNavigationLogs = value);
+            DrawSettingCard("导航时设置 Flag", "所有具有明确坐标的导航会同步标记目的地", configuration.SetFlagOnNavigation, "navigation-flag", value => configuration.SetFlagOnNavigation = value);
             ImGui.EndTable();
         }
 
@@ -4316,10 +4371,11 @@ public sealed class PluginUI
             }
 
             ImGui.ProgressBar(total == 0 ? 1f : (float)completed / total, new Vector2(-1, 0), $"{completed}/{total}");
-            if (ImGui.BeginTable($"secret-duty-table-{group.Key}", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+            if (ImGui.BeginTable($"secret-duty-table-{group.Key}", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
             {
                 ImGui.TableSetupColumn("完成", ImGuiTableColumnFlags.WidthFixed, 56);
                 ImGui.TableSetupColumn("指定迷宫/讨伐", ImGuiTableColumnFlags.WidthStretch, 1f);
+                ImGui.TableSetupColumn("操作", ImGuiTableColumnFlags.WidthFixed, 76f);
                 ImGui.TableHeadersRow();
 
                 foreach (var duty in group.Duties)
@@ -4353,6 +4409,11 @@ public sealed class PluginUI
 
         ImGui.TableNextColumn();
         ImGui.TextWrapped(duty.Name);
+        ImGui.TableNextColumn();
+        if (ImGui.SmallButton($"AD执行##secret-duty-ad-{duty.Key}"))
+        {
+            autoDuty.Run(duty.Name);
+        }
     }
 
     private void DrawRequirementRow(PhantomWeaponRequirement requirement, Dictionary<string, int> progress)
@@ -4420,7 +4481,7 @@ public sealed class PluginUI
 
     private void DrawSecretTargets()
     {
-        ImGui.TextUnformatted("秘影指定目标");
+        ImGui.TextUnformatted("秘影目标");
         ImGui.SameLine();
         var showTargets = configuration.ShowSecretTargetsInFloatingWindow;
         if (DrawFloatingVisibilityCheckbox("##secret-target-floating-toggle", ref showTargets))
@@ -4635,15 +4696,20 @@ public sealed class PluginUI
             progress = new ZodiacJobProgress();
         }
 
-        var monitorHeight = floatingZodiacMonitorOpen ? (selectedStage.Key == "zodiac-animus" ? 190f : 154f) : 34f;
+        var monitorHeight = floatingZodiacMonitorOpen
+            ? selectedStage.Key switch
+            {
+                "zodiac-animus" => 224f,
+                "zodiac-atma" => 190f,
+                _ => 174f,
+            }
+            : 34f;
         if (ImGui.BeginChild("floating-zodiac-monitor", new Vector2(-1f, monitorHeight), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.35f, 0.88f, 0.82f, 1f));
-            if (ImGui.Selectable($"古武监控##floating-zodiac-monitor-header", false, ImGuiSelectableFlags.AllowDoubleClick, new Vector2(76f, 22f)))
+            if (DrawFloatingMonitorHeaderButton("古武监控", "floating-zodiac-monitor-header", new Vector4(0.35f, 0.88f, 0.82f, 1f)))
             {
                 floatingZodiacMonitorOpen = !floatingZodiacMonitorOpen;
             }
-            ImGui.PopStyleColor();
 
             if (ImGui.IsItemHovered())
             {
@@ -4707,6 +4773,20 @@ public sealed class PluginUI
         }
 
         ImGui.EndChild();
+    }
+
+    private static bool DrawFloatingMonitorHeaderButton(string label, string id, Vector4 textColor)
+    {
+        var width = ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2f;
+        var hovered = ImGui.GetStyle().Colors[(int)ImGuiCol.ButtonHovered];
+        var active = ImGui.GetStyle().Colors[(int)ImGuiCol.ButtonActive];
+        ImGui.PushStyleColor(ImGuiCol.Text, textColor);
+        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0f, 0f, 0f, 0f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hovered with { W = 0.35f });
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, active with { W = 0.5f });
+        var clicked = ImGui.Button($"{label}##{id}", new Vector2(width, 22f));
+        ImGui.PopStyleColor(4);
+        return clicked;
     }
 
     private void DrawFloatingZodiacStageSummary(string stageKey, ZodiacJobProgress progress)
@@ -4779,14 +4859,16 @@ public sealed class PluginUI
         if (nextMonster != null)
         {
             var count = progress.RequirementProgress.GetValueOrDefault(nextMonster.Key);
-            DrawFloatingZodiacNextStep($"讨伐 {nextMonster.Name}（{Math.Clamp(count, 0, nextMonster.Needed)}/{nextMonster.Needed}）", () => NavigateToZodiacCoordinate(nextMonster.Zone, nextMonster.Coordinates?.FirstOrDefault()));
+            DrawFloatingZodiacNextStep(
+                $"讨伐 {nextMonster.Name}（{Math.Clamp(count, 0, nextMonster.Needed)}/{nextMonster.Needed}）",
+                () => NavigateToZodiacMonster(nextMonster));
             return;
         }
 
         var nextDuty = book.Duties.FirstOrDefault(objective => !progress.CompletedObjectives.Contains(objective.Key));
         if (nextDuty != null)
         {
-            DrawFloatingZodiacNextStep($"完成副本：{nextDuty.Name}", null);
+            DrawFloatingZodiacNextStep($"完成副本：{nextDuty.Name}", () => autoDuty.Run(nextDuty.Name), "AD执行");
             return;
         }
 
@@ -4799,7 +4881,7 @@ public sealed class PluginUI
 
         var nextLeve = book.Leves.FirstOrDefault(objective => !progress.CompletedObjectives.Contains(objective.Key));
         DrawFloatingZodiacNextStep(
-            nextLeve == null ? "当前文书已完成" : $"完成理符：{nextLeve.Name}",
+            nextLeve == null ? "当前文书已完成" : $"完成理符：[{FormatLeveType(nextLeve)}] {nextLeve.Name}",
             nextLeve == null || nextLeve.MapX <= 0f ? null : () => NavigateToZodiacCoordinate(nextLeve.Zone, new ZodiacCoordinate(nextLeve.MapX, nextLeve.MapY)));
     }
 
@@ -4814,7 +4896,25 @@ public sealed class PluginUI
         vnav.NavigateToMapCoordinate(zone, coordinate.MapX, coordinate.MapY);
     }
 
-    private static void DrawFloatingZodiacNextStep(string text, System.Action? navigate)
+    private void NavigateToZodiacMonster(ZodiacMonsterObjective objective)
+    {
+        var worldCoordinate = objective.WorldCoordinates?.FirstOrDefault();
+        if (worldCoordinate != null)
+        {
+            vnav.NavigateToWorldCoordinate(objective.Zone, new Vector3(worldCoordinate.X, worldCoordinate.Y, worldCoordinate.Z));
+            return;
+        }
+
+        if (objective.Zone == OuterLaNoscea)
+        {
+            vnav.NavigateToWorldCoordinate(objective.Zone, new Vector3(OuterLaNosceaMineEntrance.X, OuterLaNosceaMineEntrance.Y, OuterLaNosceaMineEntrance.Z));
+            return;
+        }
+
+        NavigateToZodiacCoordinate(objective.Zone, objective.Coordinates?.FirstOrDefault());
+    }
+
+    private static void DrawFloatingZodiacNextStep(string text, System.Action? navigate, string buttonLabel = "前往")
     {
         ImGui.TextColored(new Vector4(1f, 0.82f, 0.28f, 1f), "下一步");
         ImGui.SameLine();
@@ -4822,7 +4922,7 @@ public sealed class PluginUI
         if (navigate != null)
         {
             ImGui.SameLine();
-            if (ImGui.SmallButton("前往##floating-zodiac-next"))
+            if (ImGui.SmallButton($"{buttonLabel}##floating-zodiac-next"))
             {
                 navigate();
             }
@@ -4842,12 +4942,10 @@ public sealed class PluginUI
         var cardHeight = floatingPhantomMonitorOpen ? Math.Max(ImGui.GetContentRegionAvail().Y, 120f) : 34f;
         if (ImGui.BeginChild("floating-phantom-monitor-card", new Vector2(-1f, cardHeight), true))
         {
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.45f, 0.70f, 0.98f, 1f));
-            if (ImGui.Selectable("幻武监控##floating-phantom-monitor-header", false, ImGuiSelectableFlags.AllowDoubleClick, new Vector2(76f, 22f)))
+            if (DrawFloatingMonitorHeaderButton("幻武监控", "floating-phantom-monitor-header", new Vector4(0.45f, 0.70f, 0.98f, 1f)))
             {
                 floatingPhantomMonitorOpen = !floatingPhantomMonitorOpen;
             }
-            ImGui.PopStyleColor();
 
             if (ImGui.IsItemHovered())
             {
@@ -4894,7 +4992,7 @@ public sealed class PluginUI
             floatingPhantomTargetsOpen = !floatingPhantomTargetsOpen;
         }
 
-        ImGui.TextDisabled($"{targets[0].Zone} · {completed} / 4 目标 · FATE {Math.Min(fateCount, 5)} / 5");
+        ImGui.TextDisabled($"{targets[0].Zone} · {completed}/4 · FATE {Math.Min(fateCount, 5)}/5");
         ImGui.ProgressBar((completed + Math.Min(fateCount, 5)) / 9f, new Vector2(-1, 0), $"{completed + Math.Min(fateCount, 5)} / 9");
 
         if (!floatingPhantomTargetsOpen)
@@ -4994,9 +5092,7 @@ public sealed class PluginUI
             }
 
             ImGui.SameLine();
-            ImGui.TextUnformatted(target.UseWorldCoords
-                ? $"{target.Name}  W:{target.WorldX:F0},{target.WorldY:F0},{target.WorldZ:F0}"
-                : $"{target.Name}  X:{target.MapX:F1} Y:{target.MapY:F1}");
+            ImGui.TextUnformatted(target.Name);
             ImGui.SameLine();
             if (ImGui.SmallButton($"导航##float-nav-{target.Key}"))
             {
@@ -5032,12 +5128,27 @@ public sealed class PluginUI
 
     private void DrawFloatingHuntAssistant()
     {
-        if (ImGui.BeginChild("floating-hunt-card", new Vector2(-1f, 72f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        var cardHeight = floatingHuntAssistantOpen ? 72f : 34f;
+        if (ImGui.BeginChild("floating-hunt-card", new Vector2(-1f, cardHeight), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
             var accent = configuration.HuntAssistantEnabled
                 ? new Vector4(0.95f, 0.45f, 0.25f, 1f)
                 : new Vector4(0.48f, 0.52f, 0.58f, 1f);
-            ImGui.TextColored(accent, "狩猎助手");
+            if (DrawFloatingMonitorHeaderButton("狩猎助手", "floating-hunt-header", accent))
+            {
+                floatingHuntAssistantOpen = !floatingHuntAssistantOpen;
+            }
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip("狩猎助手\n显示车头、监听状态和狩猎 Flag 导航。点击标题可折叠或展开卡片。");
+            }
+
+            if (!floatingHuntAssistantOpen)
+            {
+                ImGui.EndChild();
+                return;
+            }
+
             ImGui.SameLine();
             ImGui.TextColored(configuration.HuntAssistantEnabled ? new Vector4(0.42f, 0.88f, 0.58f, 1f) : new Vector4(0.65f, 0.67f, 0.70f, 1f),
                 configuration.HuntAssistantEnabled ? "ONLINE" : "OFFLINE");
@@ -5060,10 +5171,24 @@ public sealed class PluginUI
     private void DrawFloatingAvailableFates()
     {
         var fates = GetAvailableFates();
-        var height = Math.Min(44f + Math.Max(fates.Length, 1) * 26f, 252f);
+        var height = floatingFateAssistantOpen ? Math.Min(44f + Math.Max(fates.Length, 1) * 26f, 252f) : 34f;
         if (ImGui.BeginChild("floating-fate-card", new Vector2(-1f, height), true, ImGuiWindowFlags.NoScrollbar))
         {
-            ImGui.TextColored(new Vector4(1f, 0.82f, 0.24f, 1f), "危命助手");
+            if (DrawFloatingMonitorHeaderButton("危命助手", "floating-fate-header", new Vector4(1f, 0.82f, 0.24f, 1f)))
+            {
+                floatingFateAssistantOpen = !floatingFateAssistantOpen;
+            }
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip("危命助手\n显示当前地图可参与的 FATE 和文书标记。点击标题可折叠或展开卡片。");
+            }
+
+            if (!floatingFateAssistantOpen)
+            {
+                ImGui.EndChild();
+                return;
+            }
+
             ImGui.SameLine();
             ImGui.TextDisabled(fates.Length == 0 ? "当前地图" : $"{fates.Length} 个可参与");
             ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
@@ -5240,6 +5365,12 @@ public sealed class PluginUI
                     }
 
                     configuration.Save();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.SmallButton($"AD执行##float-duty-ad-{duty.Key}"))
+                {
+                    autoDuty.Run(duty.Name);
                 }
             }
         }

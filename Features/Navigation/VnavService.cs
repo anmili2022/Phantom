@@ -8,6 +8,7 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Excel.Sheets;
 
 namespace Phantom;
@@ -83,6 +84,7 @@ public sealed class VnavService : IDisposable
     {
         try
         {
+            TrySetCurrentTerritoryFlag(targetPos);
             var snapped = SnapToNavmesh(targetPos);
             if (!snapped.HasValue)
             {
@@ -104,6 +106,7 @@ public sealed class VnavService : IDisposable
     {
         try
         {
+            TrySetCurrentTerritoryFlag(targetPos);
             var snapped = SnapToNavmesh(targetPos);
             if (!snapped.HasValue)
             {
@@ -154,6 +157,7 @@ public sealed class VnavService : IDisposable
     {
         try
         {
+            TrySetMapFlag(territoryType, targetPos);
             var currentTerritory = DalamudApi.ClientState.TerritoryType;
             if (currentTerritory != territoryType
                 && TryTeleportToTerritory(territoryType, targetPos, true, height, false))
@@ -244,7 +248,7 @@ public sealed class VnavService : IDisposable
             return false;
         }
 
-        return TryTeleportToTerritory(territoryType, target, configuration.UseFlightNavigation, autoDismount: false);
+        return TryTeleportOnly(FindAetheryteForTerritory(territoryType));
     }
 
     public bool NavigateToMapCoordinate(string zoneName, float mapX, float mapY)
@@ -265,12 +269,15 @@ public sealed class VnavService : IDisposable
         }
 
         var territoryType = map.TerritoryType.RowId;
+        TrySetMapFlag(territoryType, map.RowId, position);
         if (DalamudApi.ClientState.TerritoryType != territoryType)
         {
             return TryTeleportToTerritory(territoryType, position, configuration.UseFlightNavigation);
         }
 
-        var snapped = SnapToNavmesh(position);
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        var heightAwarePosition = player == null ? position : position with { Y = player.Position.Y };
+        var snapped = SnapToNavmesh(heightAwarePosition);
         if (!snapped.HasValue)
         {
             PrintEcho($"导航失败：坐标 ({mapX:0.0}, {mapY:0.0}) 附近没有可行走网格。 ");
@@ -279,6 +286,44 @@ public sealed class VnavService : IDisposable
 
         StartMove(snapped.Value, configuration.UseFlightNavigation);
         PrintEcho($"已开始导航到 {zoneName} ({mapX:0.0}, {mapY:0.0})。 ");
+        return true;
+    }
+
+    public bool SetMapFlag(string zoneName, float mapX, float mapY)
+    {
+        var map = DalamudApi.DataManager.GetExcelSheet<Map>()
+            .FirstOrDefault(candidate => candidate.TerritoryType.RowId != 0
+                && candidate.PlaceName.Value.Name.ExtractText().Equals(zoneName, StringComparison.Ordinal));
+        if (map.RowId == 0 || !TryResolveMapLinkPosition(map.TerritoryType.RowId, map.RowId, mapX, mapY, out var position))
+        {
+            PrintEcho($"标记失败：无法解析“{zoneName}”坐标 ({mapX:0.0}, {mapY:0.0})。 ");
+            return false;
+        }
+
+        TrySetMapFlag(map.TerritoryType.RowId, map.RowId, position, force: true);
+        PrintEcho($"已将 Flag 设置到 {zoneName} ({mapX:0.0}, {mapY:0.0})。 ");
+        return true;
+    }
+
+    public bool NavigateToWorldCoordinate(string zoneName, Vector3 position)
+    {
+        var map = DalamudApi.DataManager.GetExcelSheet<Map>()
+            .FirstOrDefault(candidate => candidate.TerritoryType.RowId != 0
+                && candidate.PlaceName.Value.Name.ExtractText().Equals(zoneName, StringComparison.Ordinal));
+        if (map.RowId == 0)
+        {
+            PrintEcho($"导航失败：客户端地图表中找不到“{zoneName}”。 ");
+            return false;
+        }
+
+        var territoryType = map.TerritoryType.RowId;
+        TrySetMapFlag(territoryType, map.RowId, position);
+        if (DalamudApi.ClientState.TerritoryType != territoryType)
+        {
+            return TryTeleportToTerritory(territoryType, position, configuration.UseFlightNavigation);
+        }
+
+        NavigateTo(position, configuration.UseFlightNavigation);
         return true;
     }
 
@@ -309,6 +354,7 @@ public sealed class VnavService : IDisposable
 
     public void TeleportAndNavigate(Vector3 targetPos, bool fly)
     {
+        TrySetCurrentTerritoryFlag(targetPos);
         var snapped = SnapToNavmesh(targetPos);
         if (!snapped.HasValue)
         {
@@ -446,6 +492,8 @@ public sealed class VnavService : IDisposable
                 return;
             }
 
+            TrySetMapFlag(target.TerritoryType, worldPosition);
+
             if (DalamudApi.ClientState.TerritoryType != target.TerritoryType && TryTeleportToTerritory(target.TerritoryType, worldPosition, fly))
             {
                 return;
@@ -525,6 +573,68 @@ public sealed class VnavService : IDisposable
         {
             DalamudApi.Log.Warning(ex, "vnavmesh nearest point query failed.");
             return null;
+        }
+    }
+
+    private bool TryTeleportOnly(uint aetheryteId)
+    {
+        if (aetheryteId == 0 || !EnsureLifestreamIpc() || teleport == null)
+        {
+            PrintEcho("传送失败：Lifestream 不可用或没有可用以太水晶。 ");
+            return false;
+        }
+
+        try { stop.InvokeAction(); } catch { }
+        try
+        {
+            if (!teleport.InvokeFunc(aetheryteId, 0))
+            {
+                PrintEcho($"Lifestream 没有开始传送到以太水晶 {aetheryteId}。 ");
+                return false;
+            }
+
+            PrintEcho($"已请求传送到以太水晶 {aetheryteId}。 ");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Warning(ex, "Lifestream teleport-only IPC failed.");
+            PrintEcho($"Lifestream IPC 失败：{ex.Message}");
+            return false;
+        }
+    }
+
+    private void TrySetCurrentTerritoryFlag(Vector3 position)
+        => TrySetMapFlag(DalamudApi.ClientState.TerritoryType, position);
+
+    private void TrySetMapFlag(uint territoryType, Vector3 position)
+    {
+        var map = DalamudApi.DataManager.GetExcelSheet<Map>()
+            .FirstOrDefault(candidate => candidate.TerritoryType.RowId == territoryType && candidate.SizeFactor > 0);
+        if (map.RowId != 0)
+        {
+            TrySetMapFlag(territoryType, map.RowId, position);
+        }
+    }
+
+    private unsafe void TrySetMapFlag(uint territoryType, uint mapId, Vector3 position, bool force = false)
+    {
+        if (!force && !configuration.SetFlagOnNavigation)
+        {
+            return;
+        }
+
+        try
+        {
+            var agentMap = AgentMap.Instance();
+            if (agentMap != null)
+            {
+                agentMap->SetFlagMapMarker(territoryType, mapId, position);
+            }
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Warning(ex, "Failed to set navigation map Flag.");
         }
     }
 
@@ -792,6 +902,11 @@ public sealed class VnavService : IDisposable
         }
 
         var target = pendingTarget.Value;
+        var playerAfterTeleport = DalamudApi.ObjectTable.LocalPlayer;
+        if (target.Y == 0f && playerAfterTeleport != null)
+        {
+            target = target with { Y = playerAfterTeleport.Position.Y };
+        }
         var fly = pendingFly;
         var elevation = pendingElevation;
         var autoDismount = pendingAutoDismount;

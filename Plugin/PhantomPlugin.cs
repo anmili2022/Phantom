@@ -11,6 +11,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
     private readonly FateTracker fateTracker;
     private readonly ZodiacMonsterTracker zodiacMonsterTracker;
     private readonly HuntAssistant huntAssistant;
+    private readonly AutoDutyService autoDuty;
     private readonly PluginUI ui;
 
     public string Name => "Phantom";
@@ -29,7 +30,8 @@ public sealed class PhantomPlugin : IDalamudPlugin
         fateTracker = new FateTracker(Configuration);
         zodiacMonsterTracker = new ZodiacMonsterTracker(Configuration);
         huntAssistant = new HuntAssistant(Configuration, vnav);
-        ui = new PluginUI(Configuration, vnav);
+        autoDuty = new AutoDutyService(pluginInterface);
+        ui = new PluginUI(Configuration, vnav, autoDuty);
 
         DalamudApi.Commands.AddHandler(CommandName, new Dalamud.Game.Command.CommandInfo(OnCommand)
         {

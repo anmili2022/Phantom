@@ -6,6 +6,8 @@ public sealed record ZodiacCoordinate(float MapX, float MapY, string? Note = nul
         => Note == null ? $"({MapX:0.0}, {MapY:0.0})" : $"({MapX:0.0}, {MapY:0.0}) {Note}";
 }
 
+public sealed record ZodiacWorldCoordinate(float X, float Y, float Z, string? Note = null);
+
 public sealed class ZodiacCharacterProgress
 {
     public Dictionary<string, ZodiacJobProgress> Jobs { get; set; } = new(StringComparer.Ordinal);
@@ -30,7 +32,8 @@ public sealed record ZodiacMonsterObjective(
     int Needed = 3,
     string? JobKey = null,
     string LocationNotes = "",
-    IReadOnlyList<ZodiacCoordinate>? Coordinates = null);
+    IReadOnlyList<ZodiacCoordinate>? Coordinates = null,
+    IReadOnlyList<ZodiacWorldCoordinate>? WorldCoordinates = null);
 
 public sealed record ZodiacFateObjective(
     string Key,
@@ -65,6 +68,7 @@ public sealed record ZodiacLeveObjective(
     float MapX,
     float MapY,
     string Category,
+    string? GrandCompany,
     int Level,
     string? BookKey = null,
     string LocationNotes = "");

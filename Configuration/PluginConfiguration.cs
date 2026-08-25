@@ -20,6 +20,7 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool FateAssistantEnabled { get; set; }
     public bool AutoHideCompletedFloatingItems { get; set; } = true;
     public bool NavigateToFlagDirectly { get; set; } = true;
+    public bool SetFlagOnNavigation { get; set; } = true;
     public bool HuntAssistantEnabled { get; set; }
     public bool HuntAssistantEchoLeaderMessages { get; set; }
     public bool ShowHuntAssistantInFloatingWindow { get; set; } = true;

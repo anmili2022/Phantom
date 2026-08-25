@@ -51,7 +51,8 @@ public static class ZodiacGuide
                 LocationNotes: coordinates == null || coordinates[index].Count == 0
                     ? "Wiki 已核对；部分目标为巡逻路线或区域范围。"
                     : string.Join("、", coordinates[index].Select(coordinate => coordinate.ToString())),
-                Coordinates: coordinates?[index]))
+                Coordinates: coordinates?[index],
+                WorldCoordinates: GetMonsterWorldCoordinates(key, monster)))
             .ToArray();
         var dutyObjectives = duties.Select((duty, index) =>
             new ZodiacDutyObjective($"{key}-duty-{index + 1}", duty, "副本", 0, BookKey: key, GroupKey: key)).ToArray();
@@ -93,6 +94,7 @@ public static class ZodiacGuide
             "烈风勇士——怀罗克四姐妹" => (34.7f, 21.3f, null, null, null, 0f, 0f),
             "雪山袭击者——索贝克" => (4.8f, 21.9f, null, null, null, 0f, 0f),
             "丑恶合成兽——巴杜枭" => (30f, 25.5f, null, null, null, 0f, 0f),
+            "青磷大路" => (21.8f, 29.4f, "与慎重的商人对话触发", "慎重的商人", "北萨纳兰", 21.8f, 29.4f),
             _ => (0f, 0f, (string?)"地点未核对", null, null, 0f, 0f)
         };
 
@@ -109,7 +111,30 @@ public static class ZodiacGuide
     {
         var (mapX, mapY, npc) = GetLeveNpc(name, zone);
         var note = npc == null ? "NPC 坐标未核对。" : $"NPC：{npc}。";
-        return new ZodiacLeveObjective($"{bookKey}-leve-{index + 1}", name, zone, mapX, mapY, "理符", 40, bookKey, note);
+        var (category, grandCompany) = GetLeveType(name);
+        return new ZodiacLeveObjective($"{bookKey}-leve-{index + 1}", name, zone, mapX, mapY, category, grandCompany, 40, bookKey, note);
+    }
+
+    private static (string Category, string? GrandCompany) GetLeveType(string name)
+    {
+        if (!name.Contains("指令", StringComparison.Ordinal))
+        {
+            return ("佣兵理符", null);
+        }
+
+        var company = name switch
+        {
+            "索敌指令：潜伏在库尔札斯的通缉犯" or
+            "歼敌指令：怒号的米玛斯" or
+            "防卫指令：魔导机器的残骸" or
+            "迎击指令：威胁调查地安全的基迦巨人族" => "黑涡团",
+            "防卫指令：阿格里俄斯号的研究任务" or
+            "迎击指令：威胁前哨的魔物" or
+            "防卫指令：追击者的遗物" or
+            "迎击指令：第五步兵大队所属部队" => "双蛇党",
+            _ => "恒辉队",
+        };
+        return ("军队理符", company);
     }
 
     private static (float MapX, float MapY, string? Npc) GetLeveNpc(string name, string zone)
@@ -270,6 +295,18 @@ public static class ZodiacGuide
             _ => null
         };
 
+    private static IReadOnlyList<ZodiacWorldCoordinate>? GetMonsterWorldCoordinates(string bookKey, string monsterName)
+        => (bookKey, monsterName) switch
+        {
+            ("water-1", "朗咒巨人") =>
+            [
+                new(-289.82f, 292.68f, 262.35f),
+                new(-403.18f, 239.67f, 279.30f),
+                new(-437.52f, 245.89f, 314.31f),
+            ],
+            _ => null,
+        };
+
     private static ZodiacBookGuide WaterOne() => Book("water-1", "水天文书·第一卷",
         ["第二大队骑士", "礁鳞鱼人", "海蜂水母", "武伽玛罗采石员", "妖精领哨兵", "蜥蜴人枪兵", "魔导先锋", "朗咒巨人", "泥沼蝾螈", "湖畔眼镜蛇"],
         ["东拉诺西亚", "西拉诺西亚", "西拉诺西亚", "拉诺西亚外地", "黑衣森林东部林区", "南萨纳兰", "北萨纳兰", "库尔札斯中央高地", "摩杜纳", "摩杜纳"],
@@ -329,7 +366,7 @@ public static class ZodiacGuide
         ["西拉诺西亚", "拉诺西亚外地", "黑衣森林东部林区", "黑衣森林北部林区", "黑衣森林北部林区", "西萨纳兰", "南萨纳兰", "库尔札斯中央高地", "摩杜纳", "摩杜纳"],
         ["流沙迷宫樵鸣洞", "领航明灯天狼星灯塔", "腐坏遗迹无限城市街古迹"],
         ["遗迹的亡灵骑士——代达罗斯", "青磷大路", "烈风勇士——怀罗克四姐妹"],
-        ["黑衣森林北部林区", "", "库尔札斯中央高地"],
+        ["黑衣森林北部林区", "北萨纳兰", "库尔札斯中央高地"],
         ["迎击任务：徘徊的利剑牛头魔", "讨伐任务：犯罪组织巴特商会", "歼敌指令：红发的俄刻阿诺斯"],
         ["库尔札斯中央高地", "北萨纳兰", "摩杜纳"]);
 
