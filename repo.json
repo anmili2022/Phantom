@@ -5,7 +5,7 @@
     "Description": "统一追踪幻武、深层迷宫武器、旧肝武、特殊工具、绝武与妖表收藏。支持全系列按角色持有同步、秘影与 FATE 导航、妖表奖励扫描和雇员库存缓存读取。",
     "InternalName": "Phantom",
     "IconUrl": "https://raw.githubusercontent.com/anmili2022/Phantom/main/images/icon.png",
-    "AssemblyVersion": "0.1.29.0",
+    "AssemblyVersion": "0.1.30.0",
     "RepoUrl": "https://github.com/anmili2022/Phantom",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 15,
@@ -16,9 +16,9 @@
     ],
     "IsHide": false,
     "IsTestingExclusive": false,
-    "DownloadLinkInstall": "https://github.com/anmili2022/Phantom/releases/download/0.1.29.0/Phantom.zip",
-    "DownloadLinkTesting": "https://github.com/anmili2022/Phantom/releases/download/0.1.29.0/Phantom.zip",
-    "DownloadLinkUpdate": "https://github.com/anmili2022/Phantom/releases/download/0.1.29.0/Phantom.zip",
-    "LastUpdated": "2026-08-25T11:38:35Z"
+    "DownloadLinkInstall": "https://github.com/anmili2022/Phantom/releases/download/0.1.30.0/Phantom.zip",
+    "DownloadLinkTesting": "https://github.com/anmili2022/Phantom/releases/download/0.1.30.0/Phantom.zip",
+    "DownloadLinkUpdate": "https://github.com/anmili2022/Phantom/releases/download/0.1.30.0/Phantom.zip",
+    "LastUpdated": "2026-08-25T14:09:23Z"
   }
 ]
