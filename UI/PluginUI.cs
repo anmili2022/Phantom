@@ -5399,9 +5399,70 @@ public sealed class PluginUI
             return;
         }
 
+        if (ImGui.BeginMenu("快捷入口"))
+        {
+            if (ImGui.MenuItem("幻武进度"))
+            {
+                selectedMainSection = GetMainSectionIndex("phantom");
+                showWeaponProgressTab = true;
+                OpenMainWindow();
+            }
+
+            if (ImGui.MenuItem("绝武总进度"))
+            {
+                selectedMainSection = GetMainSectionIndex("ultimate");
+                stageSelectedSeries.Remove("ultimate");
+                progressSeriesKey = "ultimate";
+                OpenMainWindow();
+            }
+
+            if (ImGui.MenuItem("前往幻境村"))
+            {
+                vnav.GoToOccultVillage();
+            }
+
+            if (ImGui.MenuItem("妖表联动"))
+            {
+                selectedMainSection = GetMainSectionIndex("yokai");
+                OpenMainWindow();
+            }
+
+            ImGui.EndMenu();
+        }
+
+        ImGui.Separator();
         if (ImGui.MenuItem("打开主窗口"))
         {
             OpenMainWindow();
+        }
+
+        var monitorZodiac = configuration.ShowZodiacMonitorInFloatingWindow;
+        if (ImGui.MenuItem("古武监控", string.Empty, monitorZodiac))
+        {
+            configuration.ShowZodiacMonitorInFloatingWindow = !monitorZodiac;
+            configuration.Save();
+        }
+
+        var monitorPhantom = configuration.ShowSecretTargetsInFloatingWindow || configuration.ShowSecretDutiesInFloatingWindow;
+        if (ImGui.MenuItem("幻武监控", string.Empty, monitorPhantom))
+        {
+            configuration.ShowSecretTargetsInFloatingWindow = !monitorPhantom;
+            configuration.ShowSecretDutiesInFloatingWindow = !monitorPhantom;
+            configuration.Save();
+        }
+
+        var showHuntAssistant = configuration.ShowHuntAssistantInFloatingWindow;
+        if (ImGui.MenuItem("狩猎助手", string.Empty, showHuntAssistant))
+        {
+            configuration.ShowHuntAssistantInFloatingWindow = !showHuntAssistant;
+            configuration.Save();
+        }
+
+        var showFateAssistant = configuration.ShowAvailableFatesInFloatingWindow;
+        if (ImGui.MenuItem("危命助手", string.Empty, showFateAssistant))
+        {
+            configuration.ShowAvailableFatesInFloatingWindow = !showFateAssistant;
+            configuration.Save();
         }
 
         var useFlight = configuration.UseFlightNavigation;
