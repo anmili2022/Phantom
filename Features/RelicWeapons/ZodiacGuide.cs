@@ -2,6 +2,28 @@ namespace Phantom;
 
 public static class ZodiacGuide
 {
+    public static string GetFateBookAnnotations(string fateName)
+        => string.Join(string.Empty, AnimusBooks
+            .Where(book => book.Fates.Any(fate =>
+                fate.Name.Contains(fateName, StringComparison.OrdinalIgnoreCase)
+                || fateName.Contains(fate.Name, StringComparison.OrdinalIgnoreCase)))
+            .Select(book => $"[{GetBookShortName(book.Name)}]"));
+
+    private static string GetBookShortName(string bookName)
+        => bookName switch
+        {
+            "火天文书·第一卷" => "火天一",
+            "水天文书·第一卷" => "水天一",
+            "风天文书·第一卷" => "风天一",
+            "火天文书·第二卷" => "火天二",
+            "水天文书·第二卷" => "水天二",
+            "风天文书·第二卷" => "风天二",
+            "火狱文书·第一卷" => "火狱一",
+            "水狱文书·第一卷" => "水狱一",
+            "土天文书·第一卷" => "土天一",
+            _ => bookName,
+        };
+
     public static readonly IReadOnlyList<ZodiacFateObjective> AtmaTerritories = new[]
     {
         Atma("atma-aries", "白羊之魂晶", "中拉诺西亚"),
@@ -95,6 +117,7 @@ public static class ZodiacGuide
             "雪山袭击者——索贝克" => (4.8f, 21.9f, null, null, null, 0f, 0f),
             "丑恶合成兽——巴杜枭" => (30f, 25.5f, null, null, null, 0f, 0f),
             "青磷大路" => (21.8f, 29.4f, "与慎重的商人对话触发", "慎重的商人", "北萨纳兰", 21.8f, 29.4f),
+            "试掘地强攻" => (23.8f, 16.4f, "与黑涡团二等漩兵对话触发", "黑涡团二等漩兵", "拉诺西亚外地", 23.8f, 16.4f),
             _ => (0f, 0f, (string?)"地点未核对", null, null, 0f, 0f)
         };
 
@@ -375,7 +398,7 @@ public static class ZodiacGuide
         ["东拉诺西亚", "西拉诺西亚", "拉诺西亚外地", "黑衣森林东部林区", "黑衣森林北部林区", "南萨纳兰", "南萨纳兰", "库尔札斯中央高地", "摩杜纳", "摩杜纳"],
         ["魔兽领域日影地修炼所", "邪教驻地无限城古堡", "领航明灯天狼星灯塔"],
         ["雪山袭击者——索贝克", "试掘地强攻", "丑恶合成兽——巴杜枭"],
-        ["库尔札斯中央高地", "", "东萨纳兰"],
+        ["库尔札斯中央高地", "拉诺西亚外地", "东萨纳兰"],
         ["迎击任务：恶神之眼巴罗尔", "焚书任务：回收禁书«尖牙利齿的怪物»", "索敌指令：惊吓调查员的恶灵"],
         ["北萨纳兰", "摩杜纳", "库尔札斯中央高地"]);
 }

@@ -24,6 +24,7 @@ public sealed class PluginUI
         IReadOnlyList<PhantomWeaponJob> Jobs,
         IReadOnlyList<PhantomWeaponProgressStage> Stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> ItemLookup);
+    private sealed record FateCatalogEntry(uint FateId, string Name, string Annotations);
 
     private static readonly string WindowTitle = $"肝武助手 v{typeof(PluginUI).Assembly.GetName().Version?.ToString(4) ?? "0.0.0.0"}";
     private static readonly string IconPath = Path.Combine(Path.GetDirectoryName(typeof(PluginUI).Assembly.Location) ?? string.Empty, "icon.png");
@@ -72,6 +73,7 @@ public sealed class PluginUI
     private readonly PluginConfiguration configuration;
     private readonly VnavService vnav;
     private readonly AutoDutyService autoDuty;
+    private readonly EdgeTtsService edgeTts;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? weaponItemLookup;
     private Dictionary<string, IReadOnlyList<Item>>? phantomRewardWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? mandervilleWeaponItemLookup;
@@ -99,6 +101,8 @@ public sealed class PluginUI
     private bool floatingPhantomMonitorOpen = true;
     private bool floatingFateAssistantOpen = true;
     private bool floatingHuntAssistantOpen = true;
+    private string fateWatchSearch = string.Empty;
+    private IReadOnlyList<FateCatalogEntry>? fateCatalog;
     private string backpackOrganizeSearch = string.Empty;
     private List<BackpackItemSummary> backpackOrganizeItems = new();
     private PendingBackpackMove? pendingBackpackMove;
@@ -139,11 +143,12 @@ public sealed class PluginUI
     private static readonly HashSet<uint> ChroniclerFateTerritories = new() { 1252, 1346 };
     private static readonly HashSet<uint> UnsupportedFateTerritories = new() { 732, 763, 795, 827, 920, 975 };
 
-    public PluginUI(PluginConfiguration configuration, VnavService vnav, AutoDutyService autoDuty)
+    public PluginUI(PluginConfiguration configuration, VnavService vnav, AutoDutyService autoDuty, EdgeTtsService edgeTts)
     {
         this.configuration = configuration;
         this.vnav = vnav;
         this.autoDuty = autoDuty;
+        this.edgeTts = edgeTts;
     }
 
     public void OpenMainWindow()
@@ -757,6 +762,12 @@ public sealed class PluginUI
         }
 
         ImGui.TextWrapped(series.Summary);
+        if (series.Key == "zodiac")
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1f, 0.82f, 0.28f, 1f));
+            ImGui.TextWrapped("【危命提醒可在“危命助手”中设置；语音播报需额外安装 EdgeTTS.Dalamud 插件。】");
+            ImGui.PopStyleColor();
+        }
         ImGui.TextDisabled(series.EnglishName);
         ImGui.SameLine();
         var sourceLabel = series.Key == "zodiac" ? "打开上古武器Wiki" : $"打开{series.Name} Wiki";
@@ -3433,6 +3444,11 @@ public sealed class PluginUI
     private void DrawFateAssistantWorkspace()
     {
         DrawSettingsSectionHeader("危命助手", "当前地图");
+        DrawFateNotificationSettingsCard();
+        DrawZodiacFateAutoTrackCard();
+        DrawTrackedFatesCard();
+
+        ImGui.Spacing();
         var showAvailableFates = configuration.ShowAvailableFatesInFloatingWindow;
         if (ImGui.Checkbox("在悬浮窗显示可参与 FATE##fate-floating", ref showAvailableFates))
         {
@@ -3460,12 +3476,271 @@ public sealed class PluginUI
         {
             ImGui.TextUnformatted($"{GetFateDisplayName(fate)}  {FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
             ImGui.SameLine();
+            var tracked = IsFateTracked(fate);
+            if (ImGui.SmallButton($"{(tracked ? "取消关注" : "关注")}##fate-assistant-track-{fate.FateId}"))
+            {
+                ToggleTrackedFate(fate);
+            }
+            ImGui.SameLine();
             if (ImGui.SmallButton($"导航##fate-assistant-nav-{fate.FateId}"))
             {
                 NavigateToFate(fate);
             }
         }
     }
+
+    private void DrawFateNotificationSettingsCard()
+    {
+        if (!ImGui.BeginChild("fate-notification-settings-card", new Vector2(0f, 118f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        ImGui.TextColored(new Vector4(0.45f, 0.86f, 0.82f, 1f), "提醒设置");
+        var notificationsEnabled = configuration.ZodiacFateNotificationsEnabled;
+        if (ImGui.Checkbox("FATE 关注提醒##fate-notifications", ref notificationsEnabled))
+        {
+            configuration.ZodiacFateNotificationsEnabled = notificationsEnabled;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        var sound = Math.Clamp(configuration.ZodiacFateNotificationSound, 0, 16);
+        ImGui.SetNextItemWidth(110f);
+        if (ImGui.BeginCombo("##zodiac-fate-notification-sound", sound == 0 ? "无音效" : $"SE {sound}"))
+        {
+            for (var value = 0; value <= 16; value++)
+            {
+                var label = value == 0 ? "无音效" : $"SE {value}";
+                if (ImGui.Selectable($"{label}##zodiac-fate-se-{value}", sound == value))
+                {
+                    configuration.ZodiacFateNotificationSound = value;
+                    configuration.Save();
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.SameLine();
+        var useEdgeTts = configuration.ZodiacFateNotificationEdgeTts;
+        if (ImGui.Checkbox("EdgeTTS 语音播报##zodiac-fate-edge-tts", ref useEdgeTts))
+        {
+            if (!useEdgeTts)
+            {
+                configuration.ZodiacFateNotificationEdgeTts = false;
+                configuration.Save();
+            }
+            else if (edgeTts.IsLoaded)
+            {
+                configuration.ZodiacFateNotificationEdgeTts = true;
+                configuration.Save();
+            }
+            else
+            {
+                ImGui.OpenPopup("zodiac-fate-edge-tts-required");
+            }
+        }
+
+        if (configuration.ZodiacFateNotificationEdgeTts)
+        {
+            ImGui.SameLine();
+            if (ImGui.SmallButton("测试语音##zodiac-fate-edge-tts-test"))
+            {
+                edgeTts.Speak("肝武助手，目标临危受命提醒测试");
+            }
+        }
+
+        var intervalSeconds = Math.Clamp(configuration.ZodiacFateNotificationIntervalSeconds, 5, 300);
+        ImGui.SetNextItemWidth(120f);
+        if (ImGui.InputInt("提醒间隔（秒）##zodiac-fate-notification-interval", ref intervalSeconds, 5, 30))
+        {
+            configuration.ZodiacFateNotificationIntervalSeconds = Math.Clamp(intervalSeconds, 5, 300);
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        var repeatCount = Math.Clamp(configuration.ZodiacFateNotificationRepeatCount, 1, 10);
+        ImGui.SetNextItemWidth(100f);
+        if (ImGui.InputInt("提醒次数##zodiac-fate-notification-repeat", ref repeatCount, 1, 1))
+        {
+            configuration.ZodiacFateNotificationRepeatCount = Math.Clamp(repeatCount, 1, 10);
+            configuration.Save();
+        }
+        ImGui.TextDisabled("同一轮 FATE 按设置间隔最多提醒指定次数；FATE 消失或结束后清除计数，下次出现重新计数。范围：5-300 秒，1-10 次。");
+        DrawEdgeTtsRequiredPopup();
+        ImGui.EndChild();
+    }
+
+    private void DrawZodiacFateAutoTrackCard()
+    {
+        if (!ImGui.BeginChild("zodiac-fate-auto-track-card", new Vector2(0f, 82f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        ImGui.TextColored(new Vector4(1f, 0.82f, 0.28f, 1f), "黄道文书自动关注");
+        var autoTrackZodiac = configuration.AutoTrackSelectedZodiacBookFates;
+        if (ImGui.Checkbox("自动关注当前黄道文书中尚未完成的 FATE##auto-track-zodiac-fates", ref autoTrackZodiac))
+        {
+            configuration.AutoTrackSelectedZodiacBookFates = autoTrackZodiac;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("跟随当前角色、古武职业和所选文书自动切换；不会修改下方手动关注列表。");
+        ImGui.EndChild();
+    }
+
+    private void DrawTrackedFatesCard()
+    {
+        var cardHeight = Math.Clamp(105f + configuration.TrackedFates.Count * 24f, 132f, 300f);
+        if (!ImGui.BeginChild("tracked-fates-card", new Vector2(0f, cardHeight), true))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), $"手动关注 ({configuration.TrackedFates.Count})");
+        ImGui.TextDisabled("从全部 FATE 中提前关注；FateId 全局唯一，目标首次出现时自动识别所在地图。");
+        var prioritizeZodiac = configuration.PrioritizeZodiacFatesInCatalog;
+        if (ImGui.Checkbox("文书 FATE 置顶##prioritize-zodiac-fates", ref prioritizeZodiac))
+        {
+            configuration.PrioritizeZodiacFatesInCatalog = prioritizeZodiac;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(220f);
+        ImGui.InputTextWithHint("##fate-watch-search", "搜索 FATE 名称", ref fateWatchSearch, 128);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(300f);
+        if (ImGui.BeginCombo("##all-fate-watch-picker", "选择要关注的 FATE"))
+        {
+            foreach (var entry in GetFateCatalog()
+                         .Where(entry => fateWatchSearch.Length == 0 || entry.Name.Contains(fateWatchSearch, StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(entry => IsFateTracked(entry))
+                         .ThenByDescending(entry => configuration.PrioritizeZodiacFatesInCatalog && entry.Annotations.Length > 0)
+                         .ThenBy(entry => entry.Name)
+                         .Take(300))
+            {
+                var tracked = IsFateTracked(entry);
+                var label = $"{(tracked ? "[已关注] " : string.Empty)}{entry.Name}{entry.Annotations}";
+                if (ImGui.Selectable($"{label}##fate-catalog-{entry.FateId}", tracked))
+                {
+                    ToggleCatalogFate(entry);
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.Separator();
+        if (configuration.TrackedFates.Count == 0)
+        {
+            ImGui.TextDisabled("暂无手动关注目标。也可在当前地图 FATE 列表或悬浮窗中快捷关注。");
+            ImGui.EndChild();
+            return;
+        }
+
+        foreach (var target in configuration.TrackedFates.OrderBy(target => target.Zone).ThenBy(target => target.Name).ToArray())
+        {
+            var coordinate = target.MapX > 0f ? $" ({target.MapX:0.0}, {target.MapY:0.0})" : string.Empty;
+            var location = string.IsNullOrWhiteSpace(target.Zone) ? "地图将在首次出现时识别" : target.Zone;
+            ImGui.TextUnformatted($"{target.Name}{ZodiacGuide.GetFateBookAnnotations(target.Name)} · {location}{coordinate}");
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"移除##tracked-fate-remove-{target.FateId}"))
+            {
+                configuration.TrackedFates.Remove(target);
+                configuration.Save();
+            }
+        }
+        ImGui.EndChild();
+    }
+
+    private IReadOnlyList<FateCatalogEntry> GetFateCatalog()
+        => fateCatalog ??= DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Fate>()
+            .Where(fate => fate.RowId != 0 && !string.IsNullOrWhiteSpace(fate.Name.ExtractText()))
+            .Select(fate => new FateCatalogEntry(fate.RowId, fate.Name.ExtractText(), ZodiacGuide.GetFateBookAnnotations(fate.Name.ExtractText())))
+            .GroupBy(fate => fate.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderBy(fate => fate.FateId).First())
+            .ToArray();
+
+    private bool IsFateTracked(FateCatalogEntry entry)
+        => configuration.TrackedFates.Any(target =>
+            target.FateId == entry.FateId
+            || string.Equals(target.Name, entry.Name, StringComparison.OrdinalIgnoreCase));
+
+    private void ToggleCatalogFate(FateCatalogEntry entry)
+    {
+        var existing = configuration.TrackedFates.FirstOrDefault(target =>
+            target.FateId == entry.FateId
+            || string.Equals(target.Name, entry.Name, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            configuration.TrackedFates.Remove(existing);
+        }
+        else
+        {
+            configuration.TrackedFates.Add(new TrackedFate(entry.FateId, 0, entry.Name, string.Empty, 0f, 0f));
+        }
+        configuration.Save();
+    }
+
+    private bool IsFateTracked(IFate fate)
+        => configuration.TrackedFates.Any(target =>
+            target.FateId == fate.FateId
+            || string.Equals(target.Name, fate.Name.ToString(), StringComparison.OrdinalIgnoreCase));
+
+    private void ToggleTrackedFate(IFate fate)
+    {
+        var existing = configuration.TrackedFates.FirstOrDefault(target =>
+            target.FateId == fate.FateId
+            || string.Equals(target.Name, fate.Name.ToString(), StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            configuration.TrackedFates.Remove(existing);
+            configuration.Save();
+            return;
+        }
+
+        var zone = $"地图 {fate.TerritoryType.RowId}";
+        var mapX = 0f;
+        var mapY = 0f;
+        vnav.TryGetMapCoordinate(fate.TerritoryType.RowId, fate.Position, out zone, out mapX, out mapY);
+        configuration.TrackedFates.Add(new TrackedFate(fate.FateId, fate.TerritoryType.RowId, fate.Name.ToString(), zone, mapX, mapY));
+        configuration.Save();
+    }
+
+    private void DrawEdgeTtsRequiredPopup()
+    {
+        if (!ImGui.BeginPopupModal("zodiac-fate-edge-tts-required", ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            return;
+        }
+
+        if (edgeTts.IsInstalled)
+        {
+            ImGui.TextWrapped("已检测到 EdgeTTS.Dalamud，但插件当前未加载。请在卫月插件列表中启用或重新加载后再开启语音播报。");
+        }
+        else
+        {
+            ImGui.TextWrapped("语音播报依赖 EdgeTTS.Dalamud。请先将插件仓库地址添加到卫月设置的自定义插件仓库，然后安装并启用 EdgeTTS.Dalamud。未安装时仍可使用 Echo 和 SE 音效提醒。");
+            ImGui.Spacing();
+            ImGui.TextDisabled(EdgeTtsService.RepositoryUrl);
+            if (ImGui.Button("复制插件仓库地址##edge-tts-copy-repo"))
+            {
+                ImGui.SetClipboardText(EdgeTtsService.RepositoryUrl);
+                PrintChat("已复制 EdgeTTS.Dalamud 插件仓库地址。");
+            }
+            ImGui.SameLine();
+        }
+
+        if (ImGui.Button("关闭##edge-tts-required-close"))
+        {
+            ImGui.CloseCurrentPopup();
+        }
+
+        ImGui.EndPopup();
+    }
+
 
     private static void DrawSettingsSectionHeader(string title, string note)
     {

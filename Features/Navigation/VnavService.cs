@@ -15,6 +15,7 @@ namespace Phantom;
 
 public sealed class VnavService : IDisposable
 {
+    private const uint EasternLaNosceaTerritoryType = 137;
     private const uint TuliyollalTerritoryType = 1185;
     private const uint OccultVillageTerritoryType = 1278;
     private const uint TuliyollalAetheryteId = 216;
@@ -241,14 +242,16 @@ public sealed class VnavService : IDisposable
         }
 
         var territoryType = map.TerritoryType.RowId;
-        var target = new Vector3(0f, 0f, 0f);
-        if (!TryFindAetherytePosition(FindAetheryteForTerritory(territoryType), out target))
+        var aetheryteId = territoryType == EasternLaNosceaTerritoryType
+            ? FindAetheryteByName(territoryType, "葡萄酒港")
+            : FindAetheryteForTerritory(territoryType);
+        if (aetheryteId == 0)
         {
             PrintEcho($"传送失败：地图“{zoneName}”没有可用以太水晶。 ");
             return false;
         }
 
-        return TryTeleportOnly(FindAetheryteForTerritory(territoryType));
+        return TryTeleportOnly(aetheryteId);
     }
 
     public bool NavigateToMapCoordinate(string zoneName, float mapX, float mapY)
@@ -352,6 +355,24 @@ public sealed class VnavService : IDisposable
         return true;
     }
 
+    public bool TryGetMapCoordinate(uint territoryType, Vector3 worldPosition, out string zoneName, out float mapX, out float mapY)
+    {
+        zoneName = string.Empty;
+        mapX = 0f;
+        mapY = 0f;
+        var map = DalamudApi.DataManager.GetExcelSheet<Map>()
+            .FirstOrDefault(candidate => candidate.TerritoryType.RowId == territoryType && candidate.SizeFactor > 0);
+        if (map.RowId == 0)
+        {
+            return false;
+        }
+
+        zoneName = map.PlaceName.Value.Name.ExtractText();
+        mapX = 0.02f * (map.OffsetX + 102400f / map.SizeFactor + worldPosition.X) + 1f;
+        mapY = 0.02f * (map.OffsetY + 102400f / map.SizeFactor + worldPosition.Z) + 1f;
+        return true;
+    }
+
     public void TeleportAndNavigate(Vector3 targetPos, bool fly)
     {
         TrySetCurrentTerritoryFlag(targetPos);
@@ -371,7 +392,7 @@ public sealed class VnavService : IDisposable
             return;
         }
 
-        var aetheryteId = FindNearestAetheryteForTerritory(DalamudApi.ClientState.TerritoryType, snapped.Value);
+        var aetheryteId = FindPreferredAetheryteForTerritory(DalamudApi.ClientState.TerritoryType, snapped.Value);
         if (aetheryteId == 0)
         {
             DalamudApi.Log.Warning("No aetheryte found for current territory; navigating directly.");
@@ -683,7 +704,7 @@ public sealed class VnavService : IDisposable
             return false;
         }
 
-        var aetheryteId = FindNearestAetheryteForTerritory(territoryType, target);
+        var aetheryteId = FindPreferredAetheryteForTerritory(territoryType, target);
         if (aetheryteId == 0)
         {
             DalamudApi.Log.Warning("No aetheryte found for territory {TerritoryType}.", territoryType);
@@ -808,6 +829,20 @@ public sealed class VnavService : IDisposable
         }
 
         return nearestId != 0 ? nearestId : FindAetheryteForTerritory(territoryType);
+    }
+
+    private static uint FindPreferredAetheryteForTerritory(uint territoryType, Vector3 target)
+    {
+        if (territoryType == EasternLaNosceaTerritoryType)
+        {
+            var wineport = FindAetheryteByName(territoryType, "葡萄酒港");
+            if (wineport != 0)
+            {
+                return wineport;
+            }
+        }
+
+        return FindNearestAetheryteForTerritory(territoryType, target);
     }
 
     private static bool TryFindAetherytePosition(uint aetheryteId, out Vector3 position)

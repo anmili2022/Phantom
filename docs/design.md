@@ -55,8 +55,8 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前发布目标版本 0.1.30.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl，当前发布目标 AssemblyVersion 0.1.30.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前发布目标版本 0.1.31.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl，当前发布目标 AssemblyVersion 0.1.31.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider、IGameGui）。
@@ -65,6 +65,8 @@
 - `Features/PhantomWeapons/SecretKillTracker.cs`：聊天击杀/讨伐任务/探索记忆自动标记。
 - `Features/PhantomWeapons/FateTracker.cs`：金牌 FATE 自动检测。
 - `Features/Navigation/VnavService.cs`：导航 IPC 服务，含幻境村路线状态机。
+- `Features/Fates/FateNotificationService.cs`：通用 FATE 关注提醒，合并手动关注和黄道文书自动关注来源。
+- `Features/Fates/EdgeTtsService.cs`：可选 EdgeTTS.Dalamud IPC 语音播报服务。
 - `Features/Duties/AutoDutyService.cs`：可选 AutoDuty IPC 集成，按副本名解析客户端副本数据并启动单次自动流程。
 - `Features/Hunt/HuntAssistant.cs`：狩猎车头 Flag 监听、地图链接坐标解析与自动飞行导航。
 - `UI/PluginUI.cs`：主窗口、左侧系列导航、自绘阶段页签、武器进度总览、妖表页面、悬浮窗和设置页。
@@ -147,6 +149,13 @@
 - `FloatingSecretTerritoryType` / `FloatingManualMode`：悬浮窗当前地图与手动模式。
 - `ShowSecretTargetsInFloatingWindow` / `ShowSecretDutiesInFloatingWindow` / `AutoHideCompletedFloatingItems`：悬浮窗显示选项（秘影指定目标、迷宫/讨伐任务分组、自动隐藏已完成项）。
 - `ShowAvailableFatesInFloatingWindow`：在悬浮窗显示当前地图可参与的 FATE 及导航按钮。
+- `ZodiacFateNotificationsEnabled`：是否启用通用 FATE 关注提醒。
+- `AutoTrackSelectedZodiacBookFates`：是否将当前角色、职业所选黄道文书中尚未完成的 FATE 作为自动关注来源。
+- `PrioritizeZodiacFatesInCatalog`：是否在全部 FATE 目录中将文书 FATE 排在其他未关注 FATE 前面；已关注目标始终优先置顶。
+- `ZodiacFateNotificationSound` / `ZodiacFateNotificationEdgeTts`：游戏 SE 音效编号和可选 EdgeTTS 语音开关。
+- `ZodiacFateNotificationIntervalSeconds` / `ZodiacFateNotificationRepeatCount`：同一轮 FATE 的提醒间隔和最多提醒次数，默认 15 秒、3 次。
+- `TrackedFates`：手动关注列表，以全局唯一 `FateId` 为身份，名称、地图和坐标作为显示元数据。
+- 配置版本 `Version = 2` 包含提醒默认值迁移：旧配置首次加载时将提醒间隔和次数统一迁移为 15 秒、3 次并立即保存；迁移后不再覆盖用户后续设置。
 - `ShowZodiacMonitorInFloatingWindow`：是否在悬浮窗显示古武监控卡片。
 - `FloatingZodiacJobKey` / `FloatingZodiacStageKey`：悬浮窗古武监控当前选择的职业和阶段。
 - `HuntAssistantEchoLeaderMessages`：测试开关，以 Echo/默语复述指定车头在任意频道的发言，用于诊断聊天监听和车头匹配。
@@ -162,7 +171,7 @@
 - `YokaiOwnedRewardKeysByCharacter` / `YokaiSyncTimesByCharacter`：按角色维度保存妖表奖励和同步时间。
 - `ZodiacProgressByCharacter`：按角色、职业保存古武制作进度；材料数值写入 `RequirementProgress`，任务/目标勾选写入 `CompletedObjectives`。
 - `SelectedZodiacJobKey`：古武阶段页当前选择的职业，默认骑士 `pld`。
-- `FateAssistantEnabled`：古武 FATE 助手开关；当前只有配置字段，尚未接入助手生命周期和 UI。
+- `FateAssistantEnabled`：历史 FATE 助手配置字段；当前通用关注提醒使用 `ZodiacFateNotificationsEnabled`。
 - `HideOwnedYokaiRewards`：妖表页面是否隐藏已获得奖励。
 - `DebugLogSyncedItemLocations`：同步时是否在聊天栏输出候选物品的库存位置或“未找到”状态。
 - `DebugLogMissingItemLocations`：是否输出未找到的候选物品；仅在 `DebugLogSyncedItemLocations` 开启时显示和生效。
@@ -185,6 +194,7 @@
 - 拉诺西亚外地的武伽玛罗矿山目标使用实测洞口世界坐标 `(75.81, 52.79, -540.95)`；主页面先导航到洞口，并允许将洞内小怪刷新点逐个设为 Flag，不从洞外强行规划至地下网格。
 - 水天文书第一卷“朗咒巨人”使用三个实测世界坐标：`(-289.82, 292.68, 262.35)`、`(-403.18, 239.67, 279.30)`、`(-437.52, 245.89, 314.31)`。
 - 水狱文书第一卷 FATE“青磷大路”位于北萨纳兰，导航至慎重的商人 `(21.8, 29.4)`，与 NPC 对话触发。
+- 土天文书第一卷 FATE“试掘地强攻”已按 Wiki 核对：位于拉诺西亚外地 `(23.8, 16.4)`，与黑涡团二等漩兵对话触发。
 - 理符目标保存接取 NPC 的地图和坐标，使用 `NPC导航` 前往接取点；列表和悬浮窗显示 `[佣兵理符]` 或 `[军队理符·黑涡团/双蛇党/恒辉队]`，部队归属来自任务本身而非玩家所属军队。
 - 古武页面顶部 Wiki 按钮右侧提供“获取当前坐标”，读取当前地图 `(X, Y)` 并复制到剪贴板，用于人工补充或核对 Wiki 坐标。
 - 文书页面显示每本书的敌人/副本/FATE/理符四类完成数和总进度，全部 19 个目标完成后自动加入 `CompletedBooks`。
@@ -334,6 +344,24 @@ worldZ = 50f * mapY - map.OffsetY - 102400f / scale - 50f;
 - 地图坐标、世界坐标、FATE、幻武目标和狩猎目标才保存真实目的地，并在读图稳定、Lifestream 空闲和 vnavmesh ready 后继续导航。
 - 开启 `SetFlagOnNavigation` 后，所有具有明确目的地的导航通过 `AgentMap.SetFlagMapMarker` 同步设置 Flag；游戏一次只能保留一个 Flag。
 - 仅传送到地图没有真实目的地，不设置 Flag。洞穴刷新点菜单可显式强制设置 Flag，供玩家进入洞穴后定位。
+- 东拉诺西亚使用地图级水晶覆盖：所有跨地图导航和地图传送优先选择葡萄酒港，不再按目标距离选择太阳海岸；Flag 和 vnavmesh 终点仍使用真实目标坐标。
+
+## 通用 FATE 关注提醒
+
+`FateNotificationService` 每秒读取一次当前地图 `FateTable`，将手动关注目标和黄道文书自动目标合并后监控。黄道文书只是自动来源，不限制通用提醒功能：
+
+- 手动关注保存在 `PluginConfiguration.TrackedFates`，以全局唯一 `FateId` 作为身份，名称、地图和坐标作为显示元数据。危命助手可从所有静态 FATE 的可搜索下拉目录提前关注，当前地图列表也可快捷关注/取消，关注管理区可查看和移除。悬浮窗只保留状态和导航，不显示关注按钮。
+- 全部 FATE 目录不要求先选地图。客户端静态表中的同名 RowId 按显示名称合并，避免旧版本或内部变体重复显示；黄道文书目标追加 `[火天一]`、`[水狱一]`、`[土天一]` 等短标记。
+- “文书 FATE 置顶”控制目录排序；整体顺序为已关注优先、文书目标其次、其他 FATE 最后。提前关注时无需已知 Territory，目标首次出现后按 FateId 或名称命中并回填地图与坐标。
+- 下拉目录先按搜索词过滤和优先级排序，再最多绘制 300 项，避免一次创建全部静态 FATE 的 ImGui 项导致卡顿；已关注判断使用 FateId 优先、名称回退，与同名合并后的目录行为一致。
+- `AutoTrackSelectedZodiacBookFates` 开启时，当前角色、当前古武职业所选黄道文书中尚未完成的指定 FATE 作为自动来源；文书切换不会影响手动关注。
+- 仅当前地图可监控；Dalamud `FateTable` 不提供其他地图的实时 FATE。
+- FATE 进入 `Preparing` 或 `Running` 后开始提醒；切换到地图时目标已存在也会提醒。
+- 提醒格式为 `/echo [Phantom] 关注的 FATE 出现：名称 · 地图 (X, Y) [文书短标记] <se.N>`，通过游戏命令处理 `<se.N>`，而非将标签作为普通聊天文字打印；手动目标不显示文书标记。
+- 每个 FATE 独立记录本轮提醒状态。默认每 15 秒提醒一次，共提醒 3 次；设置范围为 5-300 秒、1-10 次。FATE 消失、结束或切换监控上下文后清除本轮计数，下次出现重新计数。
+- 可选调用 `EdgeTTS.Speak(string)` 播报“关注的临危受命出现，名称”。EdgeTTS 仅通过 IPC 集成，不引用第三方程序集，语音音色、语速和音量沿用 EdgeTTS.Dalamud 配置。
+- 开启语音时检查 `InternalName == "EdgeTTS.Dalamud"` 且插件已加载。未安装时弹窗提供仓库地址 `https://gh.atmoomen.top/raw.githubusercontent.com/AtmoOmen/DalamudPlugins/main/pluginmaster.json` 和复制按钮；已安装但未加载时提示先启用。
+- EdgeTTS 运行期间失效只跳过语音并记录一次日志，不影响 Echo 与 SE 音效提醒，也不自动打断或启动导航。
 
 ## AutoDuty 联动
 
@@ -451,6 +479,8 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 武器进度总览（按职业/阶段/角色维度，含物品名片段匹配与图标）。
 - 悬浮窗显示选项：是否在悬浮窗显示秘影指定目标、迷宫/讨伐任务分组，以及是否自动隐藏已完成项。
 - “危命助手”页面提供“在悬浮窗显示可参与 FATE”开关；开启后悬浮窗按距离列出当前地图处于准备/进行中的未完成 FATE，每项提供导航按钮和停止导航按钮。
+- 危命助手将“提醒设置”“黄道文书自动关注”“手动关注”拆成独立卡片。手动关注卡片按实际条目数动态调整高度，设置上下限；条目较多时卡片内部滚动，不保留大块空白。
+- 手动关注目录支持名称搜索、已关注置顶、可选文书 FATE 置顶及文书短标记；当前地图 FATE 行提供快捷关注/取消。悬浮窗 FATE 行不提供关注按钮，关注管理统一在危命助手主页面完成。
 - 设置页在常用设置与 DEBUG 区域之间提供“整理背包”区域，包含“选择物品”和“整理背包”按钮，并显示当前已选择的物品种类数量。物品选择弹窗使用固定尺寸和内部滚动列表，已选物品置顶，避免物品较多时难以确认选择或撑大窗口。
 - 悬浮窗最上方显示“当前可参与 FATE”，按距离列出当前地图处于准备/进行中的未完成 FATE，每项提供导航按钮。
 - “当前可参与 FATE”标题右侧提供“停止导航”按钮，调用 `VnavService.Stop()` 终止当前 FATE 导航、自动上坐骑等待和到达后的自动下坐骑监听。

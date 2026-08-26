@@ -9,13 +9,21 @@ public sealed class PluginConfiguration : IPluginConfiguration
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
 
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
     public bool Enabled { get; set; } = true;
     public bool UseFlightNavigation { get; set; } = true;
     public bool ShowFloatingObjectiveWindow { get; set; } = true;
     public bool ShowSecretTargetsInFloatingWindow { get; set; } = true;
     public bool ShowSecretDutiesInFloatingWindow { get; set; } = true;
     public bool ShowAvailableFatesInFloatingWindow { get; set; } = true;
+    public bool ZodiacFateNotificationsEnabled { get; set; } = true;
+    public bool AutoTrackSelectedZodiacBookFates { get; set; } = true;
+    public bool PrioritizeZodiacFatesInCatalog { get; set; } = true;
+    public int ZodiacFateNotificationSound { get; set; } = 1;
+    public bool ZodiacFateNotificationEdgeTts { get; set; }
+    public int ZodiacFateNotificationIntervalSeconds { get; set; } = 15;
+    public int ZodiacFateNotificationRepeatCount { get; set; } = 3;
+    public List<TrackedFate> TrackedFates { get; set; } = new();
     public bool ShowZodiacMonitorInFloatingWindow { get; set; } = true;
     public bool FateAssistantEnabled { get; set; }
     public bool AutoHideCompletedFloatingItems { get; set; } = true;
@@ -55,6 +63,13 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public void Initialize(IDalamudPluginInterface pluginInterface)
     {
         this.pluginInterface = pluginInterface;
+        if (Version < 2)
+        {
+            ZodiacFateNotificationIntervalSeconds = 15;
+            ZodiacFateNotificationRepeatCount = 3;
+            Version = 2;
+            Save();
+        }
     }
 
     public void Save()
@@ -62,3 +77,6 @@ public sealed class PluginConfiguration : IPluginConfiguration
         pluginInterface?.SavePluginConfig(this);
     }
 }
+
+[Serializable]
+public sealed record TrackedFate(uint FateId, uint TerritoryType, string Name, string Zone, float MapX, float MapY);
