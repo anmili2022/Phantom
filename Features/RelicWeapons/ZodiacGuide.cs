@@ -165,7 +165,9 @@ public static class ZodiacGuide
         if (zone == "北萨纳兰") return (22.1f, 29.4f, "鲁鲁巴纳");
         if (zone == "库尔札斯中央高地")
         {
-            return name.Contains("徘徊", StringComparison.Ordinal) || name.Contains("冰霜", StringComparison.Ordinal)
+            return name.Contains("徘徊", StringComparison.Ordinal)
+                || name.Contains("冰霜", StringComparison.Ordinal)
+                || name.Contains("黑暗羽翼", StringComparison.Ordinal)
                 ? (12.6f, 16.7f, "瓦力诺")
                 : (11.9f, 16.8f, "洛蒂耶");
         }
