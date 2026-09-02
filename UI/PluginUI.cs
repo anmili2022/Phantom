@@ -3378,7 +3378,8 @@ public sealed class PluginUI
 
         ImGui.Spacing();
         DrawSettingsSectionHeader("同步", "按当前角色保存");
-        if (ImGui.BeginChild("settings-sync-panel", new Vector2(0f, 188f), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        var syncPanelHeight = MathF.Max(188f, ImGui.GetFrameHeightWithSpacing() * 7f);
+        if (ImGui.BeginChild("settings-sync-panel", new Vector2(0f, syncPanelHeight), true))
         {
             var debugLogSyncedItemLocations = configuration.DebugLogSyncedItemLocations;
             if (DrawSettingToggle("同步时输出物品位置", "输出背包、收藏柜、投影台和雇员缓存中的匹配位置", ref debugLogSyncedItemLocations, "debug-log-synced-item-locations"))
@@ -3826,17 +3827,17 @@ public sealed class PluginUI
 
     private void DrawDebugButtons(string itemFinderText)
     {
-        if (ImGui.Button("读取道具检索##debug-item-finder"))
+        var firstInRow = true;
+        if (DrawWrappedButton("读取道具检索##debug-item-finder", "读取道具检索", ref firstInRow))
         {
             PrintChat($"DEBUG: {itemFinderText}");
         }
 
-        ImGui.SameLine();
-        if (ImGui.Button("导出幻武 Item.RowId##debug-export-phantom-item-ids")) ExportPhantomWeaponItemIds();
-        ImGui.SameLine();
-        if (ImGui.Button("读取雅武 Item.RowId##debug-export-elegant-item-ids")) ExportElegantWeaponItemIds();
+        if (DrawWrappedButton("导出幻武 Item.RowId##debug-export-phantom-item-ids", "导出幻武 Item.RowId", ref firstInRow)) ExportPhantomWeaponItemIds();
+        if (DrawWrappedButton("读取雅武 Item.RowId##debug-export-elegant-item-ids", "读取雅武 Item.RowId", ref firstInRow)) ExportElegantWeaponItemIds();
 
-        if (ImGui.Button("读取当前坐标##debug-print-coords"))
+        firstInRow = true;
+        if (DrawWrappedButton("读取当前坐标##debug-print-coords", "读取当前坐标", ref firstInRow))
         {
             var player = DalamudApi.ObjectTable[0];
             var terr = DalamudApi.ClientState.TerritoryType;
@@ -3845,8 +3846,7 @@ public sealed class PluginUI
                 : $"DEBUG: TerritoryType={terr}, Position=({player.Position.X:0.##}, {player.Position.Y:0.##}, {player.Position.Z:0.##})");
         }
 
-        ImGui.SameLine();
-        if (ImGui.Button("测试坐标换算##debug-test-convert"))
+        if (DrawWrappedButton("测试坐标换算##debug-test-convert", "测试坐标换算", ref firstInRow))
         {
             var terr = DalamudApi.ClientState.TerritoryType;
             var player = DalamudApi.ObjectTable[0];
@@ -3868,8 +3868,7 @@ public sealed class PluginUI
             }
         }
 
-        ImGui.SameLine();
-        if (ImGui.Button("解析地图参数##debug-map-info"))
+        if (DrawWrappedButton("解析地图参数##debug-map-info", "解析地图参数", ref firstInRow))
         {
             var terr = DalamudApi.ClientState.TerritoryType;
             var territories = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>();
@@ -3885,9 +3884,23 @@ public sealed class PluginUI
             else PrintChat($"DEBUG: TerritoryType={terr}, Territory not found in sheet.");
         }
 
-        if (ImGui.Button("打开 Wiki##debug-open-wiki")) OpenUrl("https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
-        ImGui.SameLine();
-        if (ImGui.Button("读取战斗记忆（未完成）##debug-read-memory-ui")) PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
+        firstInRow = true;
+        if (DrawWrappedButton("打开 Wiki##debug-open-wiki", "打开 Wiki", ref firstInRow)) OpenUrl("https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
+        if (DrawWrappedButton("读取战斗记忆（未完成）##debug-read-memory-ui", "读取战斗记忆（未完成）", ref firstInRow)) PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
+    }
+
+    private static bool DrawWrappedButton(string label, string visibleLabel, ref bool firstInRow)
+    {
+        var style = ImGui.GetStyle();
+        var width = GetButtonWidth(visibleLabel);
+        var lineEndX = ImGui.GetWindowContentRegionMax().X;
+        if (!firstInRow && ImGui.GetCursorPosX() + style.ItemSpacing.X + width <= lineEndX)
+        {
+            ImGui.SameLine();
+        }
+
+        firstInRow = false;
+        return ImGui.Button(label);
     }
 
     private static void ExportPhantomWeaponItemIds()
