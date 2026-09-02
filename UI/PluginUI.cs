@@ -409,11 +409,12 @@ public sealed class PluginUI
         var textColor = active ? new Vector4(0.76f, 1f, 0.95f, 1f) : new Vector4(0.86f, 0.91f, 0.92f, 1f);
         var mutedColor = active ? new Vector4(0.40f, 0.83f, 0.79f, 1f) : new Vector4(0.55f, 0.64f, 0.68f, 1f);
         ImGui.PushFont(UiBuilder.IconFont);
-        ImGui.SetCursorScreenPos(cursor + new Vector2(10f, (height - iconSize.Y) * 0.5f));
+        var iconX = cursor.X + 10f;
+        ImGui.SetCursorScreenPos(new Vector2(iconX, cursor.Y + (height - iconSize.Y) * 0.5f));
         ImGui.TextColored(mutedColor, iconText);
         ImGui.PopFont();
 
-        var labelX = cursor.X + 30f;
+        var labelX = iconX + iconSize.X + style.ItemSpacing.X + 6f;
         var countX = cursor.X + width - countSize.X - 10f;
         var labelMaxX = MathF.Max(labelX, countX - style.ItemSpacing.X);
         ImGui.SetCursorScreenPos(new Vector2(labelX, cursor.Y + (height - labelSize.Y) * 0.5f));
@@ -438,7 +439,7 @@ public sealed class PluginUI
             maxIconWidth = MathF.Max(maxIconWidth, GetIconTextSize(GetSidebarIcon(section.Key).ToIconString()).X);
         }
 
-        return MathF.Max(226f, 24f + maxIconWidth + style.ItemSpacing.X + maxLabelWidth + style.ItemSpacing.X + maxCountWidth + 24f);
+        return MathF.Max(226f, 26f + maxIconWidth + style.ItemSpacing.X + 6f + maxLabelWidth + style.ItemSpacing.X + maxCountWidth + 24f);
     }
 
     private static Vector2 GetIconTextSize(string text)

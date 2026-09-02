@@ -464,6 +464,7 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 阶段页签只使用 `InvisibleButton` 作为布局占位，背景和文字通过窗口 DrawList 绘制，避免 `SameLine` 产生阶梯状错位。
 - 当前角色信息只在左侧导航显示，妖表页面和幻境武器进度页面不再重复显示。
 - 主窗口带最小尺寸约束（720×480）。侧栏条目高度按 `ImGui.GetFrameHeight()`、正文高度和图标字体高度计算，图标、名称和数量垂直居中；长名称在数量区域前裁剪，不覆盖右侧计数。
+- 侧栏名称起点必须基于图标字体的实际 `CalcTextSize()` 宽度加间距计算，不能使用固定 X 偏移；高缩放下图标变宽时仍要保留图标与文字间距。
 
 秘影阶段 UI 应拆成两个区块：
 
