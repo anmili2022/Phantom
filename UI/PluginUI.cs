@@ -167,6 +167,7 @@ public sealed class PluginUI
         }
 
         ImGui.SetNextWindowSize(new Vector2(1050, 720), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(720f, 480f), new Vector2(float.MaxValue, float.MaxValue));
         if (!ImGui.Begin(WindowTitle, ref isMainWindowOpen))
         {
             ImGui.End();
@@ -185,7 +186,7 @@ public sealed class PluginUI
             return;
         }
 
-        ImGui.TableSetupColumn("导航", ImGuiTableColumnFlags.WidthFixed, 226f);
+        ImGui.TableSetupColumn("导航", ImGuiTableColumnFlags.WidthFixed, GetSidebarWidth());
         ImGui.TableSetupColumn("内容", ImGuiTableColumnFlags.WidthStretch);
         ImGui.TableNextRow();
         ImGui.TableNextColumn();
@@ -377,8 +378,13 @@ public sealed class PluginUI
     {
         var active = selectedMainSection == index;
         var cursor = ImGui.GetCursorScreenPos();
-        var width = ImGui.GetColumnWidth() - 8f;
-        var height = 28f;
+        var style = ImGui.GetStyle();
+        var width = ImGui.GetContentRegionAvail().X - 4f;
+        var iconText = icon.ToIconString();
+        var iconSize = GetIconTextSize(iconText);
+        var labelSize = ImGui.CalcTextSize(label);
+        var countSize = ImGui.CalcTextSize(count);
+        var height = MathF.Max(ImGui.GetFrameHeight(), MathF.Max(iconSize.Y, labelSize.Y)) + style.FramePadding.Y;
         var drawList = ImGui.GetWindowDrawList();
         var bg = active ? new Vector4(0.12f, 0.23f, 0.25f, 1f) : new Vector4(0.08f, 0.10f, 0.13f, 0f);
         var bgHovered = new Vector4(0.10f, 0.15f, 0.18f, 1f);
@@ -403,14 +409,53 @@ public sealed class PluginUI
         var textColor = active ? new Vector4(0.76f, 1f, 0.95f, 1f) : new Vector4(0.86f, 0.91f, 0.92f, 1f);
         var mutedColor = active ? new Vector4(0.40f, 0.83f, 0.79f, 1f) : new Vector4(0.55f, 0.64f, 0.68f, 1f);
         ImGui.PushFont(UiBuilder.IconFont);
-        ImGui.SetCursorScreenPos(cursor + new Vector2(10f, 5f));
-        ImGui.TextColored(mutedColor, icon.ToIconString());
+        ImGui.SetCursorScreenPos(cursor + new Vector2(10f, (height - iconSize.Y) * 0.5f));
+        ImGui.TextColored(mutedColor, iconText);
         ImGui.PopFont();
-        ImGui.SetCursorScreenPos(cursor + new Vector2(30f, 5f));
-        ImGui.TextColored(textColor, label);
-        ImGui.SetCursorScreenPos(cursor + new Vector2(width - 26f, 5f));
+
+        var labelX = cursor.X + 30f;
+        var countX = cursor.X + width - countSize.X - 10f;
+        var labelMaxX = MathF.Max(labelX, countX - style.ItemSpacing.X);
+        ImGui.SetCursorScreenPos(new Vector2(labelX, cursor.Y + (height - labelSize.Y) * 0.5f));
+        DrawClippedText(label, textColor, labelMaxX);
+
+        ImGui.SetCursorScreenPos(new Vector2(countX, cursor.Y + (height - countSize.Y) * 0.5f));
         ImGui.TextColored(mutedColor, count);
         ImGui.SetCursorScreenPos(cursor + new Vector2(0f, height + 2f));
+    }
+
+    private float GetSidebarWidth()
+    {
+        var style = ImGui.GetStyle();
+        var maxLabelWidth = 0f;
+        var maxCountWidth = 0f;
+        var maxIconWidth = 0f;
+
+        foreach (var section in MainSections)
+        {
+            maxLabelWidth = MathF.Max(maxLabelWidth, ImGui.CalcTextSize(section.Label).X);
+            maxCountWidth = MathF.Max(maxCountWidth, ImGui.CalcTextSize(GetSidebarCount(section)).X);
+            maxIconWidth = MathF.Max(maxIconWidth, GetIconTextSize(GetSidebarIcon(section.Key).ToIconString()).X);
+        }
+
+        return MathF.Max(226f, 24f + maxIconWidth + style.ItemSpacing.X + maxLabelWidth + style.ItemSpacing.X + maxCountWidth + 24f);
+    }
+
+    private static Vector2 GetIconTextSize(string text)
+    {
+        ImGui.PushFont(UiBuilder.IconFont);
+        var size = ImGui.CalcTextSize(text);
+        ImGui.PopFont();
+        return size;
+    }
+
+    private static void DrawClippedText(string text, Vector4 color, float maxScreenX)
+    {
+        var pos = ImGui.GetCursorScreenPos();
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.PushClipRect(pos, new Vector2(maxScreenX, pos.Y + ImGui.GetTextLineHeight()), true);
+        ImGui.TextColored(color, text);
+        drawList.PopClipRect();
     }
 
     private void DrawMainContent()
@@ -4890,8 +4935,8 @@ public sealed class PluginUI
             targets = GetFloatingSecretTargets();
         }
 
-        ImGui.SetNextWindowSize(new Vector2(300, 360), ImGuiCond.FirstUseEver);
-        ImGui.SetNextWindowSizeConstraints(new Vector2(240, 120), new Vector2(float.MaxValue, float.MaxValue));
+        ImGui.SetNextWindowSize(new Vector2(400f, 420f), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(340f, 180f), new Vector2(float.MaxValue, float.MaxValue));
         var floatingOpen = configuration.ShowFloatingObjectiveWindow;
         if (!ImGui.Begin("肝武助手##floating-secret-targets", ref floatingOpen))
         {
@@ -4974,12 +5019,12 @@ public sealed class PluginUI
         var monitorHeight = floatingZodiacMonitorOpen
             ? selectedStage.Key switch
             {
-                "zodiac-animus" => 224f,
-                "zodiac-atma" => 190f,
-                _ => 174f,
+                "zodiac-animus" => GetFloatingCardHeight(8),
+                "zodiac-atma" => GetFloatingCardHeight(7),
+                _ => GetFloatingCardHeight(6),
             }
-            : 34f;
-        if (ImGui.BeginChild("floating-zodiac-monitor", new Vector2(-1f, monitorHeight), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+            : GetCollapsedFloatingCardHeight();
+        if (ImGui.BeginChild("floating-zodiac-monitor", new Vector2(-1f, monitorHeight), true))
         {
             if (DrawFloatingMonitorHeaderButton("古武监控", "floating-zodiac-monitor-header", new Vector4(0.35f, 0.88f, 0.82f, 1f)))
             {
@@ -4993,7 +5038,7 @@ public sealed class PluginUI
 
             ImGui.SameLine();
             ImGui.TextDisabled(floatingZodiacMonitorOpen ? "收起" : "展开");
-            ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
+            TrySameLineRight(GetButtonWidth("停止导航"));
             if (ImGui.SmallButton("停止导航##floating-zodiac-stop-navigation"))
             {
                 vnav.Stop();
@@ -5007,7 +5052,8 @@ public sealed class PluginUI
             ImGui.SameLine();
             ImGui.TextDisabled($"{selectedJob.Name} · {selectedStage.Name}");
 
-            ImGui.SetNextItemWidth(125f);
+            var comboWidth = MathF.Max(120f, (ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) * 0.5f);
+            ImGui.SetNextItemWidth(comboWidth);
             if (ImGui.BeginCombo("##floating-zodiac-job", selectedJob.Name))
             {
                 foreach (var job in RelicWeaponGuide.ZodiacWeaponJobs)
@@ -5025,8 +5071,11 @@ public sealed class PluginUI
                 ImGui.EndCombo();
             }
 
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(125f);
+            if (ImGui.GetContentRegionAvail().X > comboWidth + ImGui.GetStyle().ItemSpacing.X)
+            {
+                ImGui.SameLine();
+            }
+            ImGui.SetNextItemWidth(comboWidth);
             if (ImGui.BeginCombo("##floating-zodiac-stage", selectedStage.Name))
             {
                 foreach (var stage in RelicWeaponGuide.ZodiacProgressStages)
@@ -5059,9 +5108,31 @@ public sealed class PluginUI
         ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0f, 0f, 0f, 0f));
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hovered with { W = 0.35f });
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, active with { W = 0.5f });
-        var clicked = ImGui.Button($"{label}##{id}", new Vector2(width, 22f));
+        var clicked = ImGui.Button($"{label}##{id}", new Vector2(width, ImGui.GetFrameHeight()));
         ImGui.PopStyleColor(4);
         return clicked;
+    }
+
+    private static float GetCollapsedFloatingCardHeight()
+        => ImGui.GetFrameHeightWithSpacing() + ImGui.GetStyle().WindowPadding.Y;
+
+    private static float GetFloatingCardHeight(int contentRows)
+        => GetCollapsedFloatingCardHeight()
+           + ImGui.GetTextLineHeightWithSpacing() * contentRows
+           + ImGui.GetStyle().WindowPadding.Y;
+
+    private static float GetButtonWidth(string label)
+        => ImGui.CalcTextSize(label).X + ImGui.GetStyle().FramePadding.X * 2f;
+
+    private static void TrySameLineRight(float width)
+    {
+        var style = ImGui.GetStyle();
+        var targetX = ImGui.GetWindowContentRegionMax().X - width;
+        var nextX = ImGui.GetCursorPosX() + style.ItemSpacing.X;
+        if (targetX > nextX)
+        {
+            ImGui.SameLine(targetX);
+        }
     }
 
     private void DrawFloatingZodiacStageSummary(string stageKey, ZodiacJobProgress progress)
@@ -5192,16 +5263,17 @@ public sealed class PluginUI
     private static void DrawFloatingZodiacNextStep(string text, System.Action? navigate, string buttonLabel = "前往")
     {
         ImGui.TextColored(new Vector4(1f, 0.82f, 0.28f, 1f), "下一步");
-        ImGui.SameLine();
+        ImGui.Indent();
         ImGui.TextWrapped(text);
         if (navigate != null)
         {
-            ImGui.SameLine();
+            TrySameLineRight(GetButtonWidth(buttonLabel));
             if (ImGui.SmallButton($"{buttonLabel}##floating-zodiac-next"))
             {
                 navigate();
             }
         }
+        ImGui.Unindent();
     }
 
     private void DrawFloatingPhantomMonitor(PhantomWeaponTarget[] targets, uint territory)
@@ -5214,7 +5286,7 @@ public sealed class PluginUI
         var total = 9 + dutyCount;
         var completed = completedTargets + Math.Min(fateCount, 5) + completedDuties;
 
-        var cardHeight = floatingPhantomMonitorOpen ? Math.Max(ImGui.GetContentRegionAvail().Y, 120f) : 34f;
+        var cardHeight = floatingPhantomMonitorOpen ? Math.Max(ImGui.GetContentRegionAvail().Y, GetFloatingCardHeight(5)) : GetCollapsedFloatingCardHeight();
         if (ImGui.BeginChild("floating-phantom-monitor-card", new Vector2(-1f, cardHeight), true))
         {
             if (DrawFloatingMonitorHeaderButton("幻武监控", "floating-phantom-monitor-header", new Vector4(0.45f, 0.70f, 0.98f, 1f)))
@@ -5237,7 +5309,7 @@ public sealed class PluginUI
 
             ImGui.SameLine();
             ImGui.TextColored(new Vector4(0.62f, 0.95f, 0.72f, 1f), $"{completed} / {total}");
-            ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
+            TrySameLineRight(GetButtonWidth("停止导航"));
             if (ImGui.SmallButton("停止导航##floating-phantom-stop-navigation"))
             {
                 vnav.Stop();
@@ -5261,7 +5333,7 @@ public sealed class PluginUI
     private void DrawFloatingPhantomTargetRow(PhantomWeaponTarget[] targets, uint territory, uint targetTerritory, int completed, int fateCount)
     {
         ImGui.TextUnformatted("秘影指定目标");
-        ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 44f);
+        TrySameLineRight(GetButtonWidth(floatingPhantomTargetsOpen ? "收起" : "展开"));
         if (ImGui.SmallButton(floatingPhantomTargetsOpen ? "收起##floating-phantom-targets-toggle" : "展开##floating-phantom-targets-toggle"))
         {
             floatingPhantomTargetsOpen = !floatingPhantomTargetsOpen;
@@ -5303,7 +5375,10 @@ public sealed class PluginUI
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("切换到当前地图");
 
-        ImGui.SameLine();
+        if (ImGui.GetContentRegionAvail().X > ImGui.CalcTextSize(targets[0].Zone).X + ImGui.GetStyle().ItemSpacing.X)
+        {
+            ImGui.SameLine();
+        }
         ImGui.TextDisabled(territory == targetTerritory && !configuration.FloatingManualMode ? "当前地图" : targets[0].Zone);
 
         ImGui.TextUnformatted($"金牌 FATE {Math.Min(fateCount, 5)}/5");
@@ -5319,7 +5394,10 @@ public sealed class PluginUI
             SetSecretFateCount(targetTerritory, fateCount + 1);
         }
 
-        ImGui.SameLine();
+        if (ImGui.GetContentRegionAvail().X > GetButtonWidth("最近FATE") + ImGui.GetStyle().ItemSpacing.X)
+        {
+            ImGui.SameLine();
+        }
         if (ImGui.SmallButton("最近FATE##float-nav-fate"))
         {
             if (IsChroniclerFateTerritory())
@@ -5367,8 +5445,18 @@ public sealed class PluginUI
             }
 
             ImGui.SameLine();
-            ImGui.TextUnformatted(target.Name);
-            ImGui.SameLine();
+            var navWidth = GetButtonWidth("导航");
+            var targetName = target.Name;
+            var targetNameSize = ImGui.CalcTextSize(targetName);
+            if (ImGui.GetContentRegionAvail().X <= targetNameSize.X + navWidth + ImGui.GetStyle().ItemSpacing.X)
+            {
+                ImGui.TextWrapped(targetName);
+            }
+            else
+            {
+                ImGui.TextUnformatted(targetName);
+            }
+            TrySameLineRight(navWidth);
             if (ImGui.SmallButton($"导航##float-nav-{target.Key}"))
             {
                 vnav.NavigateTo(target, configuration.UseFlightNavigation);
@@ -5385,7 +5473,7 @@ public sealed class PluginUI
     private void DrawFloatingPhantomDutyRow(int completed, int dutyCount)
     {
         ImGui.TextUnformatted("迷宫/讨伐任务");
-        ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - 44f);
+        TrySameLineRight(GetButtonWidth(floatingPhantomDutiesOpen ? "收起" : "展开"));
         if (ImGui.SmallButton(floatingPhantomDutiesOpen ? "收起##floating-phantom-duties-toggle" : "展开##floating-phantom-duties-toggle"))
         {
             floatingPhantomDutiesOpen = !floatingPhantomDutiesOpen;
@@ -5403,8 +5491,8 @@ public sealed class PluginUI
 
     private void DrawFloatingHuntAssistant()
     {
-        var cardHeight = floatingHuntAssistantOpen ? 72f : 34f;
-        if (ImGui.BeginChild("floating-hunt-card", new Vector2(-1f, cardHeight), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        var cardHeight = floatingHuntAssistantOpen ? GetFloatingCardHeight(3) : GetCollapsedFloatingCardHeight();
+        if (ImGui.BeginChild("floating-hunt-card", new Vector2(-1f, cardHeight), true))
         {
             var accent = configuration.HuntAssistantEnabled
                 ? new Vector4(0.95f, 0.45f, 0.25f, 1f)
@@ -5427,7 +5515,7 @@ public sealed class PluginUI
             ImGui.SameLine();
             ImGui.TextColored(configuration.HuntAssistantEnabled ? new Vector4(0.42f, 0.88f, 0.58f, 1f) : new Vector4(0.65f, 0.67f, 0.70f, 1f),
                 configuration.HuntAssistantEnabled ? "ONLINE" : "OFFLINE");
-            ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
+            TrySameLineRight(GetButtonWidth("停止导航"));
             if (ImGui.SmallButton("停止导航##floating-hunt-stop-navigation"))
             {
                 vnav.Stop();
@@ -5437,7 +5525,10 @@ public sealed class PluginUI
             ImGui.TextUnformatted(string.IsNullOrWhiteSpace(configuration.HuntLeaderName)
                 ? "车头  未指定"
                 : $"车头  {configuration.HuntLeaderName}");
-            ImGui.SameLine();
+            if (ImGui.GetContentRegionAvail().X > ImGui.CalcTextSize($"高度 +{configuration.HuntTargetHeight:0}y").X + ImGui.GetStyle().ItemSpacing.X)
+            {
+                ImGui.SameLine();
+            }
             ImGui.TextDisabled($"高度 +{configuration.HuntTargetHeight:0}y");
         }
         ImGui.EndChild();
@@ -5446,8 +5537,10 @@ public sealed class PluginUI
     private void DrawFloatingAvailableFates()
     {
         var fates = GetAvailableFates();
-        var height = floatingFateAssistantOpen ? Math.Min(44f + Math.Max(fates.Length, 1) * 26f, 252f) : 34f;
-        if (ImGui.BeginChild("floating-fate-card", new Vector2(-1f, height), true, ImGuiWindowFlags.NoScrollbar))
+        var height = floatingFateAssistantOpen
+            ? Math.Min(GetFloatingCardHeight(2 + Math.Max(fates.Length, 1)), 252f)
+            : GetCollapsedFloatingCardHeight();
+        if (ImGui.BeginChild("floating-fate-card", new Vector2(-1f, height), true))
         {
             if (DrawFloatingMonitorHeaderButton("危命助手", "floating-fate-header", new Vector4(1f, 0.82f, 0.24f, 1f)))
             {
@@ -5466,7 +5559,7 @@ public sealed class PluginUI
 
             ImGui.SameLine();
             ImGui.TextDisabled(fates.Length == 0 ? "当前地图" : $"{fates.Length} 个可参与");
-            ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize("停止导航").X - ImGui.GetStyle().FramePadding.X * 2f);
+            TrySameLineRight(GetButtonWidth("停止导航"));
             if (ImGui.SmallButton("停止导航##floating-fates-stop-nav"))
             {
                 vnav.Stop();
@@ -5481,10 +5574,13 @@ public sealed class PluginUI
 
             foreach (var fate in fates)
             {
-                ImGui.TextUnformatted(GetFateDisplayName(fate));
-                ImGui.SameLine();
+                ImGui.TextWrapped(GetFateDisplayName(fate));
+                if (ImGui.GetContentRegionAvail().X > ImGui.CalcTextSize($"{FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}").X + ImGui.GetStyle().ItemSpacing.X)
+                {
+                    ImGui.SameLine();
+                }
                 ImGui.TextDisabled($"{FormatFateState(fate.State)} {fate.Progress}% {FormatFateTime(fate.State, fate.TimeRemaining)}");
-                ImGui.SameLine();
+                TrySameLineRight(GetButtonWidth("前往"));
                 if (ImGui.SmallButton($"前往##floating-available-fate-{fate.FateId}"))
                 {
                     NavigateToFate(fate);
@@ -5642,7 +5738,7 @@ public sealed class PluginUI
                     configuration.Save();
                 }
 
-                ImGui.SameLine();
+                TrySameLineRight(GetButtonWidth("AD执行"));
                 if (ImGui.SmallButton($"AD执行##float-duty-ad-{duty.Key}"))
                 {
                     autoDuty.Run(duty.Name);
