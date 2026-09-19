@@ -55,8 +55,8 @@
 
 ## 当前结构
 
-- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前发布目标版本 0.1.32.0。
-- `Phantom.json`：卫月插件清单（含 IconUrl，当前发布目标 AssemblyVersion 0.1.32.0）。
+- `Phantom.csproj`：Dalamud API 15 插件项目配置，当前发布目标版本 0.1.36.0。
+- `Phantom.json`：卫月插件清单（含 IconUrl，当前发布目标 AssemblyVersion 0.1.36.0）。
 - `repo.json`：仓库发布清单，下载链接指向 GitHub Release。
 - `Plugin/PhantomPlugin.cs`：插件入口、命令注册、UI 生命周期。
 - `Infrastructure/DalamudApi.cs`：Dalamud 服务注入（含 IPlayerState、ITextureProvider、IGameGui）。
@@ -202,7 +202,7 @@
 - 文书四类目标区块可折叠，标题显示各类完成数；指定目标的操作列提供地图传送、坐标导航、NPC 导航、洞口/小怪操作或 `AD执行`。
 - 黄道十二文书材料项不再允许单独手填，`zodiac-animus-books` 直接由当前角色/职业的 `CompletedBooks` 派生，确保材料进度和文书勾选一致。
 - 现有危命助手会将当前角色/职业所选文书中名称匹配的 FATE 显示为 `FATE 名称【文书名】`；这是显示标记，不会写入通用 Phantom FATE 进度。
-- `ZodiacMonsterTracker` 复用聊天监听，按当前角色、职业和所选文书累计目标怪物击杀，每个目标需要 3 次；不确定的聊天文本不自动标记。
+- `ZodiacMonsterTracker` 复用聊天监听，优先读取聊天事件的 `Message.TextValue`。命中文书系统提示 `讨伐目标名 当前数/总数` 时直接同步游戏报告的当前数，例如“讨伐合成矿妖虫 3/3”会立即写入 3/3 并完成目标；仅在无法解析数字但仍是可靠击杀文本时才递增 1，不确定文本不自动标记。
 - 本我阶段提供 12 个独立光阶段，完成数保存到 `RequirementProgress["zodiac-zeta-mahatma"]`。
 - 古武页面 Wiki 按钮右侧提供“监控古武”开关，控制是否在悬浮窗显示古武进度和目标；悬浮窗同时显示幻武监控和古武监控时，两个独立卡片按顺序排列，互不覆盖。
 - 悬浮窗古武监控卡片可独立选择职业和古武阶段（古武、天极、魂晶、魂灵、新星、镇魂、黄道、本我）；阶段内容读取当前角色/职业的独立进度。

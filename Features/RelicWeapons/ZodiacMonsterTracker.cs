@@ -52,8 +52,9 @@ public sealed class ZodiacMonsterTracker : IDisposable
                 continue;
             }
 
-            var count = Math.Clamp(jobProgress.RequirementProgress.GetValueOrDefault(objective.Key), 0, objective.Needed);
-            count = Math.Min(objective.Needed, count + 1);
+            var count = TryExtractObjectiveProgress(text, objective.Name, out var reportedProgress)
+                ? Math.Clamp(reportedProgress, 0, objective.Needed)
+                : Math.Min(objective.Needed, Math.Clamp(jobProgress.RequirementProgress.GetValueOrDefault(objective.Key), 0, objective.Needed) + 1);
             jobProgress.RequirementProgress[objective.Key] = count;
             if (count >= objective.Needed)
             {
@@ -77,11 +78,46 @@ public sealed class ZodiacMonsterTracker : IDisposable
             || text.Contains("被击破", StringComparison.OrdinalIgnoreCase)
             || text.Contains("已死亡", StringComparison.OrdinalIgnoreCase);
 
+    private static bool TryExtractObjectiveProgress(string text, string objectiveName, out int progress)
+    {
+        progress = 0;
+        var objectiveIndex = text.IndexOf(objectiveName, StringComparison.OrdinalIgnoreCase);
+        if (objectiveIndex < 0)
+        {
+            return false;
+        }
+
+        var suffix = text[(objectiveIndex + objectiveName.Length)..];
+        var separator = suffix.IndexOf('/');
+        if (separator <= 0)
+        {
+            return false;
+        }
+
+        var start = separator - 1;
+        while (start >= 0 && char.IsDigit(suffix[start]))
+        {
+            start--;
+        }
+
+        return int.TryParse(suffix[(start + 1)..separator], out progress);
+    }
+
     private static string ExtractChatMessageText(object message)
     {
-        var type = message.GetType();
-        var text = type.GetProperty("Text")?.GetValue(message)?.ToString();
-        return text ?? message.ToString() ?? string.Empty;
+        try
+        {
+            var value = message.GetType().GetProperty("Message")?.GetValue(message);
+            return value?.GetType().GetProperty("TextValue")?.GetValue(value) as string
+                ?? value?.ToString()
+                ?? message.GetType().GetProperty("Text")?.GetValue(message)?.ToString()
+                ?? message.ToString()
+                ?? string.Empty;
+        }
+        catch
+        {
+            return message.ToString() ?? string.Empty;
+        }
     }
 
     private static string GetCurrentCharacterKey()
