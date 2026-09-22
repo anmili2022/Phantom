@@ -74,6 +74,7 @@ public sealed class PluginUI
     private readonly VnavService vnav;
     private readonly AutoDutyService autoDuty;
     private readonly EdgeTtsService edgeTts;
+    private readonly HuntAssistant huntAssistant;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? weaponItemLookup;
     private Dictionary<string, IReadOnlyList<Item>>? phantomRewardWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? mandervilleWeaponItemLookup;
@@ -143,12 +144,13 @@ public sealed class PluginUI
     private static readonly HashSet<uint> ChroniclerFateTerritories = new() { 1252, 1346 };
     private static readonly HashSet<uint> UnsupportedFateTerritories = new() { 732, 763, 795, 827, 920, 975 };
 
-    public PluginUI(PluginConfiguration configuration, VnavService vnav, AutoDutyService autoDuty, EdgeTtsService edgeTts)
+    public PluginUI(PluginConfiguration configuration, VnavService vnav, AutoDutyService autoDuty, EdgeTtsService edgeTts, HuntAssistant huntAssistant)
     {
         this.configuration = configuration;
         this.vnav = vnav;
         this.autoDuty = autoDuty;
         this.edgeTts = edgeTts;
+        this.huntAssistant = huntAssistant;
     }
 
     public void OpenMainWindow()
@@ -5505,7 +5507,7 @@ public sealed class PluginUI
 
     private void DrawFloatingHuntAssistant()
     {
-        var cardHeight = floatingHuntAssistantOpen ? GetFloatingCardHeight(3) : GetCollapsedFloatingCardHeight();
+        var cardHeight = floatingHuntAssistantOpen ? GetFloatingCardHeight(2) : GetCollapsedFloatingCardHeight();
         if (ImGui.BeginChild("floating-hunt-card", new Vector2(-1f, cardHeight), true))
         {
             var accent = configuration.HuntAssistantEnabled
@@ -5544,6 +5546,20 @@ public sealed class PluginUI
                 ImGui.SameLine();
             }
             ImGui.TextDisabled($"高度 +{configuration.HuntTargetHeight:0}y");
+
+            ImGui.TextDisabled(huntAssistant.LatestFlagLabel);
+            if (huntAssistant.IsWaitingForCombat)
+            {
+                ImGui.SameLine();
+                ImGui.TextColored(new Vector4(1f, 0.72f, 0.28f, 1f), "等待脱战");
+            }
+            TrySameLineRight(GetButtonWidth("前往最新 Flag"));
+            ImGui.BeginDisabled(!huntAssistant.HasLatestFlag);
+            if (ImGui.SmallButton("前往最新 Flag##floating-hunt-latest-flag"))
+            {
+                huntAssistant.NavigateToLatestFlag();
+            }
+            ImGui.EndDisabled();
         }
         ImGui.EndChild();
     }

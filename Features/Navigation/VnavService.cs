@@ -160,10 +160,16 @@ public sealed class VnavService : IDisposable
         {
             TrySetMapFlag(territoryType, targetPos);
             var currentTerritory = DalamudApi.ClientState.TerritoryType;
-            if (currentTerritory != territoryType
-                && TryTeleportToTerritory(territoryType, targetPos, true, height, false))
+            if (currentTerritory != territoryType)
             {
-                PrintEcho($"狩猎目标位于地图 {territoryType}，已请求 Lifestream 传送。 ");
+                if (TryTeleportToTerritory(territoryType, targetPos, true, height, false))
+                {
+                    PrintEcho($"狩猎目标位于地图 {territoryType}，已请求 Lifestream 传送。 ");
+                }
+                else
+                {
+                    PrintEcho($"狩猎目标位于地图 {territoryType}，传送未开始；已取消当前导航，避免使用异地图坐标寻路。 ");
+                }
                 return;
             }
 

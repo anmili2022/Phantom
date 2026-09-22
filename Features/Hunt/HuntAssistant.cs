@@ -2,27 +2,56 @@ using System.Numerics;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 
 namespace Phantom;
 
 public sealed class HuntAssistant : IDisposable
 {
+    private sealed record HuntFlagTarget(uint TerritoryType, uint MapId, float MapX, float MapY, Vector3 Position);
+
     private readonly PluginConfiguration configuration;
     private readonly VnavService vnav;
     private string lastFlagKey = string.Empty;
     private DateTime lastFlagUtc = DateTime.MinValue;
+    private HuntFlagTarget? latestFlag;
+    private bool pendingLatestFlagNavigation;
 
     public HuntAssistant(PluginConfiguration configuration, VnavService vnav)
     {
         this.configuration = configuration;
         this.vnav = vnav;
         DalamudApi.ChatGui.ChatMessage += OnChatMessage;
+        DalamudApi.Framework.Update += OnFrameworkUpdate;
     }
 
     public void Dispose()
     {
         DalamudApi.ChatGui.ChatMessage -= OnChatMessage;
+        DalamudApi.Framework.Update -= OnFrameworkUpdate;
+    }
+
+    public bool HasLatestFlag => latestFlag != null;
+
+    public bool IsWaitingForCombat => pendingLatestFlagNavigation && DalamudApi.Condition[ConditionFlag.InCombat];
+
+    public string LatestFlagLabel => latestFlag == null
+        ? "尚未收到车头 Flag"
+        : $"最新 Flag  X:{latestFlag.MapX:0.0} Y:{latestFlag.MapY:0.0}";
+
+    public void NavigateToLatestFlag()
+    {
+        if (latestFlag == null)
+        {
+            PrintTestStatus("尚未收到可用的车头 Flag。", false);
+            return;
+        }
+
+        pendingLatestFlagNavigation = true;
+        vnav.Stop();
+        TryNavigateLatestFlag();
     }
 
     private void OnChatMessage(object message)
@@ -80,9 +109,40 @@ public sealed class HuntAssistant : IDisposable
         }
 
         TryMarkMapFlag(territoryType, mapId, position);
-        vnav.NavigateToHuntTarget(territoryType, position, configuration.HuntTargetHeight);
-        DalamudApi.Log.Information("Navigating to hunt Flag from {Leader}: {X:0.0}, {Y:0.0}.", configuration.HuntLeaderName, mapX, mapY);
-        PrintTestStatus($"已解析 Flag：Territory={territoryType}，Map={mapId}，X={mapX:0.0}，Y={mapY:0.0}。", true);
+        latestFlag = new HuntFlagTarget(territoryType, mapId, mapX, mapY, position);
+        pendingLatestFlagNavigation = true;
+        vnav.Stop();
+        if (DalamudApi.Condition[ConditionFlag.InCombat])
+        {
+            DalamudApi.Log.Information("Queued latest hunt Flag during combat: {X:0.0}, {Y:0.0}.", mapX, mapY);
+            PrintTestStatus($"战斗中，已保存最新 Flag：X={mapX:0.0}，Y={mapY:0.0}；脱战后自动前往。", false);
+            return;
+        }
+
+        TryNavigateLatestFlag();
+    }
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        _ = framework;
+        if (pendingLatestFlagNavigation && !DalamudApi.Condition[ConditionFlag.InCombat])
+        {
+            TryNavigateLatestFlag();
+        }
+    }
+
+    private void TryNavigateLatestFlag()
+    {
+        if (!pendingLatestFlagNavigation || latestFlag == null || DalamudApi.Condition[ConditionFlag.InCombat])
+        {
+            return;
+        }
+
+        pendingLatestFlagNavigation = false;
+        TryMarkMapFlag(latestFlag.TerritoryType, latestFlag.MapId, latestFlag.Position);
+        vnav.NavigateToHuntTarget(latestFlag.TerritoryType, latestFlag.Position, configuration.HuntTargetHeight);
+        DalamudApi.Log.Information("Navigating to latest hunt Flag from {Leader}: {X:0.0}, {Y:0.0}.", configuration.HuntLeaderName, latestFlag.MapX, latestFlag.MapY);
+        PrintTestStatus($"已前往最新 Flag：Territory={latestFlag.TerritoryType}，Map={latestFlag.MapId}，X={latestFlag.MapX:0.0}，Y={latestFlag.MapY:0.0}。", true);
     }
 
     private static bool TryExtractMapLink(object message, out MapLinkPayload mapLink)

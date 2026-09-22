@@ -35,7 +35,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         autoDuty = new AutoDutyService(pluginInterface);
         edgeTts = new EdgeTtsService(pluginInterface);
         fateNotificationService = new FateNotificationService(Configuration, edgeTts);
-        ui = new PluginUI(Configuration, vnav, autoDuty, edgeTts);
+        ui = new PluginUI(Configuration, vnav, autoDuty, edgeTts, huntAssistant);
 
         DalamudApi.Commands.AddHandler(CommandName, new Dalamud.Game.Command.CommandInfo(OnCommand)
         {
