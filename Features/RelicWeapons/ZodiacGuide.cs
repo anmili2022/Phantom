@@ -2,6 +2,28 @@ namespace Phantom;
 
 public static class ZodiacGuide
 {
+    public sealed record ZodiacZodiacDutyGroup(string Key, string Name, IReadOnlyList<string> Duties);
+
+    public static readonly IReadOnlyList<ZodiacZodiacDutyGroup> ZodiacZodiacDutyGroups = new[]
+    {
+        new ZodiacZodiacDutyGroup("zodiac-zodiac-duty-drop-of-kindness", "滴水之恩", new[]
+        {
+            "山中战线泽梅尔要塞", "纷争要地布雷福洛克斯野营地", "魔兽领域日影地修炼所", "凛冽洞天披雪大冰壁",
+        }),
+        new ZodiacZodiacDutyGroup("zodiac-zodiac-duty-unknown-craftsman", "挑战未知的工匠", new[]
+        {
+            "毒雾洞窟黄金谷", "恶灵府邸静语庄园", "腐坏遗迹无限城市街古迹", "逆转要害沙斯塔夏溶洞",
+        }),
+        new ZodiacZodiacDutyGroup("zodiac-zodiac-duty-passion-dream", "激情与梦想", new[]
+        {
+            "神灵圣域放浪神古神殿", "骚乱坑道铜铃铜山", "财宝传说破舰岛", "苏醒遗迹喀恩埋没圣堂",
+        }),
+        new ZodiacZodiacDutyGroup("zodiac-zodiac-duty-mothers-hand", "慈母手中物", new[]
+        {
+            "邪教驻地无限城古堡", "领航明灯天狼星灯塔", "惨剧灵殿塔姆·塔拉墓园", "激战城塞石卫塔",
+        }),
+    };
+
     public static string GetFateBookAnnotations(string fateName)
         => string.Join(string.Empty, AnimusBooks
             .Where(book => book.Fates.Any(fate =>

@@ -1952,6 +1952,7 @@ public sealed class PluginUI
             completed => $"{selectedStage.Name} 已持有职业 {completed}/{displayJobs.Length}。未显示的武器通常表示该职业当时未开放，或上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ",
             RelicWeaponGuide.UltimateWeaponJobs,
             RelicWeaponGuide.UltimateProgressStages);
+        DrawPityItems("ultimate", GetUltimatePitySourceLabel(selectedStage.Key));
     }
 
     private void DrawUltimateTotalProgressPanel()
@@ -2120,11 +2121,20 @@ public sealed class PluginUI
         ImGui.EndTable();
     }
 
-    private void DrawPityItems(string seriesKey)
+    private void DrawPityItems(string seriesKey, string? sourceLabel = null)
     {
         if (!PityItems.TryGetValue(seriesKey, out var items))
         {
             return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(sourceLabel))
+        {
+            items = items.Where(item => string.Equals(item.SourceLabel, sourceLabel, StringComparison.Ordinal)).ToArray();
+            if (items.Count == 0)
+            {
+                return;
+            }
         }
 
         ImGui.Spacing();
@@ -2187,6 +2197,19 @@ public sealed class PluginUI
         var stageKey = RelicWeaponGuide.UltimateProgressStages[stageIndex].Key;
         return Math.Max(0, GetTotalWeaponCount("ultimate", stageKey) - GetCompletedWeaponCount("ultimate", stageKey));
     }
+
+    private static string? GetUltimatePitySourceLabel(string stageKey)
+        => stageKey switch
+        {
+            "ultimate-ucob" => "绝巴哈",
+            "ultimate-uwu" => "绝神兵",
+            "ultimate-tea" => "绝亚",
+            "ultimate-dsr" => "绝龙诗",
+            "ultimate-top" => "绝欧",
+            "ultimate-fru" => "绝伊甸",
+            "ultimate-chaos" => "绝妖星",
+            _ => null,
+        };
 
     private void DrawElegantPityItems(IReadOnlyList<PityItem> items, IReadOnlyDictionary<uint, int> quantities)
     {
@@ -5007,6 +5030,11 @@ public sealed class PluginUI
             DrawRequirements(stage, progress);
         }
 
+        if (stage.Key == "zodiac-zodiac" && completedTasks != configuration.CompletedTasks)
+        {
+            DrawZodiacZodiacDuties(completedTasks);
+        }
+
         if (stage.RepeatableRewards.Count > 0)
         {
             ImGui.Spacing();
@@ -5063,6 +5091,53 @@ public sealed class PluginUI
             }
 
             ImGui.TextWrapped(task.Detail);
+        }
+    }
+
+    private void DrawZodiacZodiacDuties(HashSet<string> completedObjectives)
+    {
+        ImGui.Spacing();
+        ImGui.TextUnformatted("黄道武器四任务副本");
+        ImGui.TextDisabled("四条任务各需完成 4 个指定副本；勾选状态按当前角色、当前职业保存。每行可直接请求 AutoDuty 执行一次。");
+
+        foreach (var group in ZodiacGuide.ZodiacZodiacDutyGroups)
+        {
+            var completed = group.Duties
+                .Select((_, index) => $"{group.Key}-{index + 1}")
+                .Count(completedObjectives.Contains);
+            if (!ImGui.CollapsingHeader($"{group.Name} ({completed}/{group.Duties.Count})##{group.Key}", ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                continue;
+            }
+
+            if (ImGui.BeginTable($"{group.Key}-duties", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+            {
+                ImGui.TableSetupColumn("完成", ImGuiTableColumnFlags.WidthFixed, 56f);
+                ImGui.TableSetupColumn("副本", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("操作", ImGuiTableColumnFlags.WidthFixed, 76f);
+                ImGui.TableHeadersRow();
+                for (var index = 0; index < group.Duties.Count; index++)
+                {
+                    var key = $"{group.Key}-{index + 1}";
+                    var done = completedObjectives.Contains(key);
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    if (ImGui.Checkbox($"##{key}", ref done))
+                    {
+                        if (done) completedObjectives.Add(key); else completedObjectives.Remove(key);
+                        configuration.Save();
+                    }
+
+                    ImGui.TableNextColumn();
+                    ImGui.TextWrapped(group.Duties[index]);
+                    ImGui.TableNextColumn();
+                    if (ImGui.SmallButton($"AD执行##{key}-ad"))
+                    {
+                        autoDuty.Run(group.Duties[index]);
+                    }
+                }
+                ImGui.EndTable();
+            }
         }
     }
 
@@ -5162,7 +5237,10 @@ public sealed class PluginUI
     private void DrawRequirementRow(PhantomWeaponRequirement requirement, Dictionary<string, int> progress)
     {
         var isZodiacBookProgress = requirement.Key == "zodiac-animus-books";
-        var current = isZodiacBookProgress ? GetCompletedZodiacBookCount() : progress.GetValueOrDefault(requirement.Key);
+        var isZodiacZodiacProgress = requirement.Key == "zodiac-zodiac-quests";
+        var current = isZodiacBookProgress ? GetCompletedZodiacBookCount()
+            : isZodiacZodiacProgress ? GetCompletedZodiacZodiacQuestCount()
+            : progress.GetValueOrDefault(requirement.Key);
         current = Math.Clamp(current, 0, requirement.Needed);
 
         ImGui.TableNextRow();
@@ -5170,9 +5248,9 @@ public sealed class PluginUI
         ImGui.TextWrapped(requirement.Name);
 
         ImGui.TableNextColumn();
-        if (isZodiacBookProgress)
+        if (isZodiacBookProgress || isZodiacZodiacProgress)
         {
-            ImGui.TextDisabled("由下方文书完成状态自动计算");
+            ImGui.TextDisabled(isZodiacBookProgress ? "由下方文书完成状态自动计算" : "由下方四任务副本完成状态自动计算");
         }
         else
         {
@@ -5198,6 +5276,20 @@ public sealed class PluginUI
             && characterProgress.Jobs.TryGetValue(configuration.SelectedZodiacJobKey, out var jobProgress)
             ? Math.Min(jobProgress.CompletedBooks.Count, ZodiacGuide.AnimusBooks.Count)
             : 0;
+    }
+
+    private int GetCompletedZodiacZodiacQuestCount()
+    {
+        var characterKey = GetCurrentCharacterKey();
+        if (!configuration.ZodiacProgressByCharacter.TryGetValue(characterKey, out var characterProgress)
+            || !characterProgress.Jobs.TryGetValue(configuration.SelectedZodiacJobKey, out var progress))
+        {
+            return 0;
+        }
+
+        return ZodiacGuide.ZodiacZodiacDutyGroups.Count(group =>
+            group.Duties.Select((_, index) => $"{group.Key}-{index + 1}")
+                .All(progress.CompletedObjectives.Contains));
     }
 
     private void DrawRewards(PhantomWeaponStage stage)
@@ -5444,6 +5536,7 @@ public sealed class PluginUI
             {
                 "zodiac-animus" => GetFloatingCardHeight(8 + GetFloatingZodiacMonsterNavigationRows(progress)),
                 "zodiac-atma" => GetFloatingCardHeight(7),
+                "zodiac-zodiac" => GetFloatingCardHeight(7),
                 _ => GetFloatingCardHeight(6),
             }
             : GetCollapsedFloatingCardHeight();
@@ -5596,6 +5689,12 @@ public sealed class PluginUI
             return;
         }
 
+        if (stageKey == "zodiac-zodiac")
+        {
+            DrawFloatingZodiacZodiacTasks(progress);
+            return;
+        }
+
         var stage = RelicWeaponGuide.Series["zodiac"].Stages.FirstOrDefault(candidate => candidate.Key == stageKey);
         if (stage == null)
         {
@@ -5620,6 +5719,41 @@ public sealed class PluginUI
         DrawFloatingZodiacNextStep(nextRequirement == null
             ? "当前阶段已完成"
             : $"完成 {nextRequirement.Name}（{Math.Clamp(progress.RequirementProgress.GetValueOrDefault(nextRequirement.Key), 0, nextRequirement.Needed)}/{nextRequirement.Needed}）", null);
+    }
+
+    private void DrawFloatingZodiacZodiacTasks(ZodiacJobProgress progress)
+    {
+        var completedGroups = ZodiacGuide.ZodiacZodiacDutyGroups.Count(group =>
+            group.Duties.Select((_, index) => $"{group.Key}-{index + 1}")
+                .All(progress.CompletedObjectives.Contains));
+        ImGui.TextDisabled($"黄道武器四任务：{completedGroups}/{ZodiacGuide.ZodiacZodiacDutyGroups.Count}");
+        ImGui.ProgressBar((float)completedGroups / ZodiacGuide.ZodiacZodiacDutyGroups.Count, new Vector2(-1f, 0f), $"{completedGroups}/4");
+
+        foreach (var group in ZodiacGuide.ZodiacZodiacDutyGroups)
+        {
+            var completed = group.Duties
+                .Select((_, index) => $"{group.Key}-{index + 1}")
+                .Count(progress.CompletedObjectives.Contains);
+            ImGui.TextUnformatted($"{group.Name}  {completed}/{group.Duties.Count}");
+            var nextIndex = Enumerable.Range(0, group.Duties.Count)
+                .FirstOrDefault(index => !progress.CompletedObjectives.Contains($"{group.Key}-{index + 1}"), -1);
+            if (nextIndex < 0)
+            {
+                ImGui.SameLine();
+                ImGui.TextColored(new Vector4(0.42f, 0.88f, 0.58f, 1f), "完成");
+                continue;
+            }
+
+            TrySameLineRight(GetButtonWidth("AD执行"));
+            if (ImGui.SmallButton($"AD执行##floating-zodiac-zodiac-{group.Key}"))
+            {
+                autoDuty.Run(group.Duties[nextIndex]);
+            }
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip($"下一个副本：{group.Duties[nextIndex]}");
+            }
+        }
     }
 
     private void DrawFloatingZodiacNextBookStep(ZodiacBookGuide book, ZodiacJobProgress progress)
