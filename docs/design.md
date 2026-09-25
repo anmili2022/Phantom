@@ -68,6 +68,7 @@
 - `Features/Fates/FateNotificationService.cs`：通用 FATE 关注提醒，合并手动关注和黄道文书自动关注来源。
 - `Features/Fates/EdgeTtsService.cs`：可选 EdgeTTS.Dalamud IPC 语音播报服务。
 - `Features/Duties/AutoDutyService.cs`：可选 AutoDuty IPC 集成，按副本名解析客户端副本数据并启动单次自动流程。
+- `Features/Duties/DutyCompletionTracker.cs`：统一监听副本成功完成事件，按确认的 `TerritoryType.RowId` 更新古武和幻武副本目标。
 - `Features/Hunt/HuntAssistant.cs`：狩猎车头 Flag 监听、地图链接坐标解析与自动飞行导航。
 - `UI/PluginUI.cs`：主窗口、左侧系列导航、自绘阶段页签、武器进度总览、妖表页面、悬浮窗和设置页。
 - `Features/Yokai/YokaiWatchGuide.cs`：妖表联动奖励定义。
@@ -88,6 +89,7 @@
 - 秘影阶段按地图的目标清单、坐标、导航。
 - 悬浮窗口显示当前地图秘影进度。
 - 聊天消息自动标记击杀、讨伐任务组、探索记忆组和金牌 FATE。
+- 副本成功完成自动标记：统一覆盖古武黄道文书、黄道武器 iLvl 125 四任务和幻武秘影副本。
 - 总览页按当前角色汇总职业收藏、绝武收藏、妖表奖励、雇员缓存覆盖和各系列完成度，支持一键同步全部系列。
 - 各系列武器进度页支持按职业分组、物品图标、角色维度保存和库存自动同步。
 - 妖表联动奖励扫描，支持隐藏已获得奖励、投影台缓存状态和按类别展示。
@@ -217,6 +219,8 @@
 - 黄道十二文书材料项不再允许单独手填，`zodiac-animus-books` 直接由当前角色/职业的 `CompletedBooks` 派生，确保材料进度和文书勾选一致。
 - 现有危命助手会将当前角色/职业所选文书中名称匹配的 FATE 显示为 `FATE 名称【文书名】`；这是显示标记，不会写入通用 Phantom FATE 进度。
 - `ZodiacMonsterTracker` 复用聊天监听，优先读取聊天事件的 `Message.TextValue`。命中文书系统提示 `讨伐目标名 当前数/总数` 时直接同步游戏报告的当前数，例如“讨伐合成矿妖虫 3/3”会立即写入 3/3 并完成目标；仅在无法解析数字但仍是可靠击杀文本时才递增 1，不确定文本不自动标记。
+- `DutyCompletionTracker` 统一监听 Dalamud `IDutyState.DutyCompleted` 成功完成事件，按已确认的 `TerritoryType.RowId` 精确标记古武黄道文书 27 个副本、黄道武器 iLvl 125 的 16 个副本和幻武秘影 35 个副本；古武写入当前 UI 选择的古武职业，幻武写入全局 `CompletedTasks`。AutoDuty、普通排本和 Duty Support 均以游戏成功完成事件为准，启动 AutoDuty 本身不会提前标记。
+- 副本完成映射以 `DutyCompletionTracker` 内的 TerritoryType 表为准，不使用名称模糊匹配。相同 TerritoryType 可对应多个目标，完成一次会同时标记所有对应目标；已完成目标不会重复保存或提示。未进入已确认映射的副本仍保留手动勾选。
 - 本我阶段提供 12 个独立光阶段，完成数保存到 `RequirementProgress["zodiac-zeta-mahatma"]`。
 - 古武页面 Wiki 按钮右侧提供“监控古武”开关，控制是否在悬浮窗显示古武进度和目标；悬浮窗同时显示幻武监控和古武监控时，两个独立卡片按顺序排列，互不覆盖。
 - 悬浮窗古武监控卡片可独立选择职业和古武阶段（古武、天极、魂晶、魂灵、新星、镇魂、黄道、本我）；阶段内容读取当前角色/职业的独立进度。
@@ -387,6 +391,8 @@ worldZ = 50f * mapY - map.OffsetY - 102400f / scale - 50f;
 3. 调用 `AutoDuty.ContentHasPath(uint)` 确认该副本存在可用路径。
 4. 调用 `AutoDuty.Run(uint, 1, false)` 启动一次完整自动流程，组队模式、战斗插件和其他行为沿用用户的 AutoDuty 配置。
 5. 无法解析副本、插件未加载、无路径或 IPC 异常时只输出明确提示，不执行替代自动操作。
+
+AutoDuty 的启动解析与完成标记分离：启动时仍按副本名从 `ContentFinderCondition` 解析可执行的 TerritoryType；副本成功结束后由 `DutyCompletionTracker` 直接读取 `IDutyStateEventArgs.TerritoryType.RowId`，不依赖 AutoDuty IPC 返回值或聊天文本。设置页“同步”区块的“导出副本 TerritoryType”按钮会导出古武黄道文书、黄道武器四任务和幻武秘影的目标 Key、`ContentFinderCondition.RowId`、名称与 `TerritoryType.RowId`，同时复制结果到剪贴板，供校对和扩展映射使用。
 
 古武文书指定副本、幻武秘影副本主页面和悬浮窗均提供 `AD执行`。讨伐战等内容同样先由 `ContentHasPath` 判定，不假设 AutoDuty 必然支持。
 

@@ -4192,6 +4192,7 @@ public sealed class PluginUI
         if (DrawWrappedButton("导出幻武 Item.RowId##debug-export-phantom-item-ids", "导出幻武 Item.RowId", ref firstInRow)) ExportPhantomWeaponItemIds();
         if (DrawWrappedButton("读取雅武 Item.RowId##debug-export-elegant-item-ids", "读取雅武 Item.RowId", ref firstInRow)) ExportElegantWeaponItemIds();
         if (DrawWrappedButton("导出低保 Item.RowId##debug-export-pity-item-ids", "导出低保 Item.RowId", ref firstInRow)) ExportPityItemIds();
+        if (DrawWrappedButton("导出副本 TerritoryType##debug-export-duty-territory-ids", "导出副本 TerritoryType", ref firstInRow)) ExportDutyTerritoryIds();
 
         firstInRow = true;
         if (DrawWrappedButton("读取当前坐标##debug-print-coords", "读取当前坐标", ref firstInRow))
@@ -4498,6 +4499,71 @@ public sealed class PluginUI
             PrintChat($"导出低保 Item.RowId 失败：{ex.Message}");
         }
     }
+
+    private static void ExportDutyTerritoryIds()
+    {
+        try
+        {
+            var duties = new List<(string Source, string Key, string Name)>();
+            duties.AddRange(ZodiacGuide.AnimusBooks
+                .SelectMany(book => book.Duties.Select(duty => ($"古武黄道文书:{book.Name}", duty.Key, duty.Name))));
+            duties.AddRange(ZodiacGuide.ZodiacZodiacDutyGroups
+                .SelectMany(group => group.Duties.Select((name, index) => ($"黄道武器:{group.Name}", $"{group.Key}-{index + 1}", name))));
+            duties.AddRange(PhantomWeaponGuide.SecretDutyGroups
+                .SelectMany(group => group.Duties.Select(duty => ($"幻武秘影:{group.Name}", duty.Key, duty.Name))));
+
+            var rows = DalamudApi.DataManager.GetExcelSheet<ContentFinderCondition>()
+                .Where(row => row.RowId != 0 && row.TerritoryType.RowId != 0 && !string.IsNullOrWhiteSpace(row.Name.ExtractText()))
+                .Select(row => new
+                {
+                    ContentFinderCondition = row.RowId,
+                    TerritoryType = row.TerritoryType.RowId,
+                    Name = row.Name.ExtractText(),
+                    NormalizedName = NormalizeDutyName(row.Name.ExtractText()),
+                })
+                .ToArray();
+
+            var lines = new List<string>
+            {
+                "# Source|Key|DeclaredName|ContentFinderCondition.RowId|ContentFinderCondition.Name|TerritoryType.RowId|Status",
+            };
+            var matched = 0;
+            var missing = 0;
+
+            foreach (var duty in duties)
+            {
+                var matches = rows
+                    .Where(row => row.NormalizedName.Equals(NormalizeDutyName(duty.Name), StringComparison.Ordinal))
+                    .ToArray();
+                if (matches.Length == 0)
+                {
+                    missing++;
+                    lines.Add($"{duty.Source}|{duty.Key}|{duty.Name}|MISSING|||未匹配");
+                    continue;
+                }
+
+                matched++;
+                foreach (var match in matches)
+                {
+                    lines.Add($"{duty.Source}|{duty.Key}|{duty.Name}|{match.ContentFinderCondition}|{match.Name}|{match.TerritoryType}|EXACT");
+                }
+            }
+
+            var output = string.Join(Environment.NewLine, lines);
+            var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "duty-territory-ids.txt");
+            File.WriteAllText(path, output);
+            ImGui.SetClipboardText(output);
+            PrintChat($"已导出副本 TerritoryType：目标 {duties.Count}，匹配 {matched}，未匹配 {missing}。结果已复制，文件：{path}");
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Error(ex, "Failed to export duty territory IDs.");
+            PrintChat($"导出副本 TerritoryType 失败：{ex.Message}");
+        }
+    }
+
+    private static string NormalizeDutyName(string name)
+        => new(name.Where(character => !char.IsWhiteSpace(character) && character is not '·' and not '：' and not ':').ToArray());
 
     private unsafe void DrawBackpackOrganizer()
     {

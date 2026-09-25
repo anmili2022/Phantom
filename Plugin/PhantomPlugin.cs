@@ -10,6 +10,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
     private readonly SecretKillTracker killTracker;
     private readonly FateTracker fateTracker;
     private readonly ZodiacMonsterTracker zodiacMonsterTracker;
+    private readonly DutyCompletionTracker dutyCompletionTracker;
     private readonly HuntAssistant huntAssistant;
     private readonly AutoDutyService autoDuty;
     private readonly EdgeTtsService edgeTts;
@@ -31,6 +32,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         killTracker = new SecretKillTracker(Configuration);
         fateTracker = new FateTracker(Configuration);
         zodiacMonsterTracker = new ZodiacMonsterTracker(Configuration);
+        dutyCompletionTracker = new DutyCompletionTracker(Configuration);
         huntAssistant = new HuntAssistant(Configuration, vnav);
         autoDuty = new AutoDutyService(pluginInterface);
         edgeTts = new EdgeTtsService(pluginInterface);
@@ -63,6 +65,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         killTracker.Dispose();
         fateTracker.Dispose();
         zodiacMonsterTracker.Dispose();
+        dutyCompletionTracker.Dispose();
         huntAssistant.Dispose();
         fateNotificationService.Dispose();
         vnav.Dispose();
