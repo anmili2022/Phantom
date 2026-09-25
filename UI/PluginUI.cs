@@ -884,6 +884,18 @@ public sealed class PluginUI
         if (series.Key == "zodiac")
         {
             ImGui.SameLine();
+            if (ImGui.Button("古·茱萨娜导航##zodiac-navigate-gjusana"))
+            {
+                NavigateToZodiacCoordinate("摩杜纳", new ZodiacCoordinate(22.9f, 7.3f));
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("加尔赞·代米尔导航##zodiac-navigate-jalzahn"))
+            {
+                NavigateToZodiacCoordinate("黑衣森林北部林区", new ZodiacCoordinate(29.8f, 19.7f));
+            }
+
+            ImGui.SameLine();
             var monitorZodiac = configuration.ShowZodiacMonitorInFloatingWindow;
             if (ImGui.Checkbox("监控古武##zodiac-floating-window", ref monitorZodiac))
             {
