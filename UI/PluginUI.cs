@@ -154,6 +154,7 @@ public sealed class PluginUI
     private readonly YokaiProgressService yokaiProgress = new();
     private bool isMainWindowOpen;
     private string trackedEquipmentId = string.Empty;
+    private string trackedEquipmentName = string.Empty;
     private string trackedEquipmentError = string.Empty;
     private string trackedEquipmentSearch = string.Empty;
     private string trackedEquipmentLookupKeyword = string.Empty;
@@ -936,6 +937,49 @@ public sealed class PluginUI
 
         if (trackedEquipmentError.Length > 0) ImGui.TextColored(new Vector4(1f, 0.45f, 0.4f, 1f), trackedEquipmentError);
 
+        ImGui.Spacing();
+        ImGui.TextUnformatted("物品名称（每行一个，按客户端名称精确匹配）");
+        ImGui.InputTextMultiline("##tracked-equipment-names", ref trackedEquipmentName, 8192,
+            new Vector2(-1f, ImGui.GetTextLineHeightWithSpacing() * 5f));
+        if (ImGui.Button("按名称批量添加##tracked-equipment-add-names"))
+        {
+            var names = trackedEquipmentName
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(name => name.Trim())
+                .Where(name => name.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var itemsByName = DalamudApi.DataManager.GetExcelSheet<Item>()
+                .Where(item => item.RowId > 0 && !string.IsNullOrWhiteSpace(item.Name.ExtractText()))
+                .GroupBy(item => item.Name.ExtractText(), StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First().RowId, StringComparer.Ordinal);
+            var existingIds = selectedList.ItemIds.ToHashSet();
+            var missing = new List<string>();
+            var added = 0;
+            foreach (var name in names)
+            {
+                if (!itemsByName.TryGetValue(name, out var itemId))
+                {
+                    missing.Add(name);
+                    continue;
+                }
+
+                if (!existingIds.Add(itemId)) continue;
+                selectedList.ItemIds.Add(itemId);
+                if (!configuration.TrackedEquipment.Any(entry => entry.ItemId == itemId))
+                    configuration.TrackedEquipment.Add(new TrackedEquipment(itemId, name));
+                added++;
+            }
+
+            if (added > 0) configuration.Save();
+            trackedEquipmentName = string.Join(Environment.NewLine, missing);
+            trackedEquipmentError = missing.Count > 0
+                ? $"新增 {added} 件；以下名称未匹配到物品：{string.Join("、", missing)}"
+                : $"新增 {added} 件；已有 ID 已跳过。";
+        }
+
+        if (trackedEquipmentError.Length > 0) ImGui.TextColored(new Vector4(1f, 0.45f, 0.4f, 1f), trackedEquipmentError);
+
         if (ImGui.Button("批量添加雾忆装备##tracked-equipment-mist-memory"))
         {
             var existingIds = selectedList.ItemIds.ToHashSet();
@@ -1261,6 +1305,14 @@ public sealed class PluginUI
                     {
                         ImGui.SetClipboardText(entry.Name);
                         PrintChat($"已复制道具名：{entry.Name}");
+                    }
+
+                    if (ImGui.MenuItem($"删除##tracked-equipment-menu-delete-{entry.ItemId}"))
+                    {
+                        list.ItemIds.Remove(entry.ItemId);
+                        configuration.TrackedEquipment.RemoveAll(item => item.ItemId == entry.ItemId);
+                        configuration.Save();
+                        PrintChat($"已从装备列表移除：{entry.Name}");
                     }
 
                     ImGui.EndPopup();
