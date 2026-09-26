@@ -27,6 +27,11 @@ public sealed class PluginUI
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> ItemLookup);
     private sealed record FateCatalogEntry(uint FateId, string Name, string Annotations);
     private sealed record PityItem(uint ItemId, string Name, string? SourceLabel = null);
+    private static readonly string[] TrackedEquipmentSetSlotOrder =
+    {
+        "武器", "头部", "身体", "手部", "腿部", "脚部",
+        "耳饰", "项链", "手镯", "戒指1", "戒指2", "食物",
+    };
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<PityItem>> PityItems =
         new Dictionary<string, IReadOnlyList<PityItem>>(StringComparer.Ordinal)
@@ -82,6 +87,7 @@ public sealed class PluginUI
         ("ultimate", "绝武 · Ultimate", "-"),
         ("deep-dungeon", "深武 · Deep Dungeon", "-"),
         ("yokai", "妖表联动", "37"),
+        ("bis", "BIS联动", "-"),
         ("settings", "设置", "-"),
         ("fate", "危命助手", "-"),
         ("hunt", "狩猎助手", "-"),
@@ -147,6 +153,21 @@ public sealed class PluginUI
     private IReadOnlyList<YokaiRewardProgress> yokaiResults = Array.Empty<YokaiRewardProgress>();
     private readonly YokaiProgressService yokaiProgress = new();
     private bool isMainWindowOpen;
+    private string trackedEquipmentId = string.Empty;
+    private string trackedEquipmentError = string.Empty;
+    private string trackedEquipmentSearch = string.Empty;
+    private string trackedEquipmentLookupKeyword = string.Empty;
+    private string trackedEquipmentListName = string.Empty;
+    private string trackedEquipmentListNewName = string.Empty;
+    private string trackedEquipmentSelectedListKey = "default";
+    private string trackedEquipmentSetName = string.Empty;
+    private string trackedEquipmentSetJob = string.Empty;
+    private string trackedEquipmentSetUrl = string.Empty;
+    private string trackedEquipmentBisUrl = string.Empty;
+    private bool trackedEquipmentBisCreateList = true;
+    private BisDecodedGearSet? trackedEquipmentBisPreview;
+    private Dictionary<string, uint> trackedEquipmentBisSlots = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> trackedEquipmentSetSlotInputs = new(StringComparer.Ordinal);
     private int selectedMainSection;
     private bool showWeaponProgressTab = true;
     private string? progressSeriesKey = "phantom";
@@ -426,6 +447,7 @@ public sealed class PluginUI
             "ultimate" => FontAwesomeIcon.Trophy,
             "deep-dungeon" => FontAwesomeIcon.Archway,
             "yokai" => FontAwesomeIcon.Paw,
+            "bis" => FontAwesomeIcon.Table,
             "settings" => FontAwesomeIcon.Cog,
             "fate" => FontAwesomeIcon.Flag,
             "hunt" => FontAwesomeIcon.Crosshairs,
@@ -552,6 +574,9 @@ public sealed class PluginUI
             case "hunt":
                 DrawHuntAssistantWorkspace();
                 break;
+            case "bis":
+                DrawBisWorkspace();
+                break;
             default:
                 if (RelicWeaponGuide.Series.TryGetValue(section.Key, out var series))
                 {
@@ -564,6 +589,844 @@ public sealed class PluginUI
 
                 break;
         }
+    }
+
+    private void DrawBisWorkspace()
+    {
+        if (ImGui.BeginTabBar("hidden-equipment-tabs"))
+        {
+            if (ImGui.BeginTabItem("装备列表"))
+            {
+                DrawTrackedEquipmentLists();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("装备套装"))
+            {
+                DrawTrackedEquipmentSets();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("设置"))
+            {
+                DrawTrackedEquipmentSettings();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("检索"))
+            {
+                DrawTrackedEquipmentLookup();
+                ImGui.EndTabItem();
+            }
+
+            ImGui.EndTabBar();
+        }
+    }
+
+    private void DrawTrackedEquipmentLists()
+    {
+        if (configuration.TrackedEquipmentLists.Count == 0)
+        {
+            configuration.TrackedEquipmentLists.Add(new TrackedEquipmentList("default", "默认多装备列表", new List<uint>()));
+            configuration.Save();
+        }
+
+        var selectedList = configuration.TrackedEquipmentLists.FirstOrDefault(list => list.Key == trackedEquipmentSelectedListKey)
+            ?? configuration.TrackedEquipmentLists[0];
+        trackedEquipmentSelectedListKey = selectedList.Key;
+
+        ImGui.TextUnformatted("装备列表");
+        ImGui.SetNextItemWidth(240f);
+        if (ImGui.BeginCombo("##tracked-equipment-list-picker", selectedList.Name))
+        {
+            foreach (var list in configuration.TrackedEquipmentLists)
+            {
+                if (ImGui.Selectable($"{list.Name} ({list.ItemIds.Count})##tracked-equipment-list-{list.Key}"))
+                {
+                    trackedEquipmentSelectedListKey = list.Key;
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        var linkedSet = configuration.TrackedEquipmentSets.FirstOrDefault(set =>
+            set.Name == selectedList.Name && !string.IsNullOrWhiteSpace(set.SourceUrl));
+        if (linkedSet != null)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button("打开分享网页##tracked-equipment-list-source"))
+                OpenUrl(linkedSet.SourceUrl, "已打开 BIS 分享网页。", "打开 BIS 分享网页");
+        }
+
+        ImGui.TextDisabled("列表用于保存一组不要求部位对应的装备；BIS 导入后可生成同名列表。");
+        ImGui.TextDisabled($"当前列表：{selectedList.Name}，共 {selectedList.ItemIds.Count} 件。设置页批量导入会写入当前列表。");
+
+        ImGui.SetNextItemWidth(220f);
+        ImGui.InputTextWithHint("##tracked-equipment-list-new-name", "新列表名称", ref trackedEquipmentListNewName, 128);
+        ImGui.SameLine();
+        if (ImGui.Button("新建列表##tracked-equipment-list-new") && !string.IsNullOrWhiteSpace(trackedEquipmentListNewName))
+        {
+            var key = Guid.NewGuid().ToString("N");
+            configuration.TrackedEquipmentLists.Add(new TrackedEquipmentList(key, trackedEquipmentListNewName.Trim(), new List<uint>()));
+            trackedEquipmentSelectedListKey = key;
+            trackedEquipmentListNewName = string.Empty;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("删除列表##tracked-equipment-list-delete") && selectedList.Key != "default")
+        {
+            configuration.TrackedEquipmentLists.Remove(selectedList);
+            trackedEquipmentSelectedListKey = configuration.TrackedEquipmentLists[0].Key;
+            configuration.Save();
+        }
+
+        ImGui.Separator();
+        DrawTrackedEquipmentLocations(selectedList);
+    }
+
+    private void DrawTrackedEquipmentSets()
+    {
+        ImGui.TextUnformatted("装备套装");
+        ImGui.TextDisabled("BIS URL 解析后按主手、头部、身体、戒指等部位生成套装。");
+        if (ImGui.Button("BIS大全##tracked-equipment-bis-catalog"))
+        {
+            OpenUrl(
+                "https://www.kdocs.cn/l/ceEcTzlFQBUy",
+                "已打开 BIS大全。",
+                "打开 BIS大全");
+        }
+
+        ImGui.SetNextItemWidth(-1f);
+        ImGui.InputTextMultiline("##tracked-equipment-bis-url", ref trackedEquipmentBisUrl, 4096, new Vector2(-1f, 70f));
+        ImGui.SetNextItemWidth(300f);
+        ImGui.InputTextWithHint("##tracked-equipment-set-name", "套装名称，例如：骑士 BIS", ref trackedEquipmentSetName, 128);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(140f);
+        ImGui.InputTextWithHint("##tracked-equipment-set-job", "职业", ref trackedEquipmentSetJob, 32);
+        ImGui.SameLine();
+        if (ImGui.Button("测试##tracked-equipment-bis-test"))
+        {
+            trackedEquipmentBisUrl = "https://asvel.github.io/ffxiv-gearing/?3Vnc25N8tnID3eIKHyJ8XlQj6MgeZTAWLRSdQekJvq6x3";
+            trackedEquipmentSetName = "绝妖武士";
+            trackedEquipmentSetJob = "SAM";
+            trackedEquipmentError = "测试 BIS 地址已填入，点击“解析 URL”开始解析。";
+        }
+        if (ImGui.Button("解析 URL##tracked-equipment-bis-parse"))
+        {
+            TryDecodeBisUrl();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("保存装备套装##tracked-equipment-set-new"))
+        {
+            if (trackedEquipmentBisPreview == null)
+            {
+                trackedEquipmentError = "请先解析有效的 BIS URL。";
+            }
+            else
+            {
+                var setName = string.IsNullOrWhiteSpace(trackedEquipmentSetName) ? "新装备套装" : trackedEquipmentSetName.Trim();
+                configuration.TrackedEquipmentSets.Add(new TrackedEquipmentSet
+                {
+                    Name = setName,
+                    JobKey = trackedEquipmentSetJob.Trim(),
+                    SourceUrl = trackedEquipmentBisUrl.Trim(),
+                    Slots = new Dictionary<string, uint>(trackedEquipmentBisSlots, StringComparer.Ordinal),
+                });
+
+                if (trackedEquipmentBisCreateList)
+                {
+                    var itemIds = trackedEquipmentBisPreview.ItemIds.Distinct().ToList();
+                    configuration.TrackedEquipmentLists.Add(new TrackedEquipmentList(
+                        Guid.NewGuid().ToString("N"), setName, itemIds));
+                    foreach (var itemId in itemIds)
+                    {
+                        if (DalamudApi.DataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item)
+                            && !configuration.TrackedEquipment.Any(entry => entry.ItemId == itemId))
+                        {
+                            configuration.TrackedEquipment.Add(new TrackedEquipment(itemId, item.Name.ExtractText()));
+                        }
+                    }
+                }
+
+                configuration.Save();
+                trackedEquipmentSetName = string.Empty;
+                trackedEquipmentSetJob = string.Empty;
+                trackedEquipmentBisUrl = string.Empty;
+                trackedEquipmentBisPreview = null;
+                trackedEquipmentBisSlots.Clear();
+                trackedEquipmentError = "装备套装已保存。";
+            }
+        }
+        ImGui.SameLine();
+        ImGui.Checkbox("同时生成多装备列表##tracked-equipment-bis-list", ref trackedEquipmentBisCreateList);
+
+        if (trackedEquipmentBisPreview != null)
+        {
+            ImGui.Separator();
+            ImGui.TextDisabled($"解析预览：{trackedEquipmentBisPreview.Job} · 等级 {trackedEquipmentBisPreview.JobLevel} · {trackedEquipmentBisSlots.Count}/12 部位有效");
+            if (ImGui.BeginTable("tracked-equipment-bis-preview", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+            {
+                foreach (var slot in TrackedEquipmentSetSlotOrder)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.TextDisabled(slot);
+                    ImGui.TableNextColumn();
+                    if (TryGetTrackedEquipmentSetSlot(trackedEquipmentBisSlots, slot, out var itemId)
+                        && DalamudApi.DataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item))
+                    {
+                        ImGui.TextUnformatted(item.Name.ExtractText());
+                        ImGui.TableNextColumn();
+                        ImGui.TextDisabled(itemId.ToString());
+                    }
+                    else
+                    {
+                        ImGui.TextDisabled("未识别");
+                        ImGui.TableNextColumn();
+                        ImGui.TextDisabled("—");
+                    }
+                }
+                ImGui.EndTable();
+            }
+        }
+
+        foreach (var set in configuration.TrackedEquipmentSets.ToArray())
+        {
+            ImGui.Separator();
+            ImGui.TextUnformatted($"{set.Name}  ·  {set.JobKey}  ·  {set.Slots.Count}/12 部位");
+            ImGui.SameLine();
+            if (!string.IsNullOrWhiteSpace(set.SourceUrl)
+                && ImGui.SmallButton($"打开分享网页##tracked-equipment-set-source-{set.Key}"))
+            {
+                OpenUrl(set.SourceUrl, "已打开 BIS 分享网页。", "打开 BIS 分享网页");
+            }
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"删除##tracked-equipment-set-delete-{set.Key}"))
+            {
+                configuration.TrackedEquipmentSets.Remove(set);
+                configuration.Save();
+                continue;
+            }
+
+            if (ImGui.BeginTable($"tracked-equipment-set-slots-{set.Key}", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+            {
+                foreach (var slot in TrackedEquipmentSetSlotOrder)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.TextDisabled(slot);
+                    ImGui.TableNextColumn();
+                    if (TryGetTrackedEquipmentSetSlot(set.Slots, slot, out var itemId)
+                        && DalamudApi.DataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item))
+                    {
+                        ImGui.TextUnformatted(item.Name.ExtractText());
+                    }
+                    else
+                    {
+                        ImGui.TextDisabled("未识别");
+                    }
+                }
+                ImGui.EndTable();
+            }
+        }
+        if (trackedEquipmentError.Length > 0) ImGui.TextColored(new Vector4(1f, 0.65f, 0.35f, 1f), trackedEquipmentError);
+    }
+
+    private void TryDecodeBisUrl()
+    {
+        trackedEquipmentBisPreview = null;
+        trackedEquipmentBisSlots.Clear();
+        if (string.IsNullOrWhiteSpace(trackedEquipmentBisUrl))
+        {
+            trackedEquipmentError = "请先粘贴 BIS URL。";
+            return;
+        }
+
+        try
+        {
+            var decoded = BisShareDecoder.Decode(trackedEquipmentBisUrl);
+            var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+            var unknown = new List<uint>();
+            var ringIndex = 1;
+            foreach (var itemId in decoded.ItemIds)
+            {
+                if (!items.TryGetRow(itemId, out var item))
+                {
+                    unknown.Add(itemId);
+                    continue;
+                }
+
+                var slot = ResolveBisSlot(item);
+                if (slot == "戒指") slot = $"戒指{ringIndex++}";
+                if (slot != null && !trackedEquipmentBisSlots.ContainsKey(slot)) trackedEquipmentBisSlots[slot] = itemId;
+            }
+
+            trackedEquipmentBisPreview = decoded;
+            trackedEquipmentSetJob = string.IsNullOrWhiteSpace(trackedEquipmentSetJob) ? decoded.Job : trackedEquipmentSetJob;
+            trackedEquipmentError = unknown.Count == 0
+                ? "BIS URL 解析成功。"
+                : $"BIS URL 解析成功；无法在客户端物品表找到 {unknown.Count} 个 ID。";
+        }
+        catch (Exception ex)
+        {
+            trackedEquipmentError = $"BIS URL 解析失败：{ex.Message}";
+        }
+    }
+
+    private static string? ResolveBisSlot(Item item)
+    {
+        var category = item.EquipSlotCategory.Value;
+        if (category.MainHand > 0) return "武器";
+        if (category.Head > 0) return "头部";
+        if (category.Body > 0) return "身体";
+        if (category.Gloves > 0) return "手部";
+        if (category.Legs > 0) return "腿部";
+        if (category.Feet > 0) return "脚部";
+        if (category.Ears > 0) return "耳饰";
+        if (category.Neck > 0) return "项链";
+        if (category.Wrists > 0) return "手镯";
+        if (category.FingerL > 0 || category.FingerR > 0) return "戒指";
+        return null;
+    }
+
+    private static bool TryGetTrackedEquipmentSetSlot(
+        IReadOnlyDictionary<string, uint> slots,
+        string slot,
+        out uint itemId)
+    {
+        if (slots.TryGetValue(slot, out itemId)) return true;
+        return slot == "武器" && slots.TryGetValue("主手", out itemId);
+    }
+
+    private void DrawTrackedEquipmentSettings()
+    {
+        var selectedList = GetSelectedTrackedEquipmentList();
+        ImGui.TextUnformatted("物品 ID（每行一个，也可用逗号或空格分隔）");
+        ImGui.InputTextMultiline("##tracked-equipment-ids", ref trackedEquipmentId, 8192,
+            new Vector2(-1f, ImGui.GetTextLineHeightWithSpacing() * 5f));
+        if (ImGui.Button("批量添加##tracked-equipment-add"))
+        {
+            var tokens = trackedEquipmentId.Split(new[] { ',', '，', ';', '；', '\r', '\n', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var existingIds = selectedList.ItemIds.ToHashSet();
+            var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+            var invalid = new List<string>();
+            var added = 0;
+            foreach (var token in tokens.Distinct(StringComparer.Ordinal))
+            {
+                if (!uint.TryParse(token, out var itemId) || itemId == 0 || !items.TryGetRow(itemId, out var item))
+                {
+                    invalid.Add(token);
+                    continue;
+                }
+
+                if (!existingIds.Add(itemId)) continue;
+                selectedList.ItemIds.Add(itemId);
+                if (!configuration.TrackedEquipment.Any(entry => entry.ItemId == itemId))
+                    configuration.TrackedEquipment.Add(new TrackedEquipment(itemId, item.Name.ExtractText()));
+                added++;
+            }
+
+            if (added > 0) configuration.Save();
+            trackedEquipmentId = string.Join(Environment.NewLine, invalid);
+            trackedEquipmentError = invalid.Count > 0
+                ? $"新增 {added} 件；以下 ID 无效或不在物品表中：{string.Join("、", invalid)}"
+                : $"新增 {added} 件；已有 ID 已跳过。";
+        }
+
+        if (trackedEquipmentError.Length > 0) ImGui.TextColored(new Vector4(1f, 0.45f, 0.4f, 1f), trackedEquipmentError);
+
+        if (ImGui.Button("批量添加雾忆装备##tracked-equipment-mist-memory"))
+        {
+            var existingIds = selectedList.ItemIds.ToHashSet();
+            var added = 0;
+            foreach (var item in DalamudApi.DataManager.GetExcelSheet<Item>())
+            {
+                var name = item.Name.ExtractText();
+                if (!name.StartsWith("雾忆", StringComparison.Ordinal)
+                    || item.EquipSlotCategory.RowId == 0
+                    || !existingIds.Add(item.RowId))
+                {
+                    continue;
+                }
+
+                selectedList.ItemIds.Add(item.RowId);
+                if (!configuration.TrackedEquipment.Any(entry => entry.ItemId == item.RowId))
+                    configuration.TrackedEquipment.Add(new TrackedEquipment(item.RowId, name));
+                added++;
+            }
+
+            if (added > 0) configuration.Save();
+            trackedEquipmentError = string.Empty;
+            PrintChat($"已新增 {added} 件雾忆装备；已有 ID 已跳过。");
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("导出 ID##tracked-equipment-export"))
+        {
+            try
+            {
+                var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "tracked-equipment-ids.txt");
+                File.WriteAllLines(path, selectedList.ItemIds.Select(itemId => itemId.ToString()));
+                trackedEquipmentError = $"已导出 {selectedList.ItemIds.Count} 个 ID：{path}";
+            }
+            catch (Exception ex)
+            {
+                trackedEquipmentError = $"导出失败：{ex.Message}";
+                DalamudApi.Log.Error(ex, "Failed to export tracked equipment IDs.");
+            }
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("导入 ID##tracked-equipment-import"))
+        {
+            try
+            {
+                var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "tracked-equipment-ids.txt");
+                if (!File.Exists(path))
+                {
+                    trackedEquipmentError = $"导入失败：找不到文件 {path}";
+                }
+                else
+                {
+                    var existingIds = selectedList.ItemIds.ToHashSet();
+                    var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+                    var added = 0;
+                    var invalid = 0;
+                    foreach (var line in File.ReadLines(path))
+                    {
+                        var token = line.Trim();
+                        if (token.Length == 0) continue;
+                        if (!uint.TryParse(token, out var itemId) || itemId == 0 || !items.TryGetRow(itemId, out var item))
+                        {
+                            invalid++;
+                            continue;
+                        }
+
+                        if (!existingIds.Add(itemId)) continue;
+                        selectedList.ItemIds.Add(itemId);
+                        if (!configuration.TrackedEquipment.Any(entry => entry.ItemId == itemId))
+                            configuration.TrackedEquipment.Add(new TrackedEquipment(itemId, item.Name.ExtractText()));
+                        added++;
+                    }
+
+                    if (added > 0) configuration.Save();
+                    trackedEquipmentError = $"导入完成：新增 {added}，无效 {invalid}，重复 ID 已跳过。文件：{path}";
+                }
+            }
+            catch (Exception ex)
+            {
+                trackedEquipmentError = $"导入失败：{ex.Message}";
+                DalamudApi.Log.Error(ex, "Failed to import tracked equipment IDs.");
+            }
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("一键清空##tracked-equipment-clear")) ImGui.OpenPopup("tracked-equipment-clear-confirm");
+        if (ImGui.BeginPopupModal("tracked-equipment-clear-confirm", ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.TextUnformatted("清空全部已录入的物品 ID 和所有角色的自定义位置快照？");
+            if (ImGui.Button("确认清空##tracked-equipment-clear-confirm"))
+            {
+                configuration.TrackedEquipment.Clear();
+                configuration.TrackedEquipmentLocationsByCharacter.Clear();
+                configuration.TrackedEquipmentSyncTimesByCharacter.Clear();
+                configuration.Save();
+                trackedEquipmentId = string.Empty;
+                trackedEquipmentError = string.Empty;
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("取消##tracked-equipment-clear-cancel")) ImGui.CloseCurrentPopup();
+            ImGui.EndPopup();
+        }
+
+        ImGui.Separator();
+        foreach (var entry in GetSelectedTrackedEquipmentEntries(selectedList).ToArray())
+        {
+            ImGui.TextUnformatted($"{entry.Name}  ·  {entry.ItemId}");
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"移除##tracked-equipment-{entry.ItemId}"))
+            {
+                selectedList.ItemIds.Remove(entry.ItemId);
+                configuration.TrackedEquipment.RemoveAll(item => item.ItemId == entry.ItemId);
+                configuration.Save();
+            }
+        }
+    }
+
+    private TrackedEquipmentList GetSelectedTrackedEquipmentList()
+    {
+        var selected = configuration.TrackedEquipmentLists.FirstOrDefault(list => list.Key == trackedEquipmentSelectedListKey);
+        if (selected != null) return selected;
+        selected = configuration.TrackedEquipmentLists.FirstOrDefault()
+            ?? new TrackedEquipmentList("default", "默认多装备列表", new List<uint>());
+        if (!configuration.TrackedEquipmentLists.Contains(selected)) configuration.TrackedEquipmentLists.Add(selected);
+        trackedEquipmentSelectedListKey = selected.Key;
+        return selected;
+    }
+
+    private static IReadOnlyList<TrackedEquipment> GetSelectedTrackedEquipmentEntries(TrackedEquipmentList list)
+    {
+        var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+        return list.ItemIds.Distinct()
+            .Select(itemId => items.TryGetRow(itemId, out var item) ? new TrackedEquipment(itemId, item.Name.ExtractText()) : null)
+            .Where(item => item != null)
+            .Select(item => item!)
+            .OrderBy(entry => items.TryGetRow(entry.ItemId, out var item) ? GetTrackedEquipmentSlotOrder(item) : int.MaxValue)
+            .ToArray();
+    }
+
+    private static int GetTrackedEquipmentSlotOrder(Item item)
+    {
+        if (IsTrackedEquipmentFood(item)) return 10;
+        var slot = ResolveBisSlot(item);
+        return slot switch
+        {
+            "武器" => 0,
+            "头部" => 1,
+            "身体" => 2,
+            "手部" => 3,
+            "腿部" => 4,
+            "脚部" => 5,
+            "耳饰" => 6,
+            "项链" => 7,
+            "手镯" => 8,
+            "戒指" => 9,
+            _ => 11,
+        };
+    }
+
+    private static bool IsTrackedEquipmentFood(Item item)
+        => item.ItemAction.RowId != 0
+            && item.ItemAction.Value.Action.RowId == 846;
+
+    private void DrawTrackedEquipmentLookup()
+    {
+        ImGui.TextUnformatted("检索装备名称中的关键词");
+        ImGui.SetNextItemWidth(280f);
+        ImGui.InputTextWithHint("##tracked-equipment-lookup-keyword", "例如：雾忆", ref trackedEquipmentLookupKeyword, 128);
+        ImGui.SameLine();
+        var items = string.IsNullOrWhiteSpace(trackedEquipmentLookupKeyword)
+            ? Array.Empty<Item>()
+            : DalamudApi.DataManager.GetExcelSheet<Item>()
+                .Where(item => item.RowId > 0
+                    && item.EquipSlotCategory.RowId != 0
+                    && item.Name.ExtractText().Contains(trackedEquipmentLookupKeyword.Trim(), StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        if (ImGui.Button("复制 ID##tracked-equipment-lookup-copy"))
+        {
+            ImGui.SetClipboardText(string.Join(Environment.NewLine, items.Select(item => item.RowId)));
+            trackedEquipmentError = $"已复制 {items.Length} 个匹配 ID。";
+        }
+
+        ImGui.TextDisabled($"匹配 {items.Length} 件装备");
+        if (trackedEquipmentError.StartsWith("已复制", StringComparison.Ordinal))
+        {
+            ImGui.TextColored(new Vector4(0.55f, 0.85f, 0.68f, 1f), trackedEquipmentError);
+        }
+
+        if (items.Length == 0)
+        {
+            ImGui.TextDisabled(string.IsNullOrWhiteSpace(trackedEquipmentLookupKeyword) ? "请输入关键词。" : "没有匹配的装备。");
+            return;
+        }
+
+        if (ImGui.BeginTable("tracked-equipment-lookup-table", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY, new Vector2(0f, 300f)))
+        {
+            ImGui.TableSetupColumn("物品 ID", ImGuiTableColumnFlags.WidthFixed, 100f);
+            ImGui.TableSetupColumn("装备名称", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("装备栏", ImGuiTableColumnFlags.WidthFixed, 110f);
+            ImGui.TableHeadersRow();
+            foreach (var item in items)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(item.RowId.ToString());
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(item.Name.ExtractText());
+                ImGui.TableNextColumn();
+                ImGui.TextDisabled(item.EquipSlotCategory.RowId.ToString());
+            }
+            ImGui.EndTable();
+        }
+    }
+
+    private void DrawTrackedEquipmentLocations(TrackedEquipmentList? list = null)
+    {
+        list ??= GetSelectedTrackedEquipmentList();
+        var entries = GetSelectedTrackedEquipmentEntries(list);
+        var characterKey = GetCurrentCharacterKey();
+        var canSync = characterKey.Length > 0;
+        if (!canSync) ImGui.BeginDisabled();
+        if (ImGui.Button("同步当前角色##tracked-equipment-sync"))
+        {
+            var snapshot = new Dictionary<uint, List<string>>();
+            foreach (var entry in entries)
+            {
+                snapshot[entry.ItemId] = FindTrackedEquipmentLocations(entry.ItemId).ToList();
+            }
+
+            configuration.TrackedEquipmentLocationsByCharacter[characterKey] = snapshot;
+            configuration.TrackedEquipmentSyncTimesByCharacter[characterKey] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            configuration.Save();
+        }
+        if (!canSync) ImGui.EndDisabled();
+
+        ImGui.SameLine();
+        ImGui.TextDisabled(canSync && configuration.TrackedEquipmentSyncTimesByCharacter.TryGetValue(characterKey, out var time)
+            ? $"上次同步：{time}"
+            : "尚未同步当前角色");
+        ImGui.SetNextItemWidth(220f);
+        ImGui.InputTextWithHint("##tracked-equipment-search", "搜索装备名称或 ID", ref trackedEquipmentSearch, 128);
+        ImGui.SameLine();
+        var backpackFirst = configuration.TrackedEquipmentBackpackFirst;
+        if (ImGui.Checkbox("背包优先##tracked-equipment-backpack-first", ref backpackFirst))
+        {
+            configuration.TrackedEquipmentBackpackFirst = backpackFirst;
+            configuration.Save();
+        }
+        if (!canSync)
+        {
+            ImGui.TextDisabled("登录角色后可同步装备位置。");
+            return;
+        }
+
+        if (entries.Count == 0)
+        {
+            ImGui.TextDisabled("暂无装备记录。");
+            return;
+        }
+
+        configuration.TrackedEquipmentLocationsByCharacter.TryGetValue(characterKey, out var savedLocations);
+        var filtered = entries.Where(entry =>
+            trackedEquipmentSearch.Length == 0
+            || entry.Name.Contains(trackedEquipmentSearch, StringComparison.OrdinalIgnoreCase)
+            || entry.ItemId.ToString().Contains(trackedEquipmentSearch, StringComparison.Ordinal)).ToArray();
+        if (configuration.TrackedEquipmentBackpackFirst && savedLocations != null)
+        {
+            filtered = filtered.OrderByDescending(entry => savedLocations.TryGetValue(entry.ItemId, out var locations)
+                && locations.Contains("背包")).ToArray();
+        }
+        var foundCount = filtered.Count(entry => savedLocations != null
+            && savedLocations.TryGetValue(entry.ItemId, out var locations)
+            && locations.Any(location => !location.EndsWith(":unloaded", StringComparison.Ordinal)));
+        var retainers = GetTrackedEquipmentRetainers();
+        var coverage = GetRetainerCacheCoverage();
+        ImGui.TextDisabled($"装备 {filtered.Length}/{entries.Count}  ·  已找到 {foundCount}  ·  雇员缓存 {coverage.Cached}/{coverage.Total}");
+        var flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollX | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Resizable | ImGuiTableFlags.SizingStretchProp;
+        if (ImGui.BeginTable("tracked-equipment-location-table", 7, flags, new Vector2(0f, MathF.Max(160f, ImGui.GetContentRegionAvail().Y - ImGui.GetTextLineHeightWithSpacing() * 2f))))
+        {
+            ImGui.TableSetupColumn("装备", ImGuiTableColumnFlags.WidthStretch, 3f);
+            ImGui.TableSetupColumn("背包", ImGuiTableColumnFlags.WidthStretch, 1f);
+            ImGui.TableSetupColumn("兵装库", ImGuiTableColumnFlags.WidthStretch, 1f);
+            ImGui.TableSetupColumn("陆行鸟鞍囊", ImGuiTableColumnFlags.WidthStretch, 1.6f);
+            ImGui.TableSetupColumn("雇员", ImGuiTableColumnFlags.WidthStretch, 3f);
+            ImGui.TableSetupColumn("投影台", ImGuiTableColumnFlags.WidthStretch, 1f);
+            ImGui.TableSetupColumn("收藏柜", ImGuiTableColumnFlags.WidthStretch, 1f);
+            ImGui.TableHeadersRow();
+
+            foreach (var entry in filtered)
+            {
+                List<string>? stored = null;
+                savedLocations?.TryGetValue(entry.ItemId, out stored);
+                var synced = stored != null;
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.55f, 0.85f, 0.82f, 1f));
+                var openWiki = ImGui.Selectable($"{entry.Name}##tracked-equipment-wiki-{entry.ItemId}");
+                ImGui.PopStyleColor();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("左键打开物品 Wiki，右键打开菜单");
+                if (openWiki)
+                {
+                    OpenTrackedEquipmentWiki(entry);
+                }
+
+                if (ImGui.BeginPopupContextItem($"tracked-equipment-menu-{entry.ItemId}"))
+                {
+                    if (ImGui.MenuItem($"打开 Wiki##tracked-equipment-menu-wiki-{entry.ItemId}"))
+                    {
+                        OpenTrackedEquipmentWiki(entry);
+                    }
+
+                    if (ImGui.MenuItem($"检索##tracked-equipment-menu-lookup-{entry.ItemId}"))
+                    {
+                        var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+                        var searchName = items.TryGetRow(entry.ItemId, out var searchItem) ? searchItem.Name.ExtractText() : entry.Name;
+                        DalamudApi.Commands.ProcessCommand($"/isearch {searchName}");
+                        PrintChat($"已请求游戏检索：{searchName}（/isearch {searchName}）");
+                    }
+
+                    if (ImGui.MenuItem($"复制道具名##tracked-equipment-menu-copy-{entry.ItemId}"))
+                    {
+                        ImGui.SetClipboardText(entry.Name);
+                        PrintChat($"已复制道具名：{entry.Name}");
+                    }
+
+                    ImGui.EndPopup();
+                }
+
+                ImGui.TableNextColumn();
+                DrawTrackedEquipmentCell(stored, synced, "背包");
+                ImGui.TableNextColumn();
+                DrawTrackedEquipmentCell(stored, synced, "兵装库", "装备中");
+                ImGui.TableNextColumn();
+                DrawTrackedEquipmentCell(stored, synced, "陆行鸟鞍囊");
+                ImGui.TableNextColumn();
+                if (!synced)
+                {
+                    ImGui.TextDisabled("未同步");
+                }
+                else
+                {
+                    var matchedRetainers = retainers.Where(retainer => stored!.Contains($"retainer:{retainer.Id}:cached"))
+                        .Select(retainer => retainer.Name).ToArray();
+                    if (matchedRetainers.Length > 0)
+                        ImGui.TextColored(new Vector4(0.55f, 0.85f, 0.68f, 1f), $"找到（{string.Join("、", matchedRetainers)}）");
+                    else if (stored!.Contains("retainer:cache:matched"))
+                        ImGui.TextColored(new Vector4(0.55f, 0.85f, 0.68f, 1f), "找到（雇员缓存）");
+                    else
+                        ImGui.TextDisabled("—");
+                }
+                ImGui.TableNextColumn();
+                DrawTrackedEquipmentCell(stored, synced, "投影台");
+                ImGui.TableNextColumn();
+                DrawTrackedEquipmentCell(stored, synced, "收藏柜");
+            }
+            ImGui.EndTable();
+        }
+
+        ImGui.TextDisabled("鞍囊与雇员位置依赖客户端缓存；未加载的雇员无法确认。");
+    }
+
+    private static void OpenTrackedEquipmentWiki(TrackedEquipment entry)
+    {
+        var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+        var wikiName = items.TryGetRow(entry.ItemId, out var item) ? item.Name.ExtractText() : entry.Name;
+        OpenUrl($"https://ff14.huijiwiki.com/wiki/{Uri.EscapeDataString($"物品:{wikiName}")}");
+    }
+
+    private static void DrawTrackedEquipmentCell(IReadOnlyCollection<string>? locations, bool synced, params string[] names)
+    {
+        if (!synced)
+        {
+            ImGui.TextDisabled("未同步");
+        }
+        else if (names.Any(name => locations!.Contains(name)))
+        {
+            ImGui.TextColored(new Vector4(0.55f, 0.85f, 0.68f, 1f), "找到");
+        }
+        else if (names.Any(name => locations!.Contains($"{name}（缓存）")))
+        {
+            ImGui.TextColored(new Vector4(0.60f, 0.78f, 0.95f, 1f), "缓存命中");
+        }
+        else
+        {
+            ImGui.TextDisabled("—");
+        }
+    }
+
+    private static unsafe IReadOnlyList<(ulong Id, string Name)> GetTrackedEquipmentRetainers()
+    {
+        var manager = RetainerManager.Instance();
+        if (manager == null) return Array.Empty<(ulong, string)>();
+        var result = new List<(ulong, string)>();
+        for (var index = 0; index < manager->GetRetainerCount(); index++)
+        {
+            var retainer = manager->Retainers[index];
+            if (retainer.RetainerId == 0) continue;
+            result.Add((retainer.RetainerId, string.IsNullOrWhiteSpace(retainer.NameString)
+                ? $"雇员 {index + 1}" : retainer.NameString));
+        }
+        return result;
+    }
+
+    private static unsafe IReadOnlyList<string> FindTrackedEquipmentLocations(uint itemId)
+    {
+        var locations = new List<string>();
+        var inventoryManager = InventoryManager.Instance();
+        if (inventoryManager != null)
+        {
+            foreach (var (type, label) in new[]
+            {
+                (InventoryType.Inventory1, "背包"), (InventoryType.Inventory2, "背包"),
+                (InventoryType.Inventory3, "背包"), (InventoryType.Inventory4, "背包"),
+                (InventoryType.ArmoryMainHand, "兵装库"), (InventoryType.ArmoryOffHand, "兵装库"),
+                (InventoryType.ArmoryHead, "兵装库"), (InventoryType.ArmoryBody, "兵装库"),
+                (InventoryType.ArmoryHands, "兵装库"), (InventoryType.ArmoryLegs, "兵装库"),
+                (InventoryType.ArmoryFeets, "兵装库"), (InventoryType.ArmoryEar, "兵装库"),
+                (InventoryType.ArmoryNeck, "兵装库"), (InventoryType.ArmoryWrist, "兵装库"),
+                (InventoryType.ArmoryRings, "兵装库"), (InventoryType.ArmorySoulCrystal, "兵装库"),
+                (InventoryType.EquippedItems, "装备中"),
+                (InventoryType.SaddleBag1, "陆行鸟鞍囊"), (InventoryType.SaddleBag2, "陆行鸟鞍囊"),
+                (InventoryType.PremiumSaddleBag1, "陆行鸟鞍囊"), (InventoryType.PremiumSaddleBag2, "陆行鸟鞍囊"),
+            })
+            {
+                var container = inventoryManager->GetInventoryContainer(type);
+                if (container == null || !container->IsLoaded) continue;
+                for (var index = 0; index < container->Size; index++)
+                {
+                    if (NormalizeItemId(container->GetInventorySlot(index)->ItemId) != itemId) continue;
+                    if (!locations.Contains(label)) locations.Add(label);
+                    break;
+                }
+            }
+        }
+
+        var finder = ItemFinderModule.Instance();
+        if (finder != null && (ContainsItemId(finder->SaddleBagItemIds, itemId) || ContainsItemId(finder->PremiumSaddleBagItemIds, itemId))
+            && !locations.Contains("陆行鸟鞍囊")) locations.Add("陆行鸟鞍囊（缓存）");
+        if (finder != null)
+        {
+            if (ContainsItemId(finder->GlamourDresserItemIds, itemId)) locations.Add("投影台（缓存）");
+            var cabinetRow = DalamudApi.DataManager.GetExcelSheet<Cabinet>()
+                .FirstOrDefault(row => row.Item.RowId == itemId);
+            if (cabinetRow.RowId > 0 && IsCabinetItemOwned(cabinetRow.RowId, finder))
+                locations.Add("收藏柜");
+        }
+
+        var retainers = RetainerManager.Instance();
+        if (retainers == null) return locations;
+        var matchedByCache = false;
+        var namedMatch = false;
+        for (var index = 0; index < retainers->GetRetainerCount(); index++)
+        {
+            var retainer = retainers->Retainers[index];
+            if (retainer.RetainerId == 0) continue;
+            var loaded = false;
+            if (finder != null)
+            {
+                foreach (var cached in finder->RetainerInventories)
+                {
+                    if (cached.Item1 != retainer.RetainerId || cached.Item2.Value == null) continue;
+                    loaded = true;
+                    if (ContainsItemId(cached.Item2.Value->ItemIds, itemId) || ContainsItemId(cached.Item2.Value->EquippedItemIds, itemId))
+                    {
+                        locations.Add($"retainer:{retainer.RetainerId}:cached");
+                        namedMatch = true;
+                    }
+                    break;
+                }
+            }
+            if (!loaded) locations.Add($"retainer:{retainer.RetainerId}:unloaded");
+        }
+
+        if (!namedMatch && finder != null)
+        {
+            foreach (var cached in finder->RetainerInventories)
+            {
+                var retainer = cached.Item2.Value;
+                if (retainer == null) continue;
+                if (ContainsItemId(retainer->ItemIds, itemId) || ContainsItemId(retainer->EquippedItemIds, itemId))
+                {
+                    matchedByCache = true;
+                    break;
+                }
+            }
+        }
+
+        if (matchedByCache) locations.Add("retainer:cache:matched");
+        return locations;
     }
 
     private void DrawMainToolbar(string title)

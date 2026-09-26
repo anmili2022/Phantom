@@ -68,6 +68,8 @@ E:\git\Phantom\
 │       └── MandervilleWeaponGuide.cs # 曼德维尔武器四阶段资料
 │   └── RelicWeapons/
 │       └── RelicWeaponGuide.cs # 旧肝武、工具、绝本资料
+│   └── BIS/
+│       └── BISShareDecoder.cs  # ffxiv-gearing 分享链接本地解码
 ├── UI/
 │   └── PluginUI.cs         # 主窗口、总览、各系列进度、悬浮窗和设置页
 ├── docs/
@@ -172,6 +174,13 @@ PhantomWeaponTarget  // 秘影目标
 - 狩猎助手保存车头最新 Flag；战斗中收到新点会停止旧导航并覆盖队列，脱战后只执行最后一点。悬浮窗提供“前往最新 Flag”；跨地图传送失败时禁止使用异地图坐标在当前地图继续寻路。
 - 曼武、雅武、幻武和绝武总进度底部增加低保数量卡片，使用 19 个固定 Item RowId 扫描当前已加载背包、鞍囊和雇员库存；曼武/幻武按每把 3 个、绝武按实际开放职业数、雅武按三种兑换比例计算分母和可兑换量。
 - 绝武各单独页签底部也显示对应绝本图腾；总进度页显示全部七种图腾。
+- 左侧“妖表联动”下方新增正式栏目“BIS联动”（图标 `FontAwesomeIcon.Table`），原 `/肝武 隐藏栏目` 入口已移除。
+- BIS 栏目含“装备列表、装备套装、设置、检索”四个页签；装备列表按部位顺序显示位置表格，装备套装按固定部位顺序展示。
+- 新增 `Features/BIS/BISShareDecoder.cs`：本地解析 ffxiv-gearing 分享链接，Base62 + BigInteger 混合进制，仅支持版本 6 及以上。
+- BIS 装备套装保存名称、职业、来源分享链接和部位映射；可选同时生成同名装备列表。
+- 装备列表中装备名支持左键打开 Wiki、右键菜单“打开 Wiki / 检索 / 复制道具名”；装备位置表列宽由 ImGui 自动保存。
+- 装备位置同步按方案 3 区分雇员结果：按 ID 对上显示“找到（雇员名）”，仅命中缓存显示“找到（雇员缓存）”，其余显示“—”。
+- 未决项：游戏原生 `/isearch` 无法通过 `ICommandManager.ProcessCommand` 触发，公开 API 也没有执行入口；已搁置，待定方案为引入 `ECommons` 依赖或改用宏系统。
 
 ---
 
@@ -205,6 +214,8 @@ Dispose()
 - ICommandManager         // /phantom
 - IPluginLog              // 日志
 - IFateTable              // 最近FATE 导航
+- IDutyState              // 副本成功完成事件
+- IUnlockState            // 成就解锁判断
 ```
 
 ---
