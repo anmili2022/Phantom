@@ -33,6 +33,7 @@
   <ItemGroup>
     <None Include="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Features\RelicWeapons\weapon-item-ids.txt" LogicalName="Phantom.WeaponItemIds" />
+    <EmbeddedResource Include="docs\成就.csv" LogicalName="Phantom.Achievements" />
     <Reference Include="Dalamud" HintPath="$(DalamudLibPath)Dalamud.dll" Private="false" />
     <Reference Include="Dalamud.Bindings.ImGui" HintPath="$(DalamudLibPath)Dalamud.Bindings.ImGui.dll" Private="false" />
     <Reference Include="FFXIVClientStructs" HintPath="$(DalamudLibPath)FFXIVClientStructs.dll" Private="false" />

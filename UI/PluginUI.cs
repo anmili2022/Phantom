@@ -9,6 +9,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using Lumina.Excel.Sheets;
 using System.Diagnostics;
 using System.Numerics;
+using System.Text;
 
 namespace Phantom;
 
@@ -3127,6 +3128,26 @@ public sealed class PluginUI
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> itemLookup,
         IReadOnlyDictionary<string, List<uint>> syncedItems)
     {
+        var stageIndex = Array.IndexOf(
+            seriesKey switch
+            {
+                "phantom" => PhantomWeaponGuide.ProgressStages.ToArray(),
+                "manderville" => MandervilleWeaponGuide.ProgressStages.ToArray(),
+                "elegant" => RelicWeaponGuide.ElegantProgressStages.ToArray(),
+                "anima" => RelicWeaponGuide.AnimaProgressStages.ToArray(),
+                "eureka" => RelicWeaponGuide.EurekaProgressStages.ToArray(),
+                "resistance" => RelicWeaponGuide.ResistanceProgressStages.ToArray(),
+                "skysteel" => RelicWeaponGuide.SkysteelProgressStages.ToArray(),
+                "splendorous" => RelicWeaponGuide.SplendorousProgressStages.ToArray(),
+                "cosmic" => RelicWeaponGuide.CosmicProgressStages.ToArray(),
+                _ => Array.Empty<PhantomWeaponProgressStage>(),
+            },
+            stage);
+        if (AchievementWeaponHistory.IsStageOwned(seriesKey, job.Key, stageIndex))
+        {
+            return true;
+        }
+
         if (!itemLookup.TryGetValue((job.Key, stage.Key), out var items)
             || items.Count == 0
             || !TryGetSyncedItemIds(seriesKey, job, stage, syncedItems, out var itemIds))
@@ -3137,6 +3158,25 @@ public sealed class PluginUI
         return seriesKey.StartsWith("deep-dungeon-", StringComparison.Ordinal) && job.Key == "pld"
             ? items.All(item => itemIds.Contains(item.RowId))
             : items.Any(item => itemIds.Contains(item.RowId));
+    }
+
+    private static bool IsStageOwnedByAchievement(string seriesKey, PhantomWeaponJob job, PhantomWeaponProgressStage stage)
+    {
+        var stages = seriesKey switch
+        {
+            "phantom" => PhantomWeaponGuide.ProgressStages,
+            "manderville" => MandervilleWeaponGuide.ProgressStages,
+            "elegant" => RelicWeaponGuide.ElegantProgressStages,
+            "anima" => RelicWeaponGuide.AnimaProgressStages,
+            "eureka" => RelicWeaponGuide.EurekaProgressStages,
+            "resistance" => RelicWeaponGuide.ResistanceProgressStages,
+            "skysteel" => RelicWeaponGuide.SkysteelProgressStages,
+            "splendorous" => RelicWeaponGuide.SplendorousProgressStages,
+            "cosmic" => RelicWeaponGuide.CosmicProgressStages,
+            _ => Array.Empty<PhantomWeaponProgressStage>(),
+        };
+        var stageIndex = Array.IndexOf(stages.ToArray(), stage);
+        return stageIndex >= 0 && AchievementWeaponHistory.IsStageOwned(seriesKey, job.Key, stageIndex);
     }
 
     private void DrawWeaponProgressCell(
@@ -3152,6 +3192,7 @@ public sealed class PluginUI
         var items = itemLookup.TryGetValue((job.Key, stage.Key), out var matchedItems) ? matchedItems : Array.Empty<Item>();
         var itemAvailable = items.Count > 0;
         var owned = IsStageOwned(seriesKey, job, stage, itemLookup, syncedItems);
+        var achievementOwned = IsStageOwnedByAchievement(seriesKey, job, stage);
         var drawList = ImGui.GetWindowDrawList();
         var bgColor = owned
             ? (isHighest ? ImGui.GetColorU32(new Vector4(0.18f, 0.45f, 0.48f, 0.72f)) : ImGui.GetColorU32(new Vector4(0.18f, 0.24f, 0.30f, 0.58f)))
@@ -3177,12 +3218,18 @@ public sealed class PluginUI
 
         ImGui.SetCursorScreenPos(cursor + new Vector2(7, 42));
         ImGui.TextColored(owned ? new Vector4(0.78f, 0.96f, 0.94f, 1f) : new Vector4(0.45f, 0.45f, 0.50f, 1f), stage.Name);
+        if (achievementOwned)
+        {
+            ImGui.SetCursorScreenPos(cursor + new Vector2(34f, 5f));
+            ImGui.TextColored(new Vector4(1f, 0.78f, 0.25f, 1f), "成就");
+        }
         ImGui.SetCursorScreenPos(cursor);
         ImGui.InvisibleButton($"weapon-progress-{seriesKey}-{job.Key}-{stage.Key}", size);
         if (ImGui.IsItemHovered())
         {
+            var status = achievementOwned ? "成就已解锁，判定为曾经拥有" : owned ? "已持有" : "未持有";
             ImGui.SetTooltip(itemAvailable
-                ? $"{job.Name} / {stage.Name}\n{string.Join("\n", items.Select(item => item.Name.ExtractText()))}\n{(owned ? "已持有" : "未持有")}" 
+                ? $"{job.Name} / {stage.Name}\n{string.Join("\n", items.Select(item => item.Name.ExtractText()))}\n{status}"
                 : $"{job.Name} / {stage.Name}\n未能在物品表匹配到武器");
         }
     }
@@ -4205,6 +4252,7 @@ public sealed class PluginUI
         if (DrawWrappedButton("读取雅武 Item.RowId##debug-export-elegant-item-ids", "读取雅武 Item.RowId", ref firstInRow)) ExportElegantWeaponItemIds();
         if (DrawWrappedButton("导出低保 Item.RowId##debug-export-pity-item-ids", "导出低保 Item.RowId", ref firstInRow)) ExportPityItemIds();
         if (DrawWrappedButton("导出副本 TerritoryType##debug-export-duty-territory-ids", "导出副本 TerritoryType", ref firstInRow)) ExportDutyTerritoryIds();
+        if (DrawWrappedButton("导出成就 ID##debug-export-achievement-ids", "导出成就 ID", ref firstInRow)) ExportAchievementIds();
 
         firstInRow = true;
         if (DrawWrappedButton("读取当前坐标##debug-print-coords", "读取当前坐标", ref firstInRow))
@@ -4576,6 +4624,165 @@ public sealed class PluginUI
 
     private static string NormalizeDutyName(string name)
         => new(name.Where(character => !char.IsWhiteSpace(character) && character is not '·' and not '：' and not ':').ToArray());
+
+    private static string NormalizeAchievementName(string name)
+        => name.Trim().Replace('・', '·');
+
+    private static void ExportAchievementIds()
+    {
+        try
+        {
+            using var stream = typeof(PluginUI).Assembly.GetManifestResourceStream("Phantom.Achievements");
+            if (stream == null)
+            {
+                PrintChat("导出成就 ID 失败：找不到内置成就映射文件。 ");
+                return;
+            }
+
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var rows = ParseCsv(reader.ReadToEnd());
+            if (rows.Count < 2)
+            {
+                PrintChat("导出成就 ID 失败：成就映射文件为空。 ");
+                return;
+            }
+
+            var header = rows[0];
+            var sheetIndex = header.IndexOf("Sheet");
+            var rowIndex = header.IndexOf("Row");
+            var columnIndexes = header
+                .Select((name, index) => (name, index))
+                .Where(entry => entry.name.StartsWith("Column", StringComparison.Ordinal))
+                .Select(entry => entry.index)
+                .ToArray();
+            var achievementsByName = DalamudApi.DataManager.GetExcelSheet<Achievement>()
+                .Where(achievement => achievement.RowId != 0 && !string.IsNullOrWhiteSpace(achievement.Name.ExtractText()))
+                .GroupBy(achievement => NormalizeAchievementName(achievement.Name.ExtractText()), StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+
+            var lines = new List<string>
+            {
+                "# Series|JobName|Stage|AchievementName|Achievement.RowId|Status",
+            };
+            var matched = 0;
+            var missing = 0;
+            var skipped = 0;
+
+            foreach (var sheetRows in rows.Skip(1).GroupBy(row => GetCell(row, sheetIndex), StringComparer.Ordinal))
+            {
+                var titleRow = sheetRows.FirstOrDefault(row => string.IsNullOrWhiteSpace(GetCell(row, columnIndexes.FirstOrDefault())))
+                    ?? sheetRows.FirstOrDefault();
+                if (titleRow == null)
+                {
+                    continue;
+                }
+
+                var stages = sheetRows
+                    .Where(row => !string.IsNullOrWhiteSpace(GetCell(row, columnIndexes.FirstOrDefault())))
+                    .ToDictionary(row => GetCell(row, rowIndex), row => GetCell(row, columnIndexes.FirstOrDefault()), StringComparer.Ordinal);
+                foreach (var columnIndex in columnIndexes.Skip(1))
+                {
+                    var jobName = GetCell(titleRow, columnIndex);
+                    if (string.IsNullOrWhiteSpace(jobName))
+                    {
+                        continue;
+                    }
+
+                    foreach (var row in sheetRows)
+                    {
+                        var stage = GetCell(row, columnIndexes.FirstOrDefault());
+                        var achievementName = GetCell(row, columnIndex);
+                        if (string.IsNullOrWhiteSpace(stage) || string.IsNullOrWhiteSpace(achievementName))
+                        {
+                            continue;
+                        }
+
+                        if (achievementName.Equals("无对应成就", StringComparison.Ordinal))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        if (!achievementsByName.TryGetValue(NormalizeAchievementName(achievementName), out var matches))
+                        {
+                            missing++;
+                            lines.Add($"{sheetRows.Key}|{jobName}|{stage}|{achievementName}|MISSING|未匹配");
+                            continue;
+                        }
+
+                        matched++;
+                        foreach (var achievement in matches)
+                        {
+                            lines.Add($"{sheetRows.Key}|{jobName}|{stage}|{achievementName}|{achievement.RowId}|EXACT");
+                        }
+                    }
+                }
+            }
+
+            var output = string.Join(Environment.NewLine, lines);
+            var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "achievement-ids.txt");
+            File.WriteAllText(path, output);
+            ImGui.SetClipboardText(output);
+            PrintChat($"已导出成就 ID：匹配 {matched}，未匹配 {missing}，无对应成就 {skipped}。结果已复制，文件：{path}");
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Error(ex, "Failed to export achievement IDs.");
+            PrintChat($"导出成就 ID 失败：{ex.Message}");
+        }
+    }
+
+    private static List<string[]> ParseCsv(string content)
+    {
+        var rows = new List<string[]>();
+        var row = new List<string>();
+        var field = new StringBuilder();
+        var quoted = false;
+        for (var index = 0; index < content.Length; index++)
+        {
+            var character = content[index];
+            if (character == '"')
+            {
+                if (quoted && index + 1 < content.Length && content[index + 1] == '"')
+                {
+                    field.Append('"');
+                    index++;
+                }
+                else
+                {
+                    quoted = !quoted;
+                }
+            }
+            else if (character == ',' && !quoted)
+            {
+                row.Add(field.ToString());
+                field.Clear();
+            }
+            else if ((character == '\n' || character == '\r') && !quoted)
+            {
+                if (character == '\r' && index + 1 < content.Length && content[index + 1] == '\n') index++;
+                row.Add(field.ToString());
+                field.Clear();
+                rows.Add(row.ToArray());
+                row.Clear();
+            }
+            else
+            {
+                field.Append(character);
+            }
+        }
+
+        if (field.Length > 0 || row.Count > 0)
+        {
+            row.Add(field.ToString());
+            rows.Add(row.ToArray());
+        }
+
+        return rows;
+    }
+
+    private static string GetCell(IReadOnlyList<string> row, int index)
+        => index >= 0 && index < row.Count ? row[index].Trim() : string.Empty;
 
     private unsafe void DrawBackpackOrganizer()
     {
