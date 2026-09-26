@@ -221,6 +221,7 @@
 - `ZodiacMonsterTracker` 复用聊天监听，优先读取聊天事件的 `Message.TextValue`。命中文书系统提示 `讨伐目标名 当前数/总数` 时直接同步游戏报告的当前数，例如“讨伐合成矿妖虫 3/3”会立即写入 3/3 并完成目标；仅在无法解析数字但仍是可靠击杀文本时才递增 1，不确定文本不自动标记。
 - `DutyCompletionTracker` 统一监听 Dalamud `IDutyState.DutyCompleted` 成功完成事件，按已确认的 `TerritoryType.RowId` 精确标记古武黄道文书 27 个副本、黄道武器 iLvl 125 的 16 个副本和幻武秘影 35 个副本；古武写入当前 UI 选择的古武职业，幻武写入全局 `CompletedTasks`。AutoDuty、普通排本和 Duty Support 均以游戏成功完成事件为准，启动 AutoDuty 本身不会提前标记。
 - 副本完成映射以 `DutyCompletionTracker` 内的 TerritoryType 表为准，不使用名称模糊匹配。相同 TerritoryType 可对应多个目标，完成一次会同时标记所有对应目标；已完成目标不会重复保存或提示。未进入已确认映射的副本仍保留手动勾选。
+- 古武文书存在重复副本时，`DutyCompletionTracker` 只将副本完成写入当前 UI 选择的文书；黄道武器四任务副本仍独立标记。切换或接取其他文书不会因为此前完成过同名副本而自动勾选，历史上已经写入的旧目标不自动清理。
 - 本我阶段提供 12 个独立光阶段，完成数保存到 `RequirementProgress["zodiac-zeta-mahatma"]`。
 - 古武页面 Wiki 按钮右侧提供“监控古武”开关，控制是否在悬浮窗显示古武进度和目标；悬浮窗同时显示幻武监控和古武监控时，两个独立卡片按顺序排列，互不覆盖。
 - 悬浮窗古武监控卡片可独立选择职业和古武阶段（古武、天极、魂晶、魂灵、新星、镇魂、黄道、本我）；阶段内容读取当前角色/职业的独立进度。

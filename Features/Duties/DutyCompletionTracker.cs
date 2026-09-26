@@ -99,9 +99,21 @@ public sealed class DutyCompletionTracker : IDisposable
             characterProgress.Jobs[configuration.SelectedZodiacJobKey] = jobProgress;
         }
 
+        var selectedBook = ZodiacGuide.AnimusBooks.FirstOrDefault(book => book.Key == jobProgress.SelectedBookKey);
+        var selectedBookObjectiveKeys = selectedBook?.Duties
+            .Select(duty => duty.Key)
+            .ToHashSet(StringComparer.Ordinal)
+            ?? new HashSet<string>(StringComparer.Ordinal);
+
         var changed = false;
         foreach (var objectiveKey in objectiveKeys)
         {
+            if (!objectiveKey.StartsWith("zodiac-zodiac-duty-", StringComparison.Ordinal)
+                && !selectedBookObjectiveKeys.Contains(objectiveKey))
+            {
+                continue;
+            }
+
             changed |= jobProgress.CompletedObjectives.Add(objectiveKey);
         }
 

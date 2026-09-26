@@ -5549,6 +5549,8 @@ public sealed class PluginUI
             configuration.Save();
         }
 
+        DrawFloatingContextMenuHint();
+
         if (configuration.ShowHuntAssistantInFloatingWindow)
         {
             DrawFloatingHuntAssistant();
@@ -5577,6 +5579,24 @@ public sealed class PluginUI
 
         DrawFloatingContextMenu();
         ImGui.End();
+    }
+
+    private static void DrawFloatingContextMenuHint()
+    {
+        var label = "可右键打开功能菜单";
+        var position = ImGui.GetCursorPos();
+        var color = DateTime.Now.Minute switch
+        {
+            <= 15 => new Vector4(1f, 0.25f, 0.25f, 1f),
+            <= 30 => new Vector4(1f, 0.85f, 0.15f, 1f),
+            <= 45 => new Vector4(0.25f, 0.9f, 0.35f, 1f),
+            _ => new Vector4(0.35f, 0.65f, 1f, 1f),
+        };
+        ImGui.PushStyleColor(ImGuiCol.Text, color);
+        ImGui.TextUnformatted(label);
+        ImGui.SetCursorPos(position + new Vector2(0.6f, 0f));
+        ImGui.TextUnformatted(label);
+        ImGui.PopStyleColor();
     }
 
     private void DrawFloatingZodiacMonitor()
@@ -5612,9 +5632,9 @@ public sealed class PluginUI
         var monitorHeight = floatingZodiacMonitorOpen
             ? selectedStage.Key switch
             {
-                "zodiac-animus" => GetFloatingCardHeight(8 + GetFloatingZodiacMonsterNavigationRows(progress)),
+                "zodiac-animus" => GetFloatingCardHeight(9 + GetFloatingZodiacMonsterNavigationRows(progress)),
                 "zodiac-atma" => GetFloatingCardHeight(7),
-                "zodiac-zodiac" => GetFloatingCardHeight(7),
+                "zodiac-zodiac" => GetFloatingCardHeight(8),
                 _ => GetFloatingCardHeight(6),
             }
             : GetCollapsedFloatingCardHeight();
@@ -5632,6 +5652,19 @@ public sealed class PluginUI
 
             ImGui.SameLine();
             ImGui.TextDisabled(floatingZodiacMonitorOpen ? "收起" : "展开");
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("加尔赞##floating-zodiac-navigate-jalzahn"))
+            {
+                NavigateToZodiacCoordinate("黑衣森林北部林区", new ZodiacCoordinate(29.8f, 19.7f));
+            }
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("茱萨娜##floating-zodiac-navigate-gjusana"))
+            {
+                NavigateToZodiacCoordinate("摩杜纳", new ZodiacCoordinate(22.9f, 7.3f));
+            }
+
             TrySameLineRight(GetButtonWidth("停止导航"));
             if (ImGui.SmallButton("停止导航##floating-zodiac-stop-navigation"))
             {
