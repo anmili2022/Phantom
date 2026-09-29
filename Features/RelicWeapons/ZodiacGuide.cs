@@ -187,20 +187,21 @@ public static class ZodiacGuide
         if (zone == "北萨纳兰") return (22.1f, 29.4f, "鲁鲁巴纳");
         if (zone == "库尔札斯中央高地")
         {
-            if (name.Contains("冰霜", StringComparison.Ordinal))
-            {
-                return (11.9f, 16.8f, "洛蒂耶");
-            }
-
-            return name.Contains("徘徊", StringComparison.Ordinal)
-                || name.Contains("黑暗羽翼", StringComparison.Ordinal)
-                ? (12.6f, 16.7f, "瓦力诺")
-                : (11.9f, 16.8f, "洛蒂耶");
+            return name.Contains("冰霜", StringComparison.Ordinal)
+                || name.Contains("米玛斯", StringComparison.Ordinal)
+                || name.Contains("威胁前哨", StringComparison.Ordinal)
+                || name.Contains("追击者", StringComparison.Ordinal)
+                || name.Contains("第五步兵", StringComparison.Ordinal)
+                || name.Contains("惊吓调查员", StringComparison.Ordinal)
+                ? (11.9f, 16.8f, "洛蒂耶")
+                : (12.6f, 16.7f, "瓦力诺");
         }
 
         if (zone == "摩杜纳")
         {
-            return name.Contains("验证", StringComparison.Ordinal) || name.Contains("饰品", StringComparison.Ordinal) || name.Contains("尖牙", StringComparison.Ordinal)
+            return name.Contains("验证", StringComparison.Ordinal)
+                || name.Contains("饰品", StringComparison.Ordinal)
+                || name.Contains("尖牙", StringComparison.Ordinal)
                 ? (29.8f, 12.5f, "克·蕾塔伊")
                 : (30.7f, 12.1f, "艾伊德哈特");
         }

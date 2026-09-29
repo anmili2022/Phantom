@@ -38,7 +38,20 @@ public sealed class ZodiacMonsterTracker : IDisposable
         }
 
         var text = ExtractChatMessageText(message);
-        if (string.IsNullOrWhiteSpace(text) || !LooksLikeKillMessage(text))
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        if (TryMarkBookObjective(text, book, jobProgress, "完成理符任务", book.Leves.Select(leve => (leve.Key, leve.Name)))
+            || TryMarkBookObjective(text, book, jobProgress, "完成危命任务", book.Fates.Select(fate => (fate.Key, fate.Name)))
+            || TryMarkBookObjective(text, book, jobProgress, "完成副本任务", book.Duties.Select(duty => (duty.Key, duty.Name))))
+        {
+            configuration.Save();
+            return;
+        }
+
+        if (!LooksLikeKillMessage(text))
         {
             return;
         }
@@ -70,6 +83,63 @@ public sealed class ZodiacMonsterTracker : IDisposable
             configuration.Save();
             DalamudApi.Log.Information("Auto-marked Zodiac book monster objective for {Book}: {Text}", book.Name, text);
         }
+    }
+
+    private static bool TryMarkBookObjective(
+        string text,
+        ZodiacBookGuide book,
+        ZodiacJobProgress jobProgress,
+        string prefix,
+        IEnumerable<(string Key, string Name)> objectives)
+    {
+        var prefixIndex = text.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+        if (prefixIndex < 0)
+        {
+            return false;
+        }
+
+        var targetName = ExtractQuotedName(text[(prefixIndex + prefix.Length)..]);
+        if (string.IsNullOrWhiteSpace(targetName))
+        {
+            return false;
+        }
+
+        var changed = false;
+        foreach (var (key, name) in objectives)
+        {
+            if (!string.Equals(name, targetName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            changed |= jobProgress.CompletedObjectives.Add(key);
+        }
+
+        if (changed)
+        {
+            DalamudApi.Log.Information("Auto-marked Zodiac book objective for {Book}: {Name}", book.Name, targetName);
+        }
+
+        return changed;
+    }
+
+    private static string ExtractQuotedName(string text)
+    {
+        var openIndex = text.IndexOfAny(new[] { '“', '「', '『', '"' });
+        if (openIndex < 0)
+        {
+            return string.Empty;
+        }
+
+        var close = text[openIndex] switch
+        {
+            '“' => '”',
+            '「' => '」',
+            '『' => '』',
+            _ => '"',
+        };
+        var end = text.IndexOf(close, openIndex + 1);
+        return end > openIndex ? text[(openIndex + 1)..end].Trim() : string.Empty;
     }
 
     private static bool LooksLikeKillMessage(string text)
