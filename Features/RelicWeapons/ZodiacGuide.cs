@@ -8,7 +8,7 @@ public static class ZodiacGuide
     {
         new ZodiacZodiacDutyGroup("zodiac-zodiac-duty-drop-of-kindness", "滴水之恩", new[]
         {
-            "山中战线泽梅尔要塞", "纷争要地布雷福洛克斯野营地", "魔兽领域日影地修炼所", "凛冽洞天披雪大冰壁",
+            "山中战线泽梅尔要塞", "纷争要地布雷福洛克斯野营地", "剑斗领域日影地修炼所", "凛冽洞天披雪大冰壁",
         }),
         new ZodiacZodiacDutyGroup("zodiac-zodiac-duty-unknown-craftsman", "挑战未知的工匠", new[]
         {
