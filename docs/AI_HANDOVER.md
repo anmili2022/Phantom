@@ -199,6 +199,7 @@ PhantomWeaponTarget  // 秘影目标
 - 莫古莫古扩展（2026-10-11）：`MogMogCollabGuide` 增加 `RareItems`（25 项往期稀有兑换物品，含 `Item.RowId`、所属活动与地区标记 `MogMogRegion`）与 `GuidePhases`（第1/2阶段指南书内容）；`YokaiProgressService.ScanRareItemsByIds()` 逐项判定持有（坐骑按 `MountName` 回查）；UI 新增两个折叠栏“莫古莫古指南书内容”“稀有兑换内容一览（5.x/6.x/7.x）”，后者带“国服（默认开）/国际服（默认关）”地区过滤开关。
 - 糖豆人调整（2026-10-11）：移除家具类统计（原 6 件家具），奖励 22→16 条；成就补齐“勇夺桂冠”四档 `3404/3405/3406/3407`。
 - DEBUG 查询合并（2026-10-11）：原“物品ID查询”“成就ID查询”合并为单个 `DrawCollabDebugSearch()`，同时查 `Item`（按 `ItemUICategory` 自动分类）与 `Achievement`，结果按类型分组，复制格式为 `类型 名称 ID`。该查询已从当前联动页签移到「设置」页「同步」区域。
+- 导航区域与跨图修复（2026-10-11）：`VnavService` 定义 `CityTerritoryTypes` 白名单（三主城/金碟/伊修加德/黄金港/水晶都/旧萨雷安/拉扎罕/图莱尤拉），主城/金碟内不尝试上坐骑且强制步行；`QueueMountBeforeMove` 不再按 `fly` 决定是否上坐骑；`StartPathfind` 飞行被拒绝时自动改步行重试；跨地图传送进入目标地图即置 `pendingTeleportBegan=true`，跳过以太水晶 90y 距离门与 8 秒等待，修复换图后原地不动。`TerritoryIntendedUse` 不可靠（130=0、141=1），故改用 ID 白名单。
 
 ---
 
@@ -251,10 +252,12 @@ NavigateTo(PhantomWeaponTarget)
 │   ├── FindAetheryteForTerritory()
 │   ├── Lifestream.Teleport()
 │   └── 等待 Lifestream.IsBusy == false + vnavmesh ready
-└── StartMove()
-    ├── QueueMountBeforeMove()   // 先上坐骑
-    └── pathfindAndMoveTo()      // vnavmesh 导航
+└── StartMove(fly)
+    ├── QueueMountBeforeMove()   // 非主城/金碟 且未骑乘/未战斗/非读图时，先尝试上坐骑
+    └── pathfindAndMoveTo()      // vnavmesh 导航；飞行被拒绝时自动改步行重试
 ```
+
+导航区域规则（2026-10-11）：主城与金碟游乐场（territory 白名单 129/130/131/132/133/134/144/418/419/628/819/962/963/1185）内**不上坐骑且强制步行**，其余区域按 `UseFlightNavigation` 上坐骑/飞行。跨地图传送一旦进入目标地图即视为完成，跳过以太水晶距离门与稳定等待直接续导航。
 
 ### 关键公式
 
