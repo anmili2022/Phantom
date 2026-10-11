@@ -75,6 +75,76 @@ public sealed class YokaiProgressService
             .ToArray();
     }
 
+    public IReadOnlyList<YokaiRewardProgress> ScanRewardsByIds(IReadOnlyList<CollabRewardDefinition> definitions)
+    {
+        var ownedIds = GetOwnedItemIds();
+        ownedIds.UnionWith(GetCachedStorageItemIds());
+        var items = DalamudApi.DataManager.GetExcelSheet<Item>().ToArray();
+
+        return definitions
+            .Select(definition =>
+            {
+                var matchedIds = definition.ItemIds.Distinct().ToArray();
+                var matchedItems = items.Where(item => matchedIds.Contains(item.RowId)).ToArray();
+                var owned = definition.Category switch
+                {
+                    YokaiWatchGuide.MountCategory or FfxvCollabGuide.MountCategory
+                        => IsMountRewardUnlocked(null, matchedItems, definition.MountName),
+                    YokaiWatchGuide.MinionCategory
+                        => IsMinionRewardUnlocked(matchedItems),
+                    YokaiWatchGuide.WeaponCategory
+                        => definition.ItemIds.All(ownedIds.Contains),
+                    _ => matchedIds.Any(ownedIds.Contains)
+                        || matchedItems.Any(item => DalamudApi.UnlockState.IsItemUnlocked(item)),
+                };
+
+                return new YokaiRewardProgress(
+                    definition.Key,
+                    definition.Name,
+                    definition.Category,
+                    matchedIds,
+                    owned);
+            })
+            .ToArray();
+    }
+
+    public IReadOnlyList<YokaiRewardProgress> ScanRareItemsByIds(IReadOnlyList<MogMogRareItem> items)
+    {
+        var ownedIds = GetOwnedItemIds();
+        ownedIds.UnionWith(GetCachedStorageItemIds());
+        var itemSheet = DalamudApi.DataManager.GetExcelSheet<Item>().ToArray();
+
+        return items
+            .Select(item =>
+            {
+                var matchedItems = itemSheet.Where(row => row.RowId == item.ItemId).ToArray();
+                var owned = !string.IsNullOrWhiteSpace(item.MountName)
+                    ? IsMountRewardUnlocked(null, matchedItems, item.MountName)
+                    : ownedIds.Contains(item.ItemId)
+                        || matchedItems.Any(row => DalamudApi.UnlockState.IsItemUnlocked(row));
+
+                return new YokaiRewardProgress(
+                    item.Key,
+                    item.Name,
+                    item.Group,
+                    [item.ItemId],
+                    owned);
+            })
+            .ToArray();
+    }
+
+    public static bool IsCollabAchievementUnlocked(uint achievementId)
+    {
+        if (achievementId == 0)
+        {
+            return false;
+        }
+
+        var achievements = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Achievement>();
+        return achievements.TryGetRow(achievementId, out var achievement)
+            && DalamudApi.UnlockState.IsAchievementComplete(achievement);
+    }
+
     public unsafe GlamourDresserStatus GetGlamourDresserStatus()
     {
         var finder = ItemFinderModule.Instance();
@@ -255,7 +325,7 @@ public sealed class YokaiProgressService
         return result;
     }
 
-    private static unsafe bool IsMountRewardUnlocked(uint? mountId, IEnumerable<Item> items)
+    private static unsafe bool IsMountRewardUnlocked(uint? mountId, IEnumerable<Item> items, string? mountName = null)
     {
         var playerState = PlayerState.Instance();
         if (playerState == null)
@@ -280,6 +350,19 @@ public sealed class YokaiProgressService
             if (itemMountId > 0 && playerState->IsMountUnlocked(itemMountId))
             {
                 return true;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(mountName))
+        {
+            foreach (var mountRow in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Mount>())
+            {
+                if (mountRow.RowId > 0
+                    && string.Equals(mountRow.Singular.ExtractText(), mountName, StringComparison.Ordinal)
+                    && playerState->IsMountUnlocked(mountRow.RowId))
+                {
+                    return true;
+                }
             }
         }
 

@@ -1,5 +1,7 @@
 namespace Phantom;
 
+public sealed record CollabNpc(string Key, string Name, string Zone, float X, float Y, string Purpose);
+
 public sealed record YokaiRewardDefinition(
     string Key,
     string Name,

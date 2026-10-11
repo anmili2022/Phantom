@@ -51,11 +51,22 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public Dictionary<string, string> WeaponProgressSyncTimes { get; set; } = new();
     public Dictionary<string, List<string>> YokaiOwnedRewardKeysByCharacter { get; set; } = new();
     public Dictionary<string, string> YokaiSyncTimesByCharacter { get; set; } = new();
+    public Dictionary<string, List<string>> FfxvOwnedRewardKeysByCharacter { get; set; } = new();
+    public Dictionary<string, string> FfxvSyncTimesByCharacter { get; set; } = new();
+    public Dictionary<string, List<string>> FallGuysOwnedRewardKeysByCharacter { get; set; } = new();
+    public Dictionary<string, string> FallGuysSyncTimesByCharacter { get; set; } = new();
+    public Dictionary<string, List<string>> MogMogOwnedRewardKeysByCharacter { get; set; } = new();
+    public Dictionary<string, string> MogMogSyncTimesByCharacter { get; set; } = new();
+    public string? SelectedCollabTabKey { get; set; }
     public Dictionary<string, ZodiacCharacterProgress> ZodiacProgressByCharacter { get; set; } = new();
     public string SelectedZodiacJobKey { get; set; } = "pld";
     public string FloatingZodiacJobKey { get; set; } = "pld";
     public string FloatingZodiacStageKey { get; set; } = "zodiac-animus";
     public bool HideOwnedYokaiRewards { get; set; }
+    public bool HideOwnedFfxvRewards { get; set; }
+    public bool HideOwnedFallGuysRewards { get; set; }
+    public bool HideOwnedMogMogRewards { get; set; }
+    public bool AutoHideExpiredCollabs { get; set; } = true;
     public bool DebugLogSyncedItemLocations { get; set; }
     public bool DebugLogMissingItemLocations { get; set; }
     public HashSet<uint> BackpackOrganizeItemIds { get; set; } = new();

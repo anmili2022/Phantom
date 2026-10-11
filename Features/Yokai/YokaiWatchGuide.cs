@@ -10,6 +10,20 @@ public static class YokaiWatchGuide
     public const string MinionCategory = "宠物";
     public const string WeaponCategory = "武器";
 
+    public static readonly DateTime EventStart = new(2026, 8, 4, 16, 0, 0);
+    public static readonly DateTime EventEnd = new(2026, 10, 5, 22, 59, 0);
+    public const string EventTimeText = "2026-08-04 16:00 ~ 2026-10-05 22:59";
+    public const string WikiUrl = "https://ff14.huijiwiki.com/wiki/%E5%A6%96%E6%80%AA%E6%89%8B%E8%A1%A8";
+
+    public static readonly IReadOnlyList<CollabNpc> Npcs =
+    [
+        new("poor-youth", "手头拮据的年轻人", "乌尔达哈现世回廊", 9.2f, 9.1f, "任务起始（欢迎，妖怪宠物）"),
+        new("nohi", "小野日", "金碟游乐场", 5.2f, 6.9f, "兑换宠物/武器/坐骑"),
+    ];
+
+    public static bool IsEventActive(DateTime time)
+        => time >= EventStart && time <= EventEnd;
+
     public static readonly IReadOnlyList<YokaiRewardDefinition> Rewards =
     [
         new("watch", "妖怪手表", WatchCategory, "妖怪手表"),

@@ -7,7 +7,7 @@
 
 ## 一、项目概况
 
-肝武助手是一个 Dalamud（卫月）API 15 插件，用于在《最终幻想 XIV》中追踪幻武、旧肝武、曼武、生产采集特殊工具、绝武和妖表联动收藏。参考代码库 `Chronicler`（新月岛史官）的结构和 IPC 调用方式。
+肝武助手是一个 Dalamud（卫月）API 15 插件，用于在《最终幻想 XIV》中追踪幻武、旧肝武、曼武、生产采集特殊工具、绝武和当前联动收藏（妖表/FF15）。参考代码库 `Chronicler`（新月岛史官）的结构和 IPC 调用方式。
 
 ### 技术栈
 
@@ -27,7 +27,7 @@
 - 阶段页展示、材料与进度手填、一次性流程勾选。
 - 秘影目标列表、坐标展示、导航按钮、悬浮追踪窗。
 - 聊天事件自动标记：击杀小怪、讨伐任务组、探索记忆组、金牌 FATE。
-- 总览页：汇总职业收藏、绝武收藏、妖表奖励、各系列完成度和雇员缓存覆盖；“刷新扫描”同步全部系列。
+- 总览页：汇总职业收藏、绝武收藏、联动奖励、各系列完成度和雇员缓存覆盖；“刷新扫描”同步全部系列。
 - 武器进度页：按职业/角色同步并展示已持有阶段，支持按职能分组和武器图标。
 - 曼德维尔武器四阶段资料页：任务链和材料支持手动勾选/录入。
 - 古武、魂武、优武、义武、天钢工具、莫雯工具、宇宙工具、绝本武器资料页：复用阶段页签、任务勾选、材料手动进度和职业持有同步。
@@ -124,6 +124,10 @@ PhantomWeaponTarget  // 秘影目标
 - WeaponProgressItemsByCharacter // 按角色保存各系列同步到的 Item RowId
 - WeaponProgressSyncTimes   // 按角色保存最近同步时间
 - YokaiOwnedRewardKeysByCharacter // 按角色保存妖表奖励
+- FfxvOwnedRewardKeysByCharacter // 按角色保存 FF15 联动奖励
+- FfxvSyncTimesByCharacter    // 按角色保存 FF15 最近同步时间
+- SelectedCollabTabKey        // 当前联动栏目选中页签（yokai/ff15）
+- HideOwnedFfxvRewards        // FF15 页是否隐藏已获得
 - ZodiacProgressByCharacter // 按角色、职业保存古武制作进度
 - SelectedZodiacJobKey      // 当前选择的古武职业
 - FateAssistantEnabled      // 古武 FATE 助手开关（基础字段已添加，助手尚未接入）
@@ -174,7 +178,7 @@ PhantomWeaponTarget  // 秘影目标
 - 狩猎助手保存车头最新 Flag；战斗中收到新点会停止旧导航并覆盖队列，脱战后只执行最后一点。悬浮窗提供“前往最新 Flag”；跨地图传送失败时禁止使用异地图坐标在当前地图继续寻路。
 - 曼武、雅武、幻武和绝武总进度底部增加低保数量卡片，使用 19 个固定 Item RowId 扫描当前已加载背包、鞍囊和雇员库存；曼武/幻武按每把 3 个、绝武按实际开放职业数、雅武按三种兑换比例计算分母和可兑换量。
 - 绝武各单独页签底部也显示对应绝本图腾；总进度页显示全部七种图腾。
-- 左侧“妖表联动”下方新增正式栏目“BIS联动”（图标 `FontAwesomeIcon.Table`），原 `/肝武 隐藏栏目` 入口已移除。
+- 左侧“当前联动”下方新增正式栏目“BIS联动”（图标 `FontAwesomeIcon.Table`），原 `/肝武 隐藏栏目` 入口已移除。
 - BIS 栏目含“装备列表、装备套装、设置、检索”四个页签；装备列表按部位顺序显示位置表格，装备套装按固定部位顺序展示。
 - 新增 `Features/BIS/BISShareDecoder.cs`：本地解析 ffxiv-gearing 分享链接，Base62 + BigInteger 混合进制，仅支持版本 6 及以上。
 - BIS 装备套装保存名称、职业、来源分享链接和部位映射；可选同时生成同名装备列表。
@@ -183,6 +187,18 @@ PhantomWeaponTarget  // 秘影目标
 - 旧版分享链接（版本 5 及以下）拒绝导入并提示在配装器重新生成（编辑-分享-复制）；`EquipSlotCategory` 字段为 `sbyte`，判定用 `> 0`。
 - 装备位置同步按方案 3 区分雇员结果：按 ID 对上显示“找到（雇员名）”，仅命中缓存显示“找到（雇员缓存）”，其余显示“—”。
 - 未决项：游戏原生 `/isearch` 无法通过 `ICommandManager.ProcessCommand` 触发，公开 API 也没有执行入口；已搁置，待定方案为引入 `ECommons` 依赖或改用宏系统。
+- 当前联动栏目改造（2026-10-11）：侧栏入口从“妖表联动”改名为“当前联动”（内部 key 仍为 `yokai`，去掉数量角标）；栏目内为“妖表”“FF15联动”两个页签（`ImGui.BeginTabBar`），各页签顶部显示活动起止日期横幅；首次打开默认选中活动期内联动（当前 FF15），用户切换持久化到 `SelectedCollabTabKey`。
+- 新建 `Features/Collabs/FfxvCollabGuide.cs`：FF15“献给英雄的夜曲”四期数据，13 条奖励全部按 `Item.RowId` 匹配（时装4件/坐骑/发型/幻卡/6张乐谱，ID 见 `docs/design.md`），含 3 个 NPC 坐标（导航按钮）和活动日期。
+- `YokaiProgressService` 新增 `ScanRewardsByIds()`：复用背包/兵装库/收藏柜/投影台缓存扫描；坐骑走 `ItemAction==1322` + `Mount.Singular` 名称回查双重判定；其余走持有或 `UnlockState.IsItemUnlocked`。
+- 妖表页签新增 2 个 NPC 导航按钮（手头拮据的年轻人/小野日）；奖励卡片右键统一打开灰机 Wiki 物品页（武器不再复制提示文本）。FF15 页签底部提供 DEBUG 物品 ID 查询（按名称查 `Item.RowId` 并复制）。
+- 未实机验证：FF15 坐骑/幻卡/乐谱解锁位判定是否完整覆盖；如漏报请反馈后按 DEBUG ID 扩充特殊判定。
+- FF15 成就接入（2026-10-11）：`FfxvCollabGuide.Achievements` 定义成就（当前“战友（称号：王者之剑）”，`AchievementId = 2241`），`YokaiProgressService.IsCollabAchievementUnlocked()` 按 `Achievement.RowId` + `UnlockState.IsAchievementComplete` 判定；FF15 页底部新增“成就”区域卡片，并新增 DEBUG 成就 ID 查询（按名称查 `Achievement.RowId`）。
+- 糖豆人联动（2026-10-11）：新建 `Features/Collabs/FallGuysCollabGuide.cs`（活动日期 2026-10-07~10-27、3 个 NPC、23 条奖励全部按 `Item.RowId`、成就“勇夺桂冠”`3407`）；当前联动栏目新增“糖豆人”页签；配置新增 `FallGuysOwnedRewardKeysByCharacter`/`FallGuysSyncTimesByCharacter`/`HideOwnedFallGuysRewards`。
+- 联动泛型化（2026-10-11）：FF15 与糖豆人页签共用 `DrawIdBasedCollabContent()` 与 `DrawCollabAchievements()`；新增 `AutoHideExpiredCollabs`（默认开）控制是否隐藏已过期联动页签。
+- 莫古莫古大收集（2026-10-11）：新建 `Features/Collabs/MogMogCollabGuide.cs`（天文的行路 第1阶段，2026-09-09~10-19，旅行莫古力 ×3，奖励按 `Item.RowId`：呜噜怪角笛 `50440`、豆柴围巾 `24615`，无成就）；当前联动栏目新增“莫古莫古大收集”页签；配置新增 `MogMogOwnedRewardKeysByCharacter`/`MogMogSyncTimesByCharacter`/`HideOwnedMogMogRewards`。
+- 莫古莫古扩展（2026-10-11）：`MogMogCollabGuide` 增加 `RareItems`（25 项往期稀有兑换物品，含 `Item.RowId` 与所属活动）与 `GuidePhases`（第1/2阶段指南书内容）；`YokaiProgressService.ScanRareItemsByIds()` 逐项判定持有（坐骑按 `MountName` 回查）；UI 新增两个折叠栏“莫古莫古指南书内容”“稀有兑换内容一览（5.x/6.x/7.x）”。
+- 糖豆人调整（2026-10-11）：移除家具类统计（原 6 件家具），奖励 22→16 条；成就补齐“勇夺桂冠”四档 `3404/3405/3406/3407`。
+- DEBUG 查询合并（2026-10-11）：原“物品ID查询”“成就ID查询”合并为单个 `DrawCollabDebugSearch()`，同时查 `Item`（按 `ItemUICategory` 自动分类）与 `Achievement`，结果按类型分组，复制格式为 `类型 名称 ID`。该查询已从当前联动页签移到「设置」页「同步」区域。
 
 ---
 

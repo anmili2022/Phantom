@@ -86,7 +86,7 @@ public sealed class PluginUI
         ("cosmic", "宇宙 · Cosmic", "-"),
         ("ultimate", "绝武 · Ultimate", "-"),
         ("deep-dungeon", "深武 · Deep Dungeon", "-"),
-        ("yokai", "妖表联动", "37"),
+        ("yokai", "当前联动", "-"),
         ("bis", "BIS联动", "-"),
         ("settings", "设置", "-"),
         ("fate", "危命助手", "-"),
@@ -152,6 +152,14 @@ public sealed class PluginUI
     private readonly Dictionary<string, Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>> deepDungeonWeaponItemLookups = new(StringComparer.Ordinal);
     private IReadOnlyList<YokaiRewardProgress> yokaiResults = Array.Empty<YokaiRewardProgress>();
     private readonly YokaiProgressService yokaiProgress = new();
+    private IReadOnlyList<YokaiRewardProgress> ffxvResults = Array.Empty<YokaiRewardProgress>();
+    private IReadOnlyList<YokaiRewardProgress> fallGuysResults = Array.Empty<YokaiRewardProgress>();
+    private IReadOnlyList<YokaiRewardProgress> mogMogResults = Array.Empty<YokaiRewardProgress>();
+    private IReadOnlyList<YokaiRewardProgress> mogMogRareResults = Array.Empty<YokaiRewardProgress>();
+    private bool collabTabInitialized;
+    private string activeCollabTabKey = "yokai";
+    private string collabDebugSearch = string.Empty;
+    private List<(uint Id, string Name, string Type)> collabDebugResults = [];
     private bool isMainWindowOpen;
     private string trackedEquipmentId = string.Empty;
     private string trackedEquipmentName = string.Empty;
@@ -558,7 +566,7 @@ public sealed class PluginUI
                 DrawElegantWeaponWorkspace();
                 break;
             case "yokai":
-                DrawYokaiWorkspace();
+                DrawCollabWorkspace();
                 break;
             case "manderville":
                 DrawMandervilleWorkspace();
@@ -1557,7 +1565,7 @@ public sealed class PluginUI
             }
             if (ImGui.Button("前往幻境村##overview-village", new Vector2(120f, 0f))) vnav.GoToOccultVillage();
             ImGui.SameLine();
-            if (ImGui.Button("妖表联动##overview-yokai", new Vector2(120f, 0f))) selectedMainSection = GetMainSectionIndex("yokai");
+            if (ImGui.Button("当前联动##overview-yokai", new Vector2(120f, 0f))) selectedMainSection = GetMainSectionIndex("yokai");
             ImGui.EndTable();
         }
     }
@@ -4468,7 +4476,142 @@ public sealed class PluginUI
         return new Vector4(color.X, color.Y, color.Z, alpha);
     }
 
-    private void DrawYokaiWorkspace()
+    private void DrawCollabWorkspace()
+    {
+        var now = DateTime.Now;
+        var yokaiActive = YokaiWatchGuide.IsEventActive(now);
+        var ff15Active = FfxvCollabGuide.IsEventActive(now);
+        var fallGuysActive = FallGuysCollabGuide.IsEventActive(now);
+        var mogMogActive = MogMogCollabGuide.IsEventActive(now);
+
+        var autoHide = configuration.AutoHideExpiredCollabs;
+        if (ImGui.Checkbox("自动隐藏已过期联动##auto-hide-expired-collabs", ref autoHide))
+        {
+            configuration.AutoHideExpiredCollabs = autoHide;
+            configuration.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("开启后，活动已结束的联动页签将不再显示；全部过期时仍会显示全部页签。");
+        }
+
+        var tabs = new List<(string Key, string Label, bool Active)>
+        {
+            ("yokai", "妖表", yokaiActive),
+            ("ff15", "FF15联动", ff15Active),
+            ("fallguys", "糖豆人", fallGuysActive),
+            ("mogmog", "莫古莫古大收集", mogMogActive),
+        };
+
+        if (autoHide)
+        {
+            var visibleTabs = tabs.Where(tab => tab.Active).ToList();
+            if (visibleTabs.Count > 0)
+            {
+                tabs = visibleTabs;
+            }
+        }
+
+        var firstFrame = !collabTabInitialized;
+        if (firstFrame)
+        {
+            var stored = configuration.SelectedCollabTabKey;
+            if (stored != null && tabs.Any(tab => tab.Key == stored))
+            {
+                activeCollabTabKey = stored;
+            }
+            else
+            {
+                activeCollabTabKey = tabs.FirstOrDefault(tab => tab.Active).Key ?? tabs[0].Key;
+            }
+
+            collabTabInitialized = true;
+        }
+        else if (!tabs.Any(tab => tab.Key == activeCollabTabKey))
+        {
+            activeCollabTabKey = tabs.FirstOrDefault(tab => tab.Active).Key ?? tabs[0].Key;
+        }
+
+        if (!ImGui.BeginTabBar("collab-tabs"))
+        {
+            return;
+        }
+
+        foreach (var tab in tabs)
+        {
+            var flags = firstFrame && activeCollabTabKey == tab.Key ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+            if (ImGui.BeginTabItem($"{tab.Label}##collab-tab-{tab.Key}", flags))
+            {
+                SetActiveCollabTab(tab.Key);
+                switch (tab.Key)
+                {
+                    case "yokai":
+                        DrawCollabEventBanner(YokaiWatchGuide.EventTimeText, yokaiActive);
+                        DrawYokaiCollabContent();
+                        break;
+                    case "ff15":
+                        DrawCollabEventBanner(FfxvCollabGuide.EventTimeText, ff15Active);
+                        DrawFfxvCollabContent();
+                        break;
+                    case "fallguys":
+                        DrawCollabEventBanner(FallGuysCollabGuide.EventTimeText, fallGuysActive);
+                        DrawFallGuysCollabContent();
+                        break;
+                    case "mogmog":
+                        DrawCollabEventBanner(MogMogCollabGuide.EventTimeText, mogMogActive);
+                        DrawMogMogCollabContent();
+                        break;
+                }
+
+                ImGui.EndTabItem();
+            }
+        }
+
+        ImGui.EndTabBar();
+    }
+
+    private void SetActiveCollabTab(string key)
+    {
+        if (activeCollabTabKey == key)
+        {
+            return;
+        }
+
+        activeCollabTabKey = key;
+        configuration.SelectedCollabTabKey = key;
+        configuration.Save();
+    }
+
+    private static void DrawCollabEventBanner(string eventTimeText, bool active)
+    {
+        var color = active ? new Vector4(0.45f, 0.95f, 0.55f, 1f) : new Vector4(1f, 0.72f, 0.28f, 1f);
+        ImGui.TextColored(color, $"活动时间：{eventTimeText}　{(active ? "进行中" : "未开放")}");
+    }
+
+    private void DrawCollabNpcButtons(IReadOnlyList<CollabNpc> npcs, string idPrefix)
+    {
+        for (var index = 0; index < npcs.Count; index++)
+        {
+            var npc = npcs[index];
+            if (ImGui.Button($"{npc.Name}（{npc.Zone}）导航##{idPrefix}-nav-{npc.Key}"))
+            {
+                vnav.NavigateToMapCoordinate(npc.Zone, npc.X, npc.Y);
+            }
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip($"{npc.Purpose}\n{npc.Zone} X:{npc.X} Y:{npc.Y}");
+            }
+
+            if (index < npcs.Count - 1)
+            {
+                ImGui.SameLine();
+            }
+        }
+    }
+
+    private void DrawYokaiCollabContent()
     {
         ImGui.Spacing();
         ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "一句话攻略：");
@@ -4476,6 +4619,13 @@ public sealed class PluginUI
         ImGui.TextWrapped("带着宠物后才会掉落兑换武器的材料（不是必出），最后用武器材料兑换对应武器。");
         ImGui.TextColored(new Vector4(1f, 0.35f, 0.30f, 1f), "注意：不同宠物掉落的材料不一样。");
 
+        DrawCollabNpcButtons(YokaiWatchGuide.Npcs, "yokai");
+        if (ImGui.Button("打开妖表 Wiki##open-yokai-wiki"))
+        {
+            OpenUrl(YokaiWatchGuide.WikiUrl);
+        }
+
+        ImGui.Spacing();
         var characterKey = GetCurrentCharacterKey();
         if (string.IsNullOrWhiteSpace(characterKey))
         {
@@ -4504,12 +4654,6 @@ public sealed class PluginUI
             ImGui.SetTooltip("扫描当前角色已加载的背包、关键道具、装备栏和完整兵装库，统计妖怪手表联动奖励。已同步结果按角色 ContentId 保存。");
         }
 
-        ImGui.SameLine();
-        if (ImGui.Button("打开妖表 Wiki##open-yokai-wiki"))
-        {
-            OpenUrl("https://ff14.huijiwiki.com/wiki/%E5%A6%96%E6%80%AA%E6%89%8B%E8%A1%A8");
-        }
-
         var glamourStatus = yokaiProgress.GetGlamourDresserStatus();
         ImGui.TextDisabled($"投影台缓存：{(glamourStatus.IsCached ? "已加载" : "未加载")}，物品数：{glamourStatus.CachedItemCount}");
         if (glamourStatus.SearchGlamourDresserCount > 0)
@@ -4524,7 +4668,6 @@ public sealed class PluginUI
                 .ToArray();
         }
 
-        ImGui.SameLine();
         var syncTime = configuration.YokaiSyncTimesByCharacter.TryGetValue(characterKey, out var time) ? time : "未同步";
         ImGui.TextDisabled($"上次同步：{syncTime}");
 
@@ -4540,43 +4683,369 @@ public sealed class PluginUI
         if (ImGui.BeginTable("yokai-summary", 4, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
         {
             DrawSummaryCard("奖励总数", $"{totalOwned}/{yokaiResults.Count}", "妖表联动全部奖励");
-            DrawYokaiSummaryCard(YokaiWatchGuide.WatchCategory);
-            DrawYokaiSummaryCard(YokaiWatchGuide.MinionCategory);
-            DrawYokaiSummaryCard(YokaiWatchGuide.WeaponCategory);
+            DrawCollabSummaryCard(yokaiResults, YokaiWatchGuide.WatchCategory);
+            DrawCollabSummaryCard(yokaiResults, YokaiWatchGuide.MinionCategory);
+            DrawCollabSummaryCard(yokaiResults, YokaiWatchGuide.WeaponCategory);
             ImGui.EndTable();
         }
 
         ImGui.Spacing();
-        DrawYokaiCategoryGrid(YokaiWatchGuide.WatchCategory);
-        DrawYokaiCategoryGrid(YokaiWatchGuide.MountCategory);
-        DrawYokaiCategoryGrid(YokaiWatchGuide.PortraitCategory);
-        DrawYokaiCategoryGrid(YokaiWatchGuide.MinionCategory);
-        DrawYokaiCategoryGrid(YokaiWatchGuide.WeaponCategory);
+        DrawCollabCategoryGrid(yokaiResults, YokaiWatchGuide.WatchCategory, configuration.HideOwnedYokaiRewards, "yokai", DrawYokaiRewardTile);
+        DrawCollabCategoryGrid(yokaiResults, YokaiWatchGuide.MountCategory, configuration.HideOwnedYokaiRewards, "yokai", DrawYokaiRewardTile);
+        DrawCollabCategoryGrid(yokaiResults, YokaiWatchGuide.PortraitCategory, configuration.HideOwnedYokaiRewards, "yokai", DrawYokaiRewardTile);
+        DrawCollabCategoryGrid(yokaiResults, YokaiWatchGuide.MinionCategory, configuration.HideOwnedYokaiRewards, "yokai", DrawYokaiRewardTile);
+        DrawCollabCategoryGrid(yokaiResults, YokaiWatchGuide.WeaponCategory, configuration.HideOwnedYokaiRewards, "yokai", DrawYokaiRewardTile);
     }
 
-    private void DrawYokaiSummaryCard(string category)
+    private void DrawFfxvCollabContent()
     {
-        var rewards = yokaiResults.Where(reward => reward.Category == category).ToArray();
-        DrawSummaryCard(category, $"{rewards.Count(reward => reward.Owned)}/{rewards.Length}", "奖励进度");
+        DrawIdBasedCollabContent(
+            idPrefix: "ff15",
+            label: "FF15联动",
+            rewards: FfxvCollabGuide.Rewards,
+            npcs: FfxvCollabGuide.Npcs,
+            achievements: FfxvCollabGuide.Achievements,
+            categories:
+            [
+                FfxvCollabGuide.FashionCategory,
+                FfxvCollabGuide.MountCategory,
+                FfxvCollabGuide.HairstyleCategory,
+                FfxvCollabGuide.TripleTriadCategory,
+                FfxvCollabGuide.OrchestrionCategory,
+            ],
+            summaryCategories: [FfxvCollabGuide.FashionCategory, FfxvCollabGuide.MountCategory, FfxvCollabGuide.OrchestrionCategory],
+            wikiUrl: FfxvCollabGuide.WikiUrl,
+            wikiButtonLabel: "打开FF15联动Wiki",
+            introTitle: "任务流程：",
+            introLines:
+            [
+                "前置：战斗精英/魔法导师 50级 + 主线「超越幻想，究极神兵」。任务线：黑衣青年 → 暗夜来访者 → 风之使者。",
+                "打危命任务「机械士兵」掉落「未知的魔导部件」，找调查员换乐谱；坐骑/发型/幻卡在金碟找销售员用金碟币兑换。",
+            ],
+            getResults: () => ffxvResults,
+            setResults: value => ffxvResults = value,
+            ownedKeys: configuration.FfxvOwnedRewardKeysByCharacter,
+            syncTimes: configuration.FfxvSyncTimesByCharacter,
+            getHide: () => configuration.HideOwnedFfxvRewards,
+            setHide: value => configuration.HideOwnedFfxvRewards = value,
+            syncTooltip: "扫描当前角色已加载的背包、关键道具、装备栏和完整兵装库，统计FF15联动奖励。已同步结果按角色 ContentId 保存。");
     }
 
-    private void DrawYokaiCategoryGrid(string category)
+    private void DrawFallGuysCollabContent()
     {
-        var rewards = yokaiResults.Where(reward => reward.Category == category && (!configuration.HideOwnedYokaiRewards || !reward.Owned)).ToArray();
-        var total = yokaiResults.Count(reward => reward.Category == category);
-        var completed = yokaiResults.Count(reward => reward.Category == category && reward.Owned);
-        if (configuration.HideOwnedYokaiRewards && rewards.Length == 0)
+        DrawIdBasedCollabContent(
+            idPrefix: "fallguys",
+            label: "糖豆人",
+            rewards: FallGuysCollabGuide.Rewards,
+            npcs: FallGuysCollabGuide.Npcs,
+            achievements: FallGuysCollabGuide.Achievements,
+            categories:
+            [
+                FallGuysCollabGuide.FashionCategory,
+                FallGuysCollabGuide.CrownCategory,
+                FallGuysCollabGuide.MinionCategory,
+                FallGuysCollabGuide.OrchestrionCategory,
+                FallGuysCollabGuide.EmoteCategory,
+                FallGuysCollabGuide.PortraitCategory,
+                FallGuysCollabGuide.MiscCategory,
+            ],
+            summaryCategories: [FallGuysCollabGuide.FashionCategory, FallGuysCollabGuide.MinionCategory, FallGuysCollabGuide.PortraitCategory],
+            wikiUrl: FallGuysCollabGuide.WikiUrl,
+            wikiButtonLabel: "打开糖豆人Wiki",
+            introTitle: "参与方式：",
+            introLines:
+            [
+                "所有职业 15级，先完成前置任务「前往游乐场」，再找莱维娜接「抓紧胜利的王冠！」。",
+                "与节目登记员对话报名参加金碟巨豆中心，比赛获得「金碟声誉」和「金碟币」，用金碟声誉在金碟声誉兑换员处兑换奖励。",
+            ],
+            getResults: () => fallGuysResults,
+            setResults: value => fallGuysResults = value,
+            ownedKeys: configuration.FallGuysOwnedRewardKeysByCharacter,
+            syncTimes: configuration.FallGuysSyncTimesByCharacter,
+            getHide: () => configuration.HideOwnedFallGuysRewards,
+            setHide: value => configuration.HideOwnedFallGuysRewards = value,
+            syncTooltip: "扫描当前角色已加载的背包、关键道具、装备栏和完整兵装库，统计糖豆人联动奖励。已同步结果按角色 ContentId 保存。");
+    }
+
+    private void DrawMogMogCollabContent()
+    {
+        DrawIdBasedCollabContent(
+            idPrefix: "mogmog",
+            label: "莫古莫古大收集",
+            rewards: MogMogCollabGuide.Rewards,
+            npcs: MogMogCollabGuide.Npcs,
+            achievements: MogMogCollabGuide.Achievements,
+            categories:
+            [
+                MogMogCollabGuide.MountCategory,
+                MogMogCollabGuide.FashionCategory,
+                MogMogCollabGuide.BodyCategory,
+                MogMogCollabGuide.HeadCategory,
+                MogMogCollabGuide.OrchestrionCategory,
+                MogMogCollabGuide.TripleTriadCategory,
+                MogMogCollabGuide.MinionCategory,
+                MogMogCollabGuide.MiscCategory,
+                MogMogCollabGuide.OtherCategory,
+            ],
+            summaryCategories: [MogMogCollabGuide.MountCategory, MogMogCollabGuide.FashionCategory, MogMogCollabGuide.OrchestrionCategory],
+            separatorBeforeCategories: [MogMogCollabGuide.BodyCategory],
+            wikiUrl: MogMogCollabGuide.WikiUrl,
+            wikiButtonLabel: "打开莫古莫古大收集Wiki",
+            introTitle: "参与方式（天文的行路 第1阶段）：",
+            introLines:
+            [
+                "与三个主城的「旅行莫古力」对话获得「莫古莫古指南书」，按指南书列出的目标副本游玩获取「稀少神典石：天文1章」。",
+                "把稀少神典石交给旅行莫古力兑换奖励；兑换坐骑「呜噜怪角笛」需要「呜噜怪角笛的交换票据」。",
+            ],
+            getResults: () => mogMogResults,
+            setResults: value => mogMogResults = value,
+            ownedKeys: configuration.MogMogOwnedRewardKeysByCharacter,
+            syncTimes: configuration.MogMogSyncTimesByCharacter,
+            getHide: () => configuration.HideOwnedMogMogRewards,
+            setHide: value => configuration.HideOwnedMogMogRewards = value,
+            syncTooltip: "扫描当前角色已加载的背包、关键道具、装备栏和完整兵装库，统计莫古莫古大收集奖励。已同步结果按角色 ContentId 保存。");
+
+        DrawMogMogGuideBook();
+        DrawMogMogRareExchange();
+    }
+
+    private static void DrawMogMogGuideBook()
+    {
+        if (!ImGui.CollapsingHeader("莫古莫古指南书内容##mogmog-guidebook"))
         {
             return;
         }
 
-        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), $"{category}  {completed}/{total}");
-        if (ImGui.BeginTable($"yokai-reward-grid-{category}", 4, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+        foreach (var phase in MogMogCollabGuide.GuidePhases)
         {
-            foreach (var reward in rewards)
+            if (!ImGui.CollapsingHeader($"{phase.Title}　{phase.TimeText}##mogmog-guide-{phase.Title}"))
+            {
+                continue;
+            }
+
+            foreach (var line in phase.Lines)
+            {
+                if (line.StartsWith("  ", StringComparison.Ordinal))
+                {
+                    ImGui.Indent();
+                    ImGui.TextWrapped(line.Trim());
+                    ImGui.Unindent();
+                }
+                else
+                {
+                    ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), line);
+                }
+            }
+
+            ImGui.Spacing();
+        }
+    }
+
+    private void DrawMogMogRareExchange()
+    {
+        if (!ImGui.CollapsingHeader("稀有兑换内容一览（5.x / 6.x / 7.x）##mogmog-rare"))
+        {
+            return;
+        }
+
+        ImGui.TextWrapped("以下为往期莫古莫古大收集的稀有兑换物品，按版本分组，逐项判定是否已持有。活动期间兑换入口在旅行莫古力处。");
+        if (ImGui.Button("刷新稀有物品持有##refresh-mogmog-rare"))
+        {
+            mogMogRareResults = yokaiProgress.ScanRareItemsByIds(MogMogCollabGuide.RareItems);
+        }
+
+        if (mogMogRareResults.Count == 0)
+        {
+            mogMogRareResults = yokaiProgress.ScanRareItemsByIds(MogMogCollabGuide.RareItems);
+        }
+
+        ImGui.Spacing();
+        foreach (var group in MogMogCollabGuide.RareGroups)
+        {
+            var groupResults = mogMogRareResults.Where(reward => reward.Category == group).ToArray();
+            var owned = groupResults.Count(reward => reward.Owned);
+            if (!ImGui.CollapsingHeader($"{group}　{owned}/{groupResults.Length}##mogmog-rare-{group}"))
+            {
+                continue;
+            }
+
+            if (ImGui.BeginTable($"mogmog-rare-grid-{group}", 4, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+            {
+                foreach (var reward in groupResults)
+                {
+                    ImGui.TableNextColumn();
+                    DrawMogMogRareTile(reward);
+                }
+
+                ImGui.EndTable();
+            }
+
+            ImGui.Spacing();
+        }
+    }
+
+    private void DrawMogMogRareTile(YokaiRewardProgress reward)
+    {
+        var owned = reward.Owned;
+        var cursor = ImGui.GetCursorScreenPos();
+        var size = new Vector2(150f, 88f);
+        var bg = owned ? new Vector4(0.10f, 0.22f, 0.24f, 0.96f) : new Vector4(0.10f, 0.11f, 0.15f, 0.72f);
+        var border = owned ? new Vector4(0.30f, 0.84f, 0.78f, 0.92f) : new Vector4(0.25f, 0.27f, 0.34f, 0.9f);
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(cursor, cursor + size, ImGui.GetColorU32(bg), 8f);
+        drawList.AddRect(cursor, cursor + size, ImGui.GetColorU32(border), 8f, ImDrawFlags.None, owned ? 1.8f : 1f);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 9f));
+        ImGui.TextColored(owned ? new Vector4(0.78f, 0.96f, 0.94f, 1f) : new Vector4(0.78f, 0.80f, 0.84f, 1f), reward.Name);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 38f));
+        ImGui.TextDisabled(reward.Category);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 55f));
+        ImGui.TextDisabled(owned ? "已获得" : "未获得");
+        ImGui.SetCursorScreenPos(cursor);
+        ImGui.InvisibleButton($"mogmog-rare-{reward.Key}", size);
+        if (ImGui.IsItemHovered())
+        {
+            var definition = MogMogCollabGuide.RareItems.FirstOrDefault(item => item.Key == reward.Key);
+            var tooltip = $"{reward.Name}\n{(owned ? "已获得" : "未获得")}\n右键打开 Wiki";
+            if (definition != null && !string.IsNullOrWhiteSpace(definition.Note))
+            {
+                tooltip += $"\n{definition.Note}";
+            }
+
+            ImGui.SetTooltip(tooltip);
+            if (ImGui.IsMouseReleased(ImGuiMouseButton.Right))
+            {
+                OpenItemWiki(reward.Name);
+            }
+        }
+    }
+
+    private void DrawIdBasedCollabContent(
+        string idPrefix,
+        string label,
+        IReadOnlyList<CollabRewardDefinition> rewards,
+        IReadOnlyList<CollabNpc> npcs,
+        IReadOnlyList<CollabAchievementDefinition> achievements,
+        string[] categories,
+        string[] summaryCategories,
+        string wikiUrl,
+        string wikiButtonLabel,
+        string introTitle,
+        string[] introLines,
+        Func<IReadOnlyList<YokaiRewardProgress>> getResults,
+        Action<IReadOnlyList<YokaiRewardProgress>> setResults,
+        Dictionary<string, List<string>> ownedKeys,
+        Dictionary<string, string> syncTimes,
+        Func<bool> getHide,
+        Action<bool> setHide,
+        string syncTooltip,
+        string[]? separatorBeforeCategories = null)
+    {
+        ImGui.Spacing();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), introTitle);
+        foreach (var line in introLines)
+        {
+            ImGui.TextWrapped(line);
+        }
+
+        DrawCollabNpcButtons(npcs, idPrefix);
+        if (ImGui.Button($"{wikiButtonLabel}##open-{idPrefix}-wiki"))
+        {
+            OpenUrl(wikiUrl);
+        }
+
+        ImGui.Spacing();
+        var characterKey = GetCurrentCharacterKey();
+        if (string.IsNullOrWhiteSpace(characterKey))
+        {
+            ImGui.TextColored(new Vector4(1f, 0.72f, 0.28f, 1f), "未登录角色，无法同步。");
+            return;
+        }
+
+        var results = getResults();
+        if (ImGui.Button($"同步当前角色##sync-{idPrefix}-progress"))
+        {
+            results = yokaiProgress.ScanRewardsByIds(rewards);
+            setResults(results);
+            ownedKeys[characterKey] = results
+                .Where(reward => reward.Owned)
+                .Select(reward => reward.Key)
+                .ToList();
+            syncTimes[characterKey] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            configuration.Save();
+
+            if (configuration.DebugLogSyncedItemLocations)
+            {
+                LogSyncedYokaiItemLocations(results, configuration.DebugLogMissingItemLocations, label);
+            }
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(syncTooltip);
+        }
+
+        if (results.Count == 0 && ownedKeys.TryGetValue(characterKey, out var storedKeys))
+        {
+            results = rewards
+                .Select(reward => new YokaiRewardProgress(reward.Key, reward.Name, reward.Category, Array.Empty<uint>(), storedKeys.Contains(reward.Key)))
+                .ToArray();
+            setResults(results);
+        }
+
+        var syncTime = syncTimes.TryGetValue(characterKey, out var time) ? time : "未同步";
+        ImGui.TextDisabled($"上次同步：{syncTime}");
+
+        var hideOwned = getHide();
+        if (ImGui.Checkbox($"隐藏已获得##hide-owned-{idPrefix}", ref hideOwned))
+        {
+            setHide(hideOwned);
+            configuration.Save();
+        }
+
+        ImGui.Spacing();
+        var totalOwned = results.Count(reward => reward.Owned);
+        if (ImGui.BeginTable($"{idPrefix}-summary", 4, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
+        {
+            DrawSummaryCard("奖励总数", $"{totalOwned}/{results.Count}", $"{label}全部奖励");
+            foreach (var category in summaryCategories)
+            {
+                DrawCollabSummaryCard(results, category);
+            }
+
+            ImGui.EndTable();
+        }
+
+        ImGui.Spacing();
+        DrawCollabAchievements(achievements, idPrefix);
+        foreach (var category in categories)
+        {
+            if (separatorBeforeCategories != null && separatorBeforeCategories.Contains(category))
+            {
+                ImGui.Spacing();
+                ImGui.Separator();
+                ImGui.Spacing();
+            }
+
+            DrawCollabCategoryGrid(results, category, getHide(), idPrefix, DrawFfxvRewardTile);
+        }
+    }
+
+    private void DrawCollabAchievements(IReadOnlyList<CollabAchievementDefinition> achievements, string idPrefix)
+    {
+        var visible = achievements.ToArray();
+        if (visible.Length == 0)
+        {
+            return;
+        }
+
+        var completed = visible.Count(achievement => YokaiProgressService.IsCollabAchievementUnlocked(achievement.AchievementId));
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), $"成就  {completed}/{visible.Length}");
+        if (ImGui.BeginTable($"{idPrefix}-achievement-grid", 4, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+        {
+            foreach (var achievement in visible)
             {
                 ImGui.TableNextColumn();
-                DrawYokaiRewardTile(reward);
+                DrawCollabAchievementTile(achievement, idPrefix);
             }
 
             ImGui.EndTable();
@@ -4585,7 +5054,172 @@ public sealed class PluginUI
         ImGui.Spacing();
     }
 
-    private static void LogSyncedYokaiItemLocations(IEnumerable<YokaiRewardProgress> results, bool logMissingItems)
+    private void DrawCollabAchievementTile(CollabAchievementDefinition achievement, string idPrefix)
+    {
+        var owned = YokaiProgressService.IsCollabAchievementUnlocked(achievement.AchievementId);
+        var cursor = ImGui.GetCursorScreenPos();
+        var size = new Vector2(150f, 88f);
+        var bg = owned ? new Vector4(0.10f, 0.22f, 0.24f, 0.96f) : new Vector4(0.10f, 0.11f, 0.15f, 0.72f);
+        var border = owned ? new Vector4(0.30f, 0.84f, 0.78f, 0.92f) : new Vector4(0.25f, 0.27f, 0.34f, 0.9f);
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(cursor, cursor + size, ImGui.GetColorU32(bg), 8f);
+        drawList.AddRect(cursor, cursor + size, ImGui.GetColorU32(border), 8f, ImDrawFlags.None, owned ? 1.8f : 1f);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 9f));
+        ImGui.TextColored(owned ? new Vector4(0.78f, 0.96f, 0.94f, 1f) : new Vector4(0.78f, 0.80f, 0.84f, 1f), achievement.Name);
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 38f));
+        ImGui.TextDisabled("成就");
+        ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 55f));
+        ImGui.TextDisabled(owned ? "已解锁" : "未解锁");
+        ImGui.SetCursorScreenPos(cursor);
+        ImGui.InvisibleButton($"{idPrefix}-achievement-{achievement.Key}", size);
+        if (ImGui.IsItemHovered())
+        {
+            var tooltip = $"{achievement.Name}\n{(owned ? "已解锁" : "未解锁")}";
+            if (!string.IsNullOrWhiteSpace(achievement.Note))
+            {
+                tooltip += $"\n{achievement.Note}";
+            }
+
+            if (achievement.AchievementId > 0)
+            {
+                tooltip += $"\n成就ID：{achievement.AchievementId}";
+            }
+
+            ImGui.SetTooltip(tooltip);
+        }
+    }
+
+    private void DrawCollabDebugSearch()
+    {
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "物品 / 坐骑 / 宠物 / 成就 等 ID 查询");
+        ImGui.SetNextItemWidth(240f);
+        ImGui.InputText("##collab-debug-search", ref collabDebugSearch, 64);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("输入名称（全部或部分），按物品 UI 分类与成就查询 ID，结果按类型分组。");
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("查询##collab-debug"))
+        {
+            collabDebugResults = SearchCollabDebug(collabDebugSearch);
+        }
+
+        foreach (var group in collabDebugResults.GroupBy(entry => entry.Type))
+        {
+            ImGui.TextColored(new Vector4(0.68f, 0.82f, 0.94f, 1f), $"【{group.Key}】{group.Count()} 项");
+            foreach (var (id, name, type) in group)
+            {
+                ImGui.Text($"  {type}　{name}　{id}");
+                ImGui.SameLine();
+                if (ImGui.SmallButton($"复制##copy-debug-{type}-{id}"))
+                {
+                    ImGui.SetClipboardText($"{type} {name} {id}");
+                }
+            }
+        }
+    }
+
+    private static List<(uint Id, string Name, string Type)> SearchCollabDebug(string keyword)
+    {
+        var result = new List<(uint, string, string)>();
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return result;
+        }
+
+        foreach (var item in DalamudApi.DataManager.GetExcelSheet<Item>())
+        {
+            if (item.RowId == 0)
+            {
+                continue;
+            }
+
+            var name = item.Name.ExtractText();
+            if (string.IsNullOrEmpty(name) || !name.Contains(keyword, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var type = item.ItemUICategory.Value.Name.ExtractText();
+            if (string.IsNullOrWhiteSpace(type))
+            {
+                type = "物品";
+            }
+
+            result.Add((item.RowId, name, type));
+            if (result.Count >= 60)
+            {
+                break;
+            }
+        }
+
+        foreach (var achievement in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Achievement>())
+        {
+            if (achievement.RowId == 0)
+            {
+                continue;
+            }
+
+            var name = achievement.Name.ExtractText();
+            if (string.IsNullOrEmpty(name) || !name.Contains(keyword, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            result.Add((achievement.RowId, name, "成就"));
+            if (result.Count >= 80)
+            {
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    private static void OpenItemWiki(string itemName)
+    {
+        if (string.IsNullOrWhiteSpace(itemName))
+        {
+            return;
+        }
+
+        OpenUrl($"https://ff14.huijiwiki.com/wiki/{Uri.EscapeDataString($"物品:{itemName}")}");
+    }
+
+    private void DrawCollabSummaryCard(IReadOnlyList<YokaiRewardProgress> results, string category)
+    {
+        var rewards = results.Where(reward => reward.Category == category).ToArray();
+        DrawSummaryCard(category, $"{rewards.Count(reward => reward.Owned)}/{rewards.Length}", "奖励进度");
+    }
+
+    private void DrawCollabCategoryGrid(IReadOnlyList<YokaiRewardProgress> results, string category, bool hideOwned, string idPrefix, Action<YokaiRewardProgress> drawTile)
+    {
+        var visible = results.Where(reward => reward.Category == category && (!hideOwned || !reward.Owned)).ToArray();
+        var total = results.Count(reward => reward.Category == category);
+        var completed = results.Count(reward => reward.Category == category && reward.Owned);
+        if (hideOwned && visible.Length == 0)
+        {
+            return;
+        }
+
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), $"{category}  {completed}/{total}");
+        if (ImGui.BeginTable($"{idPrefix}-reward-grid-{category}", 4, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.PadOuterX))
+        {
+            foreach (var reward in visible)
+            {
+                ImGui.TableNextColumn();
+                drawTile(reward);
+            }
+
+            ImGui.EndTable();
+        }
+
+        ImGui.Spacing();
+    }
+
+    private static void LogSyncedYokaiItemLocations(IEnumerable<YokaiRewardProgress> results, bool logMissingItems, string label = "妖表")
     {
         var itemSheet = DalamudApi.DataManager.GetExcelSheet<Item>();
         var loggedItemIds = new HashSet<uint>();
@@ -4594,7 +5228,7 @@ public sealed class PluginUI
             if (reward.Category != YokaiWatchGuide.WeaponCategory)
             {
                 var status = reward.Owned ? "已解锁" : "未解锁";
-                PrintChat($"DEBUG [妖表] {reward.Name}：{reward.Category}，{status}");
+                PrintChat($"DEBUG [{label}] {reward.Name}：{reward.Category}，{status}");
                 continue;
             }
 
@@ -4611,12 +5245,22 @@ public sealed class PluginUI
                     continue;
                 }
 
-                PrintChat($"DEBUG [妖表] {item.Name.ExtractText()}：{(locations.Count > 0 ? string.Join("、", locations) : "未找到")}");
+                PrintChat($"DEBUG [{label}] {item.Name.ExtractText()}：{(locations.Count > 0 ? string.Join("、", locations) : "未找到")}");
             }
         }
     }
 
-    private static void DrawYokaiRewardTile(YokaiRewardProgress reward)
+    private void DrawYokaiRewardTile(YokaiRewardProgress reward)
+    {
+        DrawCollabRewardTile(reward, "yokai", BuildYokaiTileTooltip(reward));
+    }
+
+    private void DrawFfxvRewardTile(YokaiRewardProgress reward)
+    {
+        DrawCollabRewardTile(reward, "ff15", BuildFfxvTileTooltip(reward));
+    }
+
+    private void DrawCollabRewardTile(YokaiRewardProgress reward, string idPrefix, string tooltip)
     {
         var cursor = ImGui.GetCursorScreenPos();
         var size = new Vector2(150f, 88f);
@@ -4632,11 +5276,40 @@ public sealed class PluginUI
         ImGui.SetCursorScreenPos(cursor + new Vector2(9f, 55f));
         ImGui.TextDisabled(reward.Owned ? "已获得" : "未获得");
         ImGui.SetCursorScreenPos(cursor);
-        ImGui.InvisibleButton($"yokai-reward-{reward.Key}", size);
+        ImGui.InvisibleButton($"{idPrefix}-reward-{reward.Key}", size);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(tooltip);
+            if (ImGui.IsMouseReleased(ImGuiMouseButton.Right))
+            {
+                OpenItemWiki(GetCollabTileWikiName(reward));
+            }
+        }
+    }
+
+    private string GetCollabTileWikiName(YokaiRewardProgress reward)
+    {
+        var yokaiDefinition = YokaiWatchGuide.Rewards.FirstOrDefault(item => item.Key == reward.Key);
+        if (yokaiDefinition != null)
+        {
+            return yokaiDefinition.ItemNameFragments.FirstOrDefault() ?? reward.Name;
+        }
+
+        var ffxvDefinition = FfxvCollabGuide.Rewards.FirstOrDefault(item => item.Key == reward.Key);
+        if (ffxvDefinition != null && ffxvDefinition.ItemIds.Count > 0 && DalamudApi.DataManager.GetExcelSheet<Item>().TryGetRow(ffxvDefinition.ItemIds[0], out var item))
+        {
+            return item.Name.ExtractText();
+        }
+
+        return reward.Name;
+    }
+
+    private string BuildYokaiTileTooltip(YokaiRewardProgress reward)
+    {
+        var tooltip = $"{reward.Name}\n{(reward.Owned ? "已获得" : "未获得")}\n右键打开 Wiki";
         var minionName = reward.Category == YokaiWatchGuide.WeaponCategory
             ? YokaiWatchGuide.GetWeaponMinionName(reward.Key)
             : null;
-        var tooltip = $"{reward.Name}\n{(reward.Owned ? "已获得" : "未获得")}";
         if (minionName != null)
         {
             tooltip += $"\n对应宠物：{minionName}";
@@ -4652,15 +5325,19 @@ public sealed class PluginUI
             tooltip += $"\n获取地区：{string.Join("、", acquisition.Territories)}";
         }
 
-        if (ImGui.IsItemHovered())
+        return tooltip;
+    }
+
+    private string BuildFfxvTileTooltip(YokaiRewardProgress reward)
+    {
+        var definition = FfxvCollabGuide.Rewards.FirstOrDefault(item => item.Key == reward.Key);
+        var tooltip = $"{reward.Name}\n{(reward.Owned ? "已获得" : "未获得")}\n右键打开 Wiki";
+        if (definition != null && !string.IsNullOrWhiteSpace(definition.Note))
         {
-            ImGui.SetTooltip(tooltip);
-            if (reward.Category == YokaiWatchGuide.WeaponCategory && ImGui.IsMouseReleased(ImGuiMouseButton.Right))
-            {
-                ImGui.SetClipboardText(tooltip);
-                PrintChat($"[右键] [妖表] 武器信息已复制。\n{tooltip}");
-            }
+            tooltip += $"\n{definition.Note}";
         }
+
+        return tooltip;
     }
 
     private void DrawSettingsWorkspace()
@@ -4732,6 +5409,7 @@ public sealed class PluginUI
             var itemFinderText = GetItemFinderDebugText();
             ImGui.TextDisabled(itemFinderText);
             DrawDebugButtons(itemFinderText);
+            DrawCollabDebugSearch();
         }
         ImGui.EndChild();
 
@@ -7676,7 +8354,7 @@ public sealed class PluginUI
                 vnav.GoToOccultVillage();
             }
 
-            if (ImGui.MenuItem("妖表联动"))
+            if (ImGui.MenuItem("当前联动"))
             {
                 selectedMainSection = GetMainSectionIndex("yokai");
                 OpenMainWindow();
