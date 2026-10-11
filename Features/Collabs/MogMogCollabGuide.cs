@@ -70,13 +70,13 @@ public static class MogMogCollabGuide
         new("rare-7x-donut-earring", "甜甜圈耳坠", Group7X, 41503, "黄金的魔典 · 主要兑换内容"),
         new("rare-7x-water-ring", "水蛇戒指", Group7X, 33650, "黄金的魔典 · 其他稀有内容"),
         new("rare-7x-koala-earring", "猴面雀耳坠", Group7X, 17495, "与幻想邂逅 / 奇谭探求者 · 主要兑换内容"),
-        new("rare-7x-ifrit-jacket", "火神夹克衫", Group7X, 17470, "与幻想邂逅 · 其他稀有内容"),
+        new("rare-7x-ifrit-jacket", "火神夹克衫", Group7X, 17470, "与幻想邂逅 · 其他稀有内容", Region: MogMogRegion.Global),
         new("rare-7x-falcon-key", "飞隼号启动钥匙", Group7X, 20548, "与幻想邂逅 / 奇谭探求者 · 其他稀有内容", MountName: "飞隼号"),
         new("rare-7x-mini-hraesvelgr", "迷你赫拉斯瓦尔格", Group7X, 17528, "奇谭探求者 · 其他稀有内容"),
         new("rare-7x-coffee-earring", "咖啡杯耳坠", Group7X, 41506, "默示的路标 · 主要兑换内容"),
         new("rare-7x-demon-brick-earring", "恶魔砖块耳坠", Group7X, 13329, "默示的路标 / 雾中经典 · 其他稀有内容"),
         new("rare-7x-koala-bird-earring", "巧儿鸟耳坠", Group7X, 15936, "默示的路标 / 雾中经典 · 其他稀有内容"),
-        new("rare-7x-daoist-moogle-doll", "道士莫古力娃娃", Group7X, 15449, "默示的路标 · 其他稀有内容"),
+        new("rare-7x-daoist-moogle-doll", "道士莫古力娃娃", Group7X, 15449, "默示的路标 · 其他稀有内容", Region: MogMogRegion.Global),
         new("rare-7x-bun-earring", "包子耳坠", Group7X, 41505, "雾中经典 · 主要兑换内容"),
         new("rare-7x-miner-earring", "采矿工耳坠", Group7X, 47938, "天文的行路 第1阶段 · 主要兑换内容"),
         new("rare-7x-fat-cat-parasol", "猫小胖阳伞", Group7X, 33712, "天文的行路 第1阶段 · 其他稀有内容"),
@@ -86,15 +86,24 @@ public static class MogMogCollabGuide
         new("rare-6x-fantasy-earring", "仙子猪耳坠", Group6X, 39328, "虚构之刻 · 主要兑换内容"),
         new("rare-6x-10th-portrait", "肖像教材：10周年纪念", Group6X, 40501, "外典 / 创世新纪元 第1·2阶段 · 主要/其他"),
         new("rare-6x-emerald-earring", "绿宝石兽耳坠", Group6X, 21033, "创世新纪元 第2阶段 · 主要兑换内容"),
+        new("rare-6x-demon-brick-earring", "恶魔砖块耳坠", Group6X, 13329, "回归的真理 · 主要兑换内容", Region: MogMogRegion.Both),
+        new("rare-6x-fat-cat-parasol", "猫小胖阳伞", Group6X, 33712, "外典 · 主要兑换内容", Region: MogMogRegion.Both),
         // 5.x
-        new("rare-5x-catfish-earring", "鲶鱼耳饰", Group5X, 24612, "另一种禁书 · 主要兑换内容"),
-        new("rare-5x-daoist-moogle-doll", "道士莫古力娃娃", Group5X, 15449, "FANFEST2021 · 其他稀有内容"),
-        new("rare-5x-oriental-warrior-hat", "东方武人帽", Group5X, 21036, "国服末段 · 其他稀有内容"),
-        new("rare-5x-oriental-warrior-top", "东方武人服", Group5X, 21037, "国服末段 · 其他稀有内容"),
-        new("rare-5x-oriental-warrior-boots", "东方武人靴", Group5X, 21038, "国服末段 · 其他稀有内容"),
-        new("rare-5x-oriental-lady-hair", "东方佳人发饰", Group5X, 21039, "国服末段 · 其他稀有内容"),
-        new("rare-5x-oriental-lady-top", "东方佳人服", Group5X, 21040, "国服末段 · 其他稀有内容"),
-        new("rare-5x-oriental-lady-boots", "东方佳人靴", Group5X, 21041, "国服末段 · 其他稀有内容"),
+        new("rare-5x-mini-hraesvelgr", "迷你赫拉斯瓦尔格", Group5X, 17528, "国服末段 · 其他稀有内容", Region: MogMogRegion.Cn),
+        new("rare-5x-oriental-warrior-hat", "东方武人帽", Group5X, 21036, "国服末段 · 其他稀有内容", Region: MogMogRegion.Cn),
+        new("rare-5x-oriental-warrior-top", "东方武人服", Group5X, 21037, "国服末段 · 其他稀有内容", Region: MogMogRegion.Cn),
+        new("rare-5x-oriental-warrior-boots", "东方武人靴", Group5X, 21038, "国服末段 · 其他稀有内容", Region: MogMogRegion.Cn),
+        new("rare-5x-oriental-lady-hair", "东方佳人发饰", Group5X, 21039, "国服末段 · 其他稀有内容", Region: MogMogRegion.Cn),
+        new("rare-5x-oriental-lady-top", "东方佳人服", Group5X, 21040, "国服末段 · 其他稀有内容", Region: MogMogRegion.Cn),
+        new("rare-5x-oriental-lady-boots", "东方佳人靴", Group5X, 21041, "国服末段 · 其他稀有内容", Region: MogMogRegion.Cn),
+        new("rare-5x-daoist-moogle-doll", "道士莫古力娃娃", Group5X, 15449, "FANFEST2021 · 其他稀有内容", Region: MogMogRegion.Cn),
+        new("rare-5x-catfish-earring", "鲶鱼耳饰", Group5X, 24612, "另一种禁书 · 主要兑换内容", Region: MogMogRegion.Both),
+        new("rare-5x-catfish-necklace", "鲶鱼领巾", Group5X, 24613, "另一种禁书 · 主要兑换内容", Region: MogMogRegion.Cn),
+        new("rare-5x-dog-earring", "豆柴耳饰", Group5X, 24614, "另一种禁书 · 主要兑换内容", Region: MogMogRegion.Cn),
+        new("rare-5x-dog-scarf", "豆柴围巾", Group5X, 24615, "追忆的法典 / 另一种禁书 · 主要兑换内容", Region: MogMogRegion.Both),
+        new("rare-5x-falcon-key", "飞隼号启动钥匙", Group5X, 20548, "另一种禁书 · 其他稀有内容", MountName: "飞隼号", Region: MogMogRegion.Both),
+        new("rare-5x-ifrit-jacket", "火神夹克衫", Group5X, 17470, "炎狱的传承 · 主要兑换内容", Region: MogMogRegion.Global),
+        new("rare-5x-water-ring", "水蛇戒指", Group5X, 33650, "FANFEST2021 · 主要兑换内容", Region: MogMogRegion.Both),
     ];
 
     public static readonly IReadOnlyList<string> RareGroups = [Group7X, Group6X, Group5X];
@@ -139,7 +148,17 @@ public sealed record MogMogRareItem(
     string Group,
     uint ItemId,
     string? Note = null,
-    string? MountName = null);
+    string? MountName = null,
+    MogMogRegion Region = MogMogRegion.Both);
+
+[Flags]
+public enum MogMogRegion
+{
+    None = 0,
+    Cn = 1,
+    Global = 2,
+    Both = Cn | Global,
+}
 
 public sealed record MogMogGuidePhase(
     string Title,

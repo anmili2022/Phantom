@@ -4849,6 +4849,25 @@ public sealed class PluginUI
         }
 
         ImGui.TextWrapped("以下为往期莫古莫古大收集的稀有兑换物品，按版本分组，逐项判定是否已持有。活动期间兑换入口在旅行莫古力处。");
+
+        var showCn = configuration.MogMogRareShowCn;
+        if (ImGui.Checkbox("国服##mogmog-rare-cn", ref showCn))
+        {
+            configuration.MogMogRareShowCn = showCn;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        var showGlobal = configuration.MogMogRareShowGlobal;
+        if (ImGui.Checkbox("国际服##mogmog-rare-global", ref showGlobal))
+        {
+            configuration.MogMogRareShowGlobal = showGlobal;
+            configuration.Save();
+        }
+
+        var regionMask = (showCn ? MogMogRegion.Cn : MogMogRegion.None) | (showGlobal ? MogMogRegion.Global : MogMogRegion.None);
+
+        ImGui.SameLine();
         if (ImGui.Button("刷新稀有物品持有##refresh-mogmog-rare"))
         {
             mogMogRareResults = yokaiProgress.ScanRareItemsByIds(MogMogCollabGuide.RareItems);
@@ -4862,7 +4881,15 @@ public sealed class PluginUI
         ImGui.Spacing();
         foreach (var group in MogMogCollabGuide.RareGroups)
         {
-            var groupResults = mogMogRareResults.Where(reward => reward.Category == group).ToArray();
+            var groupResults = mogMogRareResults
+                .Where(reward => reward.Category == group
+                    && MogMogCollabGuide.RareItems.Any(item => item.Key == reward.Key && (item.Region & regionMask) != 0))
+                .ToArray();
+            if (groupResults.Length == 0)
+            {
+                continue;
+            }
+
             var owned = groupResults.Count(reward => reward.Owned);
             if (!ImGui.CollapsingHeader($"{group}　{owned}/{groupResults.Length}##mogmog-rare-{group}"))
             {
@@ -4909,6 +4936,11 @@ public sealed class PluginUI
             if (definition != null && !string.IsNullOrWhiteSpace(definition.Note))
             {
                 tooltip += $"\n{definition.Note}";
+            }
+
+            if (definition != null)
+            {
+                tooltip += $"\n地区：{(definition.Region == MogMogRegion.Both ? "国服/国际服" : definition.Region == MogMogRegion.Cn ? "国服" : "国际服")}";
             }
 
             ImGui.SetTooltip(tooltip);

@@ -66,6 +66,8 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool HideOwnedFfxvRewards { get; set; }
     public bool HideOwnedFallGuysRewards { get; set; }
     public bool HideOwnedMogMogRewards { get; set; }
+    public bool MogMogRareShowCn { get; set; } = true;
+    public bool MogMogRareShowGlobal { get; set; }
     public bool AutoHideExpiredCollabs { get; set; } = true;
     public bool DebugLogSyncedItemLocations { get; set; }
     public bool DebugLogMissingItemLocations { get; set; }

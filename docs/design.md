@@ -186,6 +186,7 @@
 - `FallGuysOwnedRewardKeysByCharacter` / `FallGuysSyncTimesByCharacter`：按角色维度保存糖豆人联动奖励和同步时间。
 - `MogMogOwnedRewardKeysByCharacter` / `MogMogSyncTimesByCharacter`：按角色维度保存莫古莫古大收集奖励和同步时间。
 - `SelectedCollabTabKey`：当前联动栏目选中的页签（`yokai` / `ff15` / `fallguys` / `mogmog`），未记录时按活动期默认。
+- `MogMogRareShowCn` / `MogMogRareShowGlobal`：稀有兑换内容一览的国服（默认开）与国际服（默认关）过滤开关。
 - `AutoHideExpiredCollabs`：是否自动隐藏已过期联动页签，默认开启。
 - `ZodiacProgressByCharacter`：按角色、职业保存古武制作进度；材料数值写入 `RequirementProgress`，任务/目标勾选写入 `CompletedObjectives`。
 - `SelectedZodiacJobKey`：古武阶段页当前选择的职业，默认骑士 `pld`。
@@ -653,7 +654,7 @@ NPC 导航按钮：旅行莫古力 ×3（利姆萨·罗敏萨下层甲板 9.4,11
 莫古莫古大收集页签同样复用 `DrawIdBasedCollabContent()`，无成就项。页签另有两个折叠栏：
 
 - 「莫古莫古指南书内容」：折叠展示第1阶段/第2阶段的每周小莫古挑战（第1~6周任务）与莫古莫古挑战内容及奖励（纯文本）。
-- 「稀有兑换内容一览（5.x / 6.x / 7.x）」：折叠按版本分组，逐项按 `Item.RowId` 判定持有（`ScanRareItemsByIds`，坐骑走 `MountName` 回查），共 25 项往期稀有兑换物品（耳坠/戒指/时装/宠物/坐骑/肖像教材/时尚配饰），提供“刷新稀有物品持有”按钮，卡片右键打开 Wiki。
+- 「稀有兑换内容一览（5.x / 6.x / 7.x）」：折叠按版本分组，逐项按 `Item.RowId` 判定持有（`ScanRareItemsByIds`，坐骑走 `MountName` 回查），共 25 项往期稀有兑换物品（耳坠/戒指/时装/宠物/坐骑/肖像教材/时尚配饰），提供“刷新稀有物品持有”按钮，卡片右键打开 Wiki。顶部提供“国服”（默认开，`MogMogRareShowCn`）与“国际服”（默认关，`MogMogRareShowGlobal`）两个开关，按物品的地区标记（`MogMogRegion`：国服/国际服/两者）过滤；仅国服末段的东方武人/佳人套标记为国服，其余多为两者。
 
 ### 曼德维尔武器页面
 

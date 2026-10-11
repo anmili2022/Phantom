@@ -196,7 +196,7 @@ PhantomWeaponTarget  // 秘影目标
 - 糖豆人联动（2026-10-11）：新建 `Features/Collabs/FallGuysCollabGuide.cs`（活动日期 2026-10-07~10-27、3 个 NPC、23 条奖励全部按 `Item.RowId`、成就“勇夺桂冠”`3407`）；当前联动栏目新增“糖豆人”页签；配置新增 `FallGuysOwnedRewardKeysByCharacter`/`FallGuysSyncTimesByCharacter`/`HideOwnedFallGuysRewards`。
 - 联动泛型化（2026-10-11）：FF15 与糖豆人页签共用 `DrawIdBasedCollabContent()` 与 `DrawCollabAchievements()`；新增 `AutoHideExpiredCollabs`（默认开）控制是否隐藏已过期联动页签。
 - 莫古莫古大收集（2026-10-11）：新建 `Features/Collabs/MogMogCollabGuide.cs`（天文的行路 第1阶段，2026-09-09~10-19，旅行莫古力 ×3，奖励按 `Item.RowId`：呜噜怪角笛 `50440`、豆柴围巾 `24615`，无成就）；当前联动栏目新增“莫古莫古大收集”页签；配置新增 `MogMogOwnedRewardKeysByCharacter`/`MogMogSyncTimesByCharacter`/`HideOwnedMogMogRewards`。
-- 莫古莫古扩展（2026-10-11）：`MogMogCollabGuide` 增加 `RareItems`（25 项往期稀有兑换物品，含 `Item.RowId` 与所属活动）与 `GuidePhases`（第1/2阶段指南书内容）；`YokaiProgressService.ScanRareItemsByIds()` 逐项判定持有（坐骑按 `MountName` 回查）；UI 新增两个折叠栏“莫古莫古指南书内容”“稀有兑换内容一览（5.x/6.x/7.x）”。
+- 莫古莫古扩展（2026-10-11）：`MogMogCollabGuide` 增加 `RareItems`（25 项往期稀有兑换物品，含 `Item.RowId`、所属活动与地区标记 `MogMogRegion`）与 `GuidePhases`（第1/2阶段指南书内容）；`YokaiProgressService.ScanRareItemsByIds()` 逐项判定持有（坐骑按 `MountName` 回查）；UI 新增两个折叠栏“莫古莫古指南书内容”“稀有兑换内容一览（5.x/6.x/7.x）”，后者带“国服（默认开）/国际服（默认关）”地区过滤开关。
 - 糖豆人调整（2026-10-11）：移除家具类统计（原 6 件家具），奖励 22→16 条；成就补齐“勇夺桂冠”四档 `3404/3405/3406/3407`。
 - DEBUG 查询合并（2026-10-11）：原“物品ID查询”“成就ID查询”合并为单个 `DrawCollabDebugSearch()`，同时查 `Item`（按 `ItemUICategory` 自动分类）与 `Achievement`，结果按类型分组，复制格式为 `类型 名称 ID`。该查询已从当前联动页签移到「设置」页「同步」区域。
 
