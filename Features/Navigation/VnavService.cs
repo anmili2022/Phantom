@@ -20,6 +20,24 @@ public sealed class VnavService : IDisposable
     private const uint OccultVillageTerritoryType = 1278;
     private const uint TuliyollalAetheryteId = 216;
     private const uint OccultVillageAethernetId = 239;
+
+    private static readonly HashSet<uint> CityTerritoryTypes =
+    [
+        129, // 利姆萨·罗敏萨下层甲板
+        130, // 乌尔达哈现世回廊
+        131, // 乌尔达哈来生回廊
+        132, // 格里达尼亚新街
+        133, // 格里达尼亚旧街
+        134, // 利姆萨·罗敏萨上层甲板
+        144, // 金碟游乐场
+        418, // 伊修加德基础层
+        419, // 伊修加德天柱
+        628, // 黄金港
+        819, // 水晶都
+        962, // 旧萨雷安
+        963, // 拉扎罕
+        1185, // 图莱尤拉
+    ];
     private static readonly Vector3 OccultVillageDestination = new(26.98f, 0f, 11.26f);
 
     private readonly ICallGateSubscriber<bool> isReady;
@@ -278,10 +296,11 @@ public sealed class VnavService : IDisposable
         }
 
         var territoryType = map.TerritoryType.RowId;
+        var fly = configuration.UseFlightNavigation && !IsCityTerritory(territoryType);
         TrySetMapFlag(territoryType, map.RowId, position);
         if (DalamudApi.ClientState.TerritoryType != territoryType)
         {
-            return TryTeleportToTerritory(territoryType, position, configuration.UseFlightNavigation);
+            return TryTeleportToTerritory(territoryType, position, fly);
         }
 
         var player = DalamudApi.ObjectTable.LocalPlayer;
@@ -293,7 +312,7 @@ public sealed class VnavService : IDisposable
             return false;
         }
 
-        StartMove(snapped.Value, configuration.UseFlightNavigation);
+        StartMove(snapped.Value, fly);
         PrintEcho($"已开始导航到 {zoneName} ({mapX:0.0}, {mapY:0.0})。 ");
         return true;
     }
@@ -326,13 +345,14 @@ public sealed class VnavService : IDisposable
         }
 
         var territoryType = map.TerritoryType.RowId;
+        var fly = configuration.UseFlightNavigation && !IsCityTerritory(territoryType);
         TrySetMapFlag(territoryType, map.RowId, position);
         if (DalamudApi.ClientState.TerritoryType != territoryType)
         {
-            return TryTeleportToTerritory(territoryType, position, configuration.UseFlightNavigation);
+            return TryTeleportToTerritory(territoryType, position, fly);
         }
 
-        NavigateTo(position, configuration.UseFlightNavigation);
+        NavigateTo(position, fly);
         return true;
     }
 
@@ -898,13 +918,18 @@ public sealed class VnavService : IDisposable
             return;
         }
 
+        if (pendingTerritoryType != 0)
+        {
+            pendingTeleportBegan = true;
+        }
+
         if (DalamudApi.Condition[ConditionFlag.BetweenAreas]
             || DalamudApi.Condition[ConditionFlag.BetweenAreas51])
         {
             return;
         }
 
-        if (pendingAetherytePosition.HasValue)
+        if (pendingAetherytePosition.HasValue && !pendingTeleportBegan)
         {
             var player = DalamudApi.ObjectTable.LocalPlayer;
             if (player == null)
@@ -1229,14 +1254,16 @@ public sealed class VnavService : IDisposable
 
     private bool QueueMountBeforeMove(Vector3 target, bool fly, bool autoDismount)
     {
-        if (!fly)
+        if (DalamudApi.Condition[ConditionFlag.Mounted]
+            || DalamudApi.Condition[ConditionFlag.InCombat]
+            || DalamudApi.Condition[ConditionFlag.BetweenAreas]
+            || DalamudApi.Condition[ConditionFlag.BetweenAreas51]
+            || DalamudApi.ObjectTable.LocalPlayer is not { IsDead: false })
         {
             return false;
         }
 
-        if (DalamudApi.Condition[ConditionFlag.Mounted]
-            || DalamudApi.Condition[ConditionFlag.InCombat]
-            || DalamudApi.ObjectTable.LocalPlayer is not { IsDead: false })
+        if (IsInCityZone())
         {
             return false;
         }
@@ -1249,6 +1276,17 @@ public sealed class VnavService : IDisposable
         PrintEcho("导航准备：尝试上坐骑；若 8 秒内未成功，将直接发起 vnavmesh 导航。 ");
         return true;
     }
+
+    private bool IsInCityZone()
+    {
+        var territoryType = DalamudApi.ClientState.TerritoryType;
+        var isCity = IsCityTerritory(territoryType);
+        PrintEcho($"城市检查：地图 {territoryType}，{(isCity ? "判定为主城/金碟，不上坐骑" : "非主城")}。 ");
+        return isCity;
+    }
+
+    private static bool IsCityTerritory(uint territoryType)
+        => CityTerritoryTypes.Contains(territoryType);
 
     private unsafe void ProcessPendingMove()
     {
@@ -1375,6 +1413,13 @@ public sealed class VnavService : IDisposable
 
             PrintEcho($"发起 vnavmesh 导航：({target.X:0.#}, {target.Y:0.#}, {target.Z:0.#})，{(fly ? "飞行" : "步行")}。 ");
             var ok = pathfindAndMoveTo.InvokeFunc(target, fly);
+            if (!ok && fly)
+            {
+                PrintEcho("飞行导航被拒绝，改用步行重试。 ");
+                ok = pathfindAndMoveTo.InvokeFunc(target, false);
+                fly = false;
+            }
+
             if (!ok)
             {
                 activeMoveTarget = null;
