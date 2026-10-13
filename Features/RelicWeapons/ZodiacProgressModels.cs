@@ -71,7 +71,8 @@ public sealed record ZodiacLeveObjective(
     string? GrandCompany,
     int Level,
     string? BookKey = null,
-    string LocationNotes = "");
+    string LocationNotes = "",
+    uint LeveId = 0);
 
 public sealed record ZodiacBookGuide(
     string Key,

@@ -5062,6 +5062,77 @@ public sealed class PluginUI
         }
     }
 
+    private static void ExportZodiacLeveNpcIds()
+    {
+        try
+        {
+            var leveSheet = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Leve>();
+            var lines = new List<string>
+            {
+                "# Book|LeveName|Zone|Leve.RowId|NPC|NpcZone|MapX|MapY",
+            };
+            var matched = 0;
+            var missing = 0;
+
+            foreach (var book in ZodiacGuide.AnimusBooks)
+            {
+                foreach (var leve in book.Leves)
+                {
+                    var row = leveSheet.FirstOrDefault(candidate =>
+                        candidate.RowId != 0
+                        && candidate.Name.ExtractText().Equals(leve.Name, StringComparison.Ordinal));
+                    if (row.RowId == 0)
+                    {
+                        missing++;
+                        lines.Add($"{book.Name}|{leve.Name}|{leve.Zone}|MISSING|||");
+                        continue;
+                    }
+
+                    matched++;
+                    var npcName = string.Empty;
+                    var npcZone = string.Empty;
+                    var mapX = 0f;
+                    var mapY = 0f;
+                    var levemeteId = row.LevelLevemete.RowId;
+                    if (levemeteId != 0
+                        && DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Level>().TryGetRow(levemeteId, out var level))
+                    {
+                        var npcId = level.Object.RowId;
+                        if (npcId != 0
+                            && DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ENpcResident>().TryGetRow(npcId, out var npc))
+                        {
+                            npcName = npc.Singular.ExtractText();
+                        }
+
+                        npcZone = level.Territory.ValueNullable?.PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty;
+                        var map = level.Map.ValueNullable;
+                        if (map.HasValue && map.Value.SizeFactor > 0)
+                        {
+                            var scale = map.Value.SizeFactor;
+                            var offsetX = map.Value.OffsetX;
+                            var offsetY = map.Value.OffsetY;
+                            mapX = (level.X + offsetX) / scale + 1f;
+                            mapY = (level.Z + offsetY) / scale + 1f;
+                        }
+                    }
+
+                    lines.Add($"{book.Name}|{leve.Name}|{leve.Zone}|{row.RowId}|{npcName}|{npcZone}|{mapX:0.0}|{mapY:0.0}");
+                }
+            }
+
+            var output = string.Join(Environment.NewLine, lines);
+            var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "zodiac-leve-npcs.txt");
+            File.WriteAllText(path, output);
+            ImGui.SetClipboardText(output);
+            PrintChat($"已导出古武理符 NPC：目标 {matched + missing}，匹配 {matched}，未匹配 {missing}。结果已复制，文件：{path}");
+        }
+        catch (Exception ex)
+        {
+            DalamudApi.Log.Error(ex, "Failed to export zodiac leve NPCs.");
+            PrintChat($"导出古武理符 NPC 失败：{ex.Message}");
+        }
+    }
+
     private void DrawCollabAchievements(IReadOnlyList<CollabAchievementDefinition> achievements, string idPrefix)
     {
         var visible = achievements.ToArray();
@@ -5867,19 +5938,9 @@ public sealed class PluginUI
 
     private void DrawDebugButtons(string itemFinderText)
     {
+        _ = itemFinderText;
         var firstInRow = true;
-        if (DrawWrappedButton("读取道具检索##debug-item-finder", "读取道具检索", ref firstInRow))
-        {
-            PrintChat($"DEBUG: {itemFinderText}");
-        }
-
-        if (DrawWrappedButton("导出幻武 Item.RowId##debug-export-phantom-item-ids", "导出幻武 Item.RowId", ref firstInRow)) ExportPhantomWeaponItemIds();
-        if (DrawWrappedButton("读取雅武 Item.RowId##debug-export-elegant-item-ids", "读取雅武 Item.RowId", ref firstInRow)) ExportElegantWeaponItemIds();
-        if (DrawWrappedButton("导出低保 Item.RowId##debug-export-pity-item-ids", "导出低保 Item.RowId", ref firstInRow)) ExportPityItemIds();
-        if (DrawWrappedButton("导出副本 TerritoryType##debug-export-duty-territory-ids", "导出副本 TerritoryType", ref firstInRow)) ExportDutyTerritoryIds();
-        if (DrawWrappedButton("导出成就 ID##debug-export-achievement-ids", "导出成就 ID", ref firstInRow)) ExportAchievementIds();
-
-        firstInRow = true;
+        if (DrawWrappedButton("收集古武理符NPC##debug-export-zodiac-leve-npcs", "收集古武理符NPC", ref firstInRow)) ExportZodiacLeveNpcIds();
         if (DrawWrappedButton("读取当前坐标##debug-print-coords", "读取当前坐标", ref firstInRow))
         {
             var player = DalamudApi.ObjectTable[0];
@@ -5887,28 +5948,6 @@ public sealed class PluginUI
             PrintChat(player == null
                 ? $"DEBUG: TerritoryType={terr}, (no local player)"
                 : $"DEBUG: TerritoryType={terr}, Position=({player.Position.X:0.##}, {player.Position.Y:0.##}, {player.Position.Z:0.##})");
-        }
-
-        if (DrawWrappedButton("测试坐标换算##debug-test-convert", "测试坐标换算", ref firstInRow))
-        {
-            var terr = DalamudApi.ClientState.TerritoryType;
-            var player = DalamudApi.ObjectTable[0];
-            var territories = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.TerritoryType>();
-            if (player != null && territories.TryGetRow(terr, out var territory))
-            {
-                try
-                {
-                    var map = territory.Map.Value;
-                    var s = map.SizeFactor;
-                    var ox = map.OffsetX;
-                    var oy = map.OffsetY;
-                    var fwdX = 0.02f * ox + 2048f / s + 0.02f * player.Position.X + 1f;
-                    var fwdZ = 0.02f * oy + 2048f / s + 0.02f * player.Position.Z + 1f;
-                    PrintChat($"DEBUG: 当前位置→地图显示 ≈ ({fwdX:0.##}, {fwdZ:0.##})");
-                    PrintChat($"DEBUG: 若地图坐标(20.7, 14.3)→世界 ≈ ({50f * 20.7f - ox - 102400f / s - 50f:0.##}, {50f * 14.3f - oy - 102400f / s - 50f:0.##})");
-                }
-                catch { }
-            }
         }
 
         if (DrawWrappedButton("解析地图参数##debug-map-info", "解析地图参数", ref firstInRow))
@@ -5927,9 +5966,7 @@ public sealed class PluginUI
             else PrintChat($"DEBUG: TerritoryType={terr}, Territory not found in sheet.");
         }
 
-        firstInRow = true;
         if (DrawWrappedButton("打开 Wiki##debug-open-wiki", "打开 Wiki", ref firstInRow)) OpenUrl("https://ff14.huijiwiki.com/wiki/%E5%B9%BB%E5%A2%83%E6%AD%A6%E5%99%A8");
-        if (DrawWrappedButton("读取战斗记忆（未完成）##debug-read-memory-ui", "读取战斗记忆（未完成）", ref firstInRow)) PrintChat("未完成功能：后续可通过读取战斗记忆界面或任务状态同步进度。");
     }
 
     private static bool DrawWrappedButton(string label, string visibleLabel, ref bool firstInRow)
