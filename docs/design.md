@@ -325,6 +325,8 @@ BIS 分享链接解析：
 - `InventoryManager` 提供当前已加载的背包、兵装库、装备栏和库存容器。
 - 背包、兵装库和装备中属于当前角色实时读取范围。
 - `ItemFinderModule.SaddleBagItemIds` 与 `PremiumSaddleBagItemIds` 提供鞍囊缓存；`GlamourDresserItemIds` 提供投影台缓存。
+- 幻影台（幻影棱晶盒）直接读取 `MirageManager.Instance().PrismBoxItemIds`（`PrismBoxLoaded` 为真时），不依赖 `/道具检索`，因此已存入幻影台的装备也能被同步与位置表识别。
+- 套装幻影化：套装化后，棱晶盒中该套装各件被替换为一个「套装 RowId」（`MirageStoreSetItem.RowId`，如蟾蜍套装 `45342`）。读取棱晶盒时，若某项不是普通物品（`Item` 表无名称）而能在 `MirageStoreSetItem` 命中，则展开该套装的十一个槽位（主手/副手/头/身/手/腿/脚/耳/颈/腕/指）物品一并计为拥有。
 - 收藏柜优先使用 `UIState.Cabinet` 的当前角色状态，未加载时回退到 `ItemFinderModule.CabinetItemUnlockBits` 缓存。
 - `ItemFinderModule.RetainerInventories` 保存雇员装备槽与库存槽的客户端缓存；插件直接扫描其中的 `EquippedItemIds` 和 `ItemIds`。
 - `ItemFinderModule.IsRetainerCurrent(retainerId)` 为 `true` 表示该雇员已在本次登录后打开，数据由当前会话从服务器加载。

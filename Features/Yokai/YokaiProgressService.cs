@@ -228,6 +228,42 @@ public sealed class YokaiProgressService
             }
         }
 
+        var mirage = FFXIVClientStructs.FFXIV.Client.Game.MirageManager.Instance();
+        if (mirage != null && mirage->PrismBoxLoaded)
+        {
+            var itemSheet = DalamudApi.DataManager.GetExcelSheet<Item>();
+            var setSheet = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.MirageStoreSetItem>();
+            foreach (var rawId in mirage->PrismBoxItemIds)
+            {
+                if (rawId == 0)
+                {
+                    continue;
+                }
+
+                var normalized = NormalizeItemId(rawId);
+                if (normalized == 0)
+                {
+                    continue;
+                }
+
+                var isItem = itemSheet.TryGetRow(normalized, out var itemRow)
+                    && !string.IsNullOrWhiteSpace(itemRow.Name.ExtractText());
+                if (isItem)
+                {
+                    result.Add(normalized);
+                    continue;
+                }
+
+                if (setSheet.TryGetRow(normalized, out var setRow))
+                {
+                    foreach (var id in new[] { setRow.MainHand.RowId, setRow.OffHand.RowId, setRow.Head.RowId, setRow.Body.RowId, setRow.Hands.RowId, setRow.Legs.RowId, setRow.Feet.RowId, setRow.Earrings.RowId, setRow.Necklace.RowId, setRow.Bracelets.RowId, setRow.Ring.RowId })
+                    {
+                        AddItemId(result, id);
+                    }
+                }
+            }
+        }
+
         foreach (var itemId in finder->SaddleBagItemIds)
         {
             AddItemId(result, itemId);

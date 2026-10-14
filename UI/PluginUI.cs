@@ -3664,6 +3664,13 @@ public sealed class PluginUI
             locations.Add("投影台");
         }
 
+        var mirageDresser = new HashSet<uint>();
+        AddGlamourDresserItemIds(mirageDresser);
+        if (mirageDresser.Contains(itemId))
+        {
+            locations.Add("幻影台");
+        }
+
         var cabinetRow = DalamudApi.DataManager.GetExcelSheet<Cabinet>()
             .FirstOrDefault(row => row.Item.RowId == itemId);
         if (cabinetRow.RowId > 0 && IsCabinetItemOwned(cabinetRow.RowId, finder))
@@ -3924,6 +3931,7 @@ public sealed class PluginUI
         }
 
         AddCabinetItemIds(result, finder);
+        AddGlamourDresserItemIds(result);
 
         foreach (var retainerPointer in finder->RetainerInventories.Values)
         {
@@ -3985,6 +3993,56 @@ public sealed class PluginUI
 
     private static uint NormalizeItemId(uint itemId)
         => itemId >= 1_000_000 ? itemId % 1_000_000 : itemId;
+
+    private static unsafe void AddGlamourDresserItemIds(HashSet<uint> result)
+    {
+        var mirage = FFXIVClientStructs.FFXIV.Client.Game.MirageManager.Instance();
+        if (mirage == null || !mirage->PrismBoxLoaded)
+        {
+            return;
+        }
+
+        var itemSheet = DalamudApi.DataManager.GetExcelSheet<Item>();
+        var setSheet = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.MirageStoreSetItem>();
+        foreach (var rawId in mirage->PrismBoxItemIds)
+        {
+            if (rawId == 0)
+            {
+                continue;
+            }
+
+            var normalizedItemId = NormalizeItemId(rawId);
+            if (normalizedItemId == 0)
+            {
+                continue;
+            }
+
+            var isItem = itemSheet.TryGetRow(normalizedItemId, out var row)
+                && !string.IsNullOrWhiteSpace(row.Name.ExtractText());
+            if (isItem)
+            {
+                result.Add(normalizedItemId);
+                continue;
+            }
+
+            if (setSheet.TryGetRow(normalizedItemId, out var setRow))
+            {
+                AddSetItems(result, setRow);
+            }
+        }
+    }
+
+    private static void AddSetItems(HashSet<uint> result, Lumina.Excel.Sheets.MirageStoreSetItem setRow)
+    {
+        foreach (var id in new[] { setRow.MainHand.RowId, setRow.OffHand.RowId, setRow.Head.RowId, setRow.Body.RowId, setRow.Hands.RowId, setRow.Legs.RowId, setRow.Feet.RowId, setRow.Earrings.RowId, setRow.Necklace.RowId, setRow.Bracelets.RowId, setRow.Ring.RowId })
+        {
+            var normalized = NormalizeItemId(id);
+            if (normalized > 0)
+            {
+                result.Add(normalized);
+            }
+        }
+    }
 
     private static Dictionary<string, IReadOnlyList<Item>> BuildRewardWeaponItemLookup(
         Lumina.Excel.ExcelSheet<Item> itemSheet,
