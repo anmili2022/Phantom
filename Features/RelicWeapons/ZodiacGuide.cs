@@ -62,6 +62,33 @@ public static class ZodiacGuide
         Atma("atma-scorpio", "天蝎之魂晶", "南萨纳兰"),
     };
 
+    private static readonly IReadOnlyDictionary<string, uint> LeveIdsByName = new Dictionary<string, uint>(StringComparer.Ordinal)
+    {
+        ["焚书任务：回收禁书«异界火焰的怪物»"] = 644,
+        ["索敌指令：潜伏在库尔札斯的通缉犯"] = 849,
+        ["防卫指令：阿格里俄斯号的研究任务"] = 868,
+        ["巡逻任务：确保补给通道的安全"] = 646,
+        ["焚书任务：回收禁书«黑暗羽翼的怪物»"] = 649,
+        ["防卫指令：魔导机器的残骸"] = 865,
+        ["讨伐任务：犯罪组织巴特商会"] = 643,
+        ["迎击任务：验证哈帕利特奴隶末裔说的真伪"] = 658,
+        ["歼敌指令：怒号的米玛斯"] = 848,
+        ["迎击任务：恶神之眼巴罗尔"] = 645,
+        ["迎击指令：威胁前哨的魔物"] = 853,
+        ["防卫指令：古代亚拉戈的遗物"] = 875,
+        ["引导任务：失踪的警犬"] = 647,
+        ["巡逻任务：巡逻白云崖的街道"] = 652,
+        ["迎击指令：第五步兵大队所属部队"] = 870,
+        ["巡逻任务：抢夺宝石饰品的基迦巨人族"] = 659,
+        ["防卫指令：追击者的遗物"] = 855,
+        ["歼敌指令：冰霜龙鸟"] = 860,
+        ["迎击指令：威胁调查地安全的基迦巨人族"] = 863,
+        ["迎击任务：徘徊的利剑牛头魔"] = 650,
+        ["歼敌指令：红发的俄刻阿诺斯"] = 873,
+        ["焚书任务：回收禁书«尖牙利齿的怪物»"] = 657,
+        ["索敌指令：惊吓调查员的恶灵"] = 859,
+    };
+
     public static readonly IReadOnlyList<ZodiacBookGuide> AnimusBooks = new[]
     {
         FireOne(), WaterOne(), WindOne(), FireTwo(), WaterTwo(), WindTwo(),
@@ -151,33 +178,6 @@ public static class ZodiacGuide
 
         return new ZodiacFateObjective($"{bookKey}-fate-{index + 1}", name, zone, 0, mapX, mapY, BookKey: bookKey, LocationNotes: locationNotes, PrerequisiteNpcName: npcName, PrerequisiteNpcZone: npcZone, PrerequisiteNpcMapX: npcX, PrerequisiteNpcMapY: npcY);
     }
-
-    private static readonly IReadOnlyDictionary<string, uint> LeveIdsByName = new Dictionary<string, uint>(StringComparer.Ordinal)
-    {
-        ["焚书任务：回收禁书«异界火焰的怪物»"] = 644,
-        ["索敌指令：潜伏在库尔札斯的通缉犯"] = 849,
-        ["防卫指令：阿格里俄斯号的研究任务"] = 868,
-        ["巡逻任务：确保补给通道的安全"] = 646,
-        ["焚书任务：回收禁书«黑暗羽翼的怪物»"] = 649,
-        ["防卫指令：魔导机器的残骸"] = 865,
-        ["讨伐任务：犯罪组织巴特商会"] = 643,
-        ["迎击任务：验证哈帕利特奴隶末裔说的真伪"] = 658,
-        ["歼敌指令：怒号的米玛斯"] = 848,
-        ["迎击任务：恶神之眼巴罗尔"] = 645,
-        ["迎击指令：威胁前哨的魔物"] = 853,
-        ["防卫指令：古代亚拉戈的遗物"] = 875,
-        ["引导任务：失踪的警犬"] = 647,
-        ["巡逻任务：巡逻白云崖的街道"] = 652,
-        ["迎击指令：第五步兵大队所属部队"] = 870,
-        ["巡逻任务：抢夺宝石饰品的基迦巨人族"] = 659,
-        ["防卫指令：追击者的遗物"] = 855,
-        ["歼敌指令：冰霜龙鸟"] = 860,
-        ["迎击指令：威胁调查地安全的基迦巨人族"] = 863,
-        ["迎击任务：徘徊的利剑牛头魔"] = 650,
-        ["歼敌指令：红发的俄刻阿诺斯"] = 873,
-        ["焚书任务：回收禁书«尖牙利齿的怪物»"] = 657,
-        ["索敌指令：惊吓调查员的恶灵"] = 859,
-    };
 
     private static ZodiacLeveObjective CreateLeveObjective(string bookKey, int index, string name, string zone)
     {
