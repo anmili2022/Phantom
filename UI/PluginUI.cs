@@ -4017,17 +4017,16 @@ public sealed class PluginUI
                 continue;
             }
 
-            var isItem = itemSheet.TryGetRow(normalizedItemId, out var row)
-                && !string.IsNullOrWhiteSpace(row.Name.ExtractText());
-            if (isItem)
-            {
-                result.Add(normalizedItemId);
-                continue;
-            }
-
             if (setSheet.TryGetRow(normalizedItemId, out var setRow))
             {
                 AddSetItems(result, setRow);
+                continue;
+            }
+
+            if (itemSheet.TryGetRow(normalizedItemId, out var row)
+                && !string.IsNullOrWhiteSpace(row.Name.ExtractText()))
+            {
+                result.Add(normalizedItemId);
             }
         }
     }

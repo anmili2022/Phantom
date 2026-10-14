@@ -202,7 +202,7 @@ PhantomWeaponTarget  // 秘影目标
 - 古武理符 NPC 校正（2026-10-11）：用一次性按钮「收集古武理符NPC」导出 9 本黄道文书 27 条理符的 `Leve.RowId` 与接取 NPC 核对；`ZodiacGuide.LeveIdsByName` 固化 23 条（去重后）理符名→Leve ID 映射，`ZodiacLeveObjective` 新增 `LeveId` 字段；修正「索敌指令：潜伏在库尔札斯的通缉犯」NPC 为洛蒂耶（洛蒂耶白名单补「通缉犯」）。坐标沿用现有手工值，不做换算。
 - 设置页「同步」调试按钮精简：仅保留「收集古武理符NPC」「读取当前坐标」「解析地图参数」「打开 Wiki」，其余导出按钮移除（相关方法暂留）。
 - 幻影台同步（2026-10-11）：新增 `AddGlamourDresserItemIds()` 读取 `MirageManager.Instance().PrismBoxItemIds`（`PrismBoxLoaded` 为真时），并接入 `GetOwnedWeaponItemIds`（武器/改后同步）、`GetItemStorageLocations`（BIS/装备位置，标记为“幻影台”）与 `YokaiProgressService.GetCachedStorageItemIds`（联动奖励）。解决已存入幻影台（含套装幻影化）的装备无法同步的问题，无需 `/道具检索`。
-- 套装幻影化支持（2026-10-11）：套装化后棱晶盒中该套装各件被替换为套装 `RowId`（`MirageStoreSetItem`，实测蟾蜍套装=45342）。读取棱晶盒时对非物品值命中 `MirageStoreSetItem` 即展开十一个槽位物品计为拥有；`AddGlamourDresserItemIds` 与 `GetCachedStorageItemIds` 均已实现。定位过程（临时 DEBUG 按钮：读取幻影台/读取幻影套装/导出幻影台原始值/查找物品位置）价值确认后已移除。
+- 套装幻影化支持（2026-10-11）：套装化后棱晶盒中该套装各件被替换为套装 `RowId`（`MirageStoreSetItem`，实测蟾蜍套装=45342）。读取棱晶盒时**必须“套装优先”**：先 `MirageStoreSetItem.TryGetRow` 命中则展开十一个槽位物品计为拥有，未命中再按 `Item` 表当普通物品——因为 `Item` 表也存在同名套装占位物品（45342=「蟾蜍套装」），若先判物品会吞掉套装 id 永不展开。`AddGlamourDresserItemIds` 与 `GetCachedStorageItemIds` 均已按此顺序实现。定位过程（临时 DEBUG 按钮：读取幻影台/读取幻影套装/导出幻影台原始值/查找物品位置）价值确认后已移除。
 - 导航区域与跨图修复（2026-10-11）：`VnavService` 定义 `CityTerritoryTypes` 白名单（三主城/金碟/伊修加德/黄金港/水晶都/旧萨雷安/拉扎罕/图莱尤拉），主城/金碟内不尝试上坐骑且强制步行；`QueueMountBeforeMove` 不再按 `fly` 决定是否上坐骑；`StartPathfind` 飞行被拒绝时自动改步行重试；跨地图传送进入目标地图即置 `pendingTeleportBegan=true`，跳过以太水晶 90y 距离门与 8 秒等待，修复换图后原地不动。`TerritoryIntendedUse` 不可靠（130=0、141=1），故改用 ID 白名单。
 
 ---

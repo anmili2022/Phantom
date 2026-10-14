@@ -248,18 +248,19 @@ public sealed class YokaiProgressService
 
                 var isItem = itemSheet.TryGetRow(normalized, out var itemRow)
                     && !string.IsNullOrWhiteSpace(itemRow.Name.ExtractText());
-                if (isItem)
-                {
-                    result.Add(normalized);
-                    continue;
-                }
-
                 if (setSheet.TryGetRow(normalized, out var setRow))
                 {
                     foreach (var id in new[] { setRow.MainHand.RowId, setRow.OffHand.RowId, setRow.Head.RowId, setRow.Body.RowId, setRow.Hands.RowId, setRow.Legs.RowId, setRow.Feet.RowId, setRow.Earrings.RowId, setRow.Necklace.RowId, setRow.Bracelets.RowId, setRow.Ring.RowId })
                     {
                         AddItemId(result, id);
                     }
+
+                    continue;
+                }
+
+                if (isItem)
+                {
+                    result.Add(normalized);
                 }
             }
         }
