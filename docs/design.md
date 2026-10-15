@@ -326,7 +326,7 @@ BIS 分享链接解析：
 - 背包、兵装库和装备中属于当前角色实时读取范围。
 - `ItemFinderModule.SaddleBagItemIds` 与 `PremiumSaddleBagItemIds` 提供鞍囊缓存；`GlamourDresserItemIds` 提供投影台缓存。
 - 幻影台（幻影棱晶盒）直接读取 `MirageManager.Instance().PrismBoxItemIds`（`PrismBoxLoaded` 为真时），不依赖 `/道具检索`，因此已存入幻影台的装备也能被同步与位置表识别。
-- 套装幻影化：套装化后，棱晶盒中该套装各件被替换为一个「套装 RowId」（`MirageStoreSetItem.RowId`，如蟾蜍套装 `45342`）。读取棱晶盒时**先按套装判定**：若某项能在 `MirageStoreSetItem` 命中，则展开该套装的十一个槽位（主手/副手/头/身/手/腿/脚/耳/颈/腕/指）物品一并计为拥有；未命中套装的项再按 `Item` 表当作普通物品。注意 `Item` 表也存在同名的「套装占位物品」（如 `45342` = 「蟾蜍套装」），因此必须先判套装再判物品，否则套装 id 会被误当普通物品而永不展开。
+- 套装幻影化：套装化后，棱晶盒 / 投影台缓存中该套装各件被替换为一个「套装 RowId」（`MirageStoreSetItem.RowId`，如蟾蜍套装 `45342`）。读取投影台缓存 `ItemFinderModule.GlamourDresserItemIds` 与幻影台 `MirageManager.PrismBoxItemIds` 时**均先按套装判定**：若某项能在 `MirageStoreSetItem` 命中，则展开该套装的十一个槽位（主手/副手/头/身/手/腿/脚/耳/颈/腕/指）物品一并计为拥有；未命中套装的项再按 `Item` 表当作普通物品。注意 `Item` 表也存在同名的「套装占位物品」（如 `45342` = 「蟾蜍套装」），因此必须先判套装再判物品，否则套装 id 会被误当普通物品而永不展开。（统一由 `AddDresserCacheItemId` / `AddSetItems` 处理。）
 - 收藏柜优先使用 `UIState.Cabinet` 的当前角色状态，未加载时回退到 `ItemFinderModule.CabinetItemUnlockBits` 缓存。
 - `ItemFinderModule.RetainerInventories` 保存雇员装备槽与库存槽的客户端缓存；插件直接扫描其中的 `EquippedItemIds` 和 `ItemIds`。
 - `ItemFinderModule.IsRetainerCurrent(retainerId)` 为 `true` 表示该雇员已在本次登录后打开，数据由当前会话从服务器加载。

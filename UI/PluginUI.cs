@@ -160,6 +160,7 @@ public sealed class PluginUI
     private string activeCollabTabKey = "yokai";
     private string collabDebugSearch = string.Empty;
     private List<(uint Id, string Name, string Type)> collabDebugResults = [];
+    private string itemFinderDebugSearch = string.Empty;
     private bool isMainWindowOpen;
     private string trackedEquipmentId = string.Empty;
     private string trackedEquipmentName = string.Empty;
@@ -1438,7 +1439,13 @@ public sealed class PluginUI
             && !locations.Contains("陆行鸟鞍囊")) locations.Add("陆行鸟鞍囊（缓存）");
         if (finder != null)
         {
-            if (ContainsItemId(finder->GlamourDresserItemIds, itemId)) locations.Add("投影台（缓存）");
+            var dresserCache = new HashSet<uint>();
+            foreach (var cacheId in finder->GlamourDresserItemIds)
+            {
+                AddDresserCacheItemId(dresserCache, cacheId);
+            }
+
+            if (dresserCache.Contains(itemId)) locations.Add("投影台（缓存）");
             var cabinetRow = DalamudApi.DataManager.GetExcelSheet<Cabinet>()
                 .FirstOrDefault(row => row.Item.RowId == itemId);
             if (cabinetRow.RowId > 0 && IsCabinetItemOwned(cabinetRow.RowId, finder))
@@ -3659,7 +3666,13 @@ public sealed class PluginUI
             locations.Add("鞍囊");
         }
 
-        if (ContainsItemId(finder->GlamourDresserItemIds, itemId))
+        var dresserCacheIds = new HashSet<uint>();
+        foreach (var cacheId in finder->GlamourDresserItemIds)
+        {
+            AddDresserCacheItemId(dresserCacheIds, cacheId);
+        }
+
+        if (dresserCacheIds.Contains(itemId))
         {
             locations.Add("投影台");
         }
@@ -3758,6 +3771,7 @@ public sealed class PluginUI
         }
 
         var result = finder->Result;
+        var added = locations.Count;
         if (result->SaddleBagPage1Count + result->SaddleBagPage2Count + result->PremiumSaddleBagPage1Count + result->PremiumSaddleBagPage2Count > 0) locations.Add("鞍囊");
         if (result->ArmoireCount > 0) locations.Add("收藏柜");
         if (result->GlamourDresserCount > 0) locations.Add("投影台");
@@ -3769,6 +3783,11 @@ public sealed class PluginUI
                 locations.Add("雇员");
                 break;
             }
+        }
+
+        if (locations.Count == added)
+        {
+            locations.Add("检索命中");
         }
     }
 
@@ -3923,11 +3942,7 @@ public sealed class PluginUI
 
         foreach (var itemId in finder->GlamourDresserItemIds)
         {
-            var normalizedItemId = NormalizeItemId(itemId);
-            if (normalizedItemId > 0)
-            {
-                result.Add(normalizedItemId);
-            }
+            AddDresserCacheItemId(result, itemId);
         }
 
         AddCabinetItemIds(result, finder);
@@ -3951,6 +3966,18 @@ public sealed class PluginUI
             }
 
             foreach (var itemId in retainer->ItemIds)
+            {
+                var normalizedItemId = NormalizeItemId(itemId);
+                if (normalizedItemId > 0)
+                {
+                    result.Add(normalizedItemId);
+                }
+            }
+        }
+
+        if (finder->Result != null)
+        {
+            foreach (var itemId in finder->RequestItemIds)
             {
                 var normalizedItemId = NormalizeItemId(itemId);
                 if (normalizedItemId > 0)
@@ -4041,6 +4068,29 @@ public sealed class PluginUI
                 result.Add(normalized);
             }
         }
+    }
+
+    private static void AddDresserCacheItemId(HashSet<uint> result, uint rawId)
+    {
+        if (rawId == 0)
+        {
+            return;
+        }
+
+        var normalized = NormalizeItemId(rawId);
+        if (normalized == 0)
+        {
+            return;
+        }
+
+        var setSheet = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.MirageStoreSetItem>();
+        if (setSheet.TryGetRow(normalized, out var setRow))
+        {
+            AddSetItems(result, setRow);
+            return;
+        }
+
+        result.Add(normalized);
     }
 
     private static Dictionary<string, IReadOnlyList<Item>> BuildRewardWeaponItemLookup(
@@ -5249,6 +5299,99 @@ public sealed class PluginUI
         }
     }
 
+    private void DrawItemFinderHitSearch()
+    {
+        ImGui.Separator();
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "ItemFinder 命中查询（先跑 /道具检索 再查）");
+        ImGui.SetNextItemWidth(240f);
+        ImGui.InputText("##itemfinder-hit-search", ref itemFinderDebugSearch, 64);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("输入物品名或物品ID，检查该物品是否被游戏 ItemFinder 命中（RequestItemIds / Result 计数）。");
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("查询##itemfinder-hit"))
+        {
+            DebugItemFinderHit(itemFinderDebugSearch);
+        }
+    }
+
+    private static unsafe void DebugItemFinderHit(string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            PrintChat("DEBUG ItemFinder：请输入物品名或物品ID。");
+            return;
+        }
+
+        var finder = ItemFinderModule.Instance();
+        if (finder == null)
+        {
+            PrintChat("DEBUG ItemFinder：ItemFinderModule 为 null。");
+            return;
+        }
+
+        var candidates = new List<Item>();
+        if (uint.TryParse(keyword, out var directId))
+        {
+            if (DalamudApi.DataManager.GetExcelSheet<Item>().TryGetRow(directId, out var directRow))
+            {
+                candidates.Add(directRow);
+            }
+        }
+        else
+        {
+            candidates.AddRange(DalamudApi.DataManager.GetExcelSheet<Item>()
+                .Where(item => item.RowId > 0 && item.Name.ExtractText().Contains(keyword, StringComparison.Ordinal))
+                .Take(10));
+        }
+
+        if (candidates.Count == 0)
+        {
+            PrintChat($"DEBUG ItemFinder：未找到名称包含“{keyword}”的物品。");
+            return;
+        }
+
+        var resultNull = finder->Result == null;
+        var requestRaw = new List<uint>();
+        foreach (var id in finder->RequestItemIds)
+        {
+            requestRaw.Add(id);
+        }
+
+        var itemSheet = DalamudApi.DataManager.GetExcelSheet<Item>();
+        var requestDescribed = requestRaw
+            .Where(id => id > 0)
+            .Select(id =>
+            {
+                var normalized = NormalizeItemId(id);
+                var name = itemSheet.TryGetRow(normalized, out var r) ? r.Name.ExtractText() : "?";
+                return $"{id}{(id != normalized ? $"(低{normalized})" : string.Empty)}:{name}";
+            });
+        PrintChat($"DEBUG ItemFinder：Result={(resultNull ? "null" : "有")}，RequestItemIds 原始=[{string.Join(" | ", requestDescribed)}]。");
+
+        if (!resultNull)
+        {
+            PrintChat($"DEBUG ItemFinder：Result.ItemName=“{finder->Result->ItemName.ToString().Trim()}”。");
+        }
+
+        foreach (var item in candidates)
+        {
+            var id = NormalizeItemId(item.RowId);
+            var inRequest = requestRaw.Any(rawId => NormalizeItemId(rawId) == id);
+            var locations = GetItemStorageLocations(item);
+            var locText = locations.Count > 0 ? string.Join("、", locations) : "未找到";
+            PrintChat($"DEBUG ItemFinder：{item.Name.ExtractText()}（{item.RowId}）→ Request命中={inRequest}，位置={locText}。");
+        }
+
+        if (!resultNull)
+        {
+            var result = finder->Result;
+            PrintChat($"DEBUG ItemFinder：Result 计数 背包1-4={result->InventoryPage1Count},{result->InventoryPage2Count},{result->InventoryPage3Count},{result->InventoryPage4Count} 兵装={result->ArmouryChestCount} 装备槽={result->EquipmentSlot} 鞍囊={result->SaddleBagPage1Count},{result->SaddleBagPage2Count} 收藏柜={result->ArmoireCount} 投影台={result->GlamourDresserCount} 雇员={result->RetainerCount}。");
+        }
+    }
+
     private void DrawCollabDebugSearch()
     {
         ImGui.Separator();
@@ -5566,10 +5709,9 @@ public sealed class PluginUI
                 }
             }
 
-            var itemFinderText = GetItemFinderDebugText();
-            ImGui.TextDisabled(itemFinderText);
-            DrawDebugButtons(itemFinderText);
+            DrawDebugButtons();
             DrawCollabDebugSearch();
+            DrawItemFinderHitSearch();
         }
         ImGui.EndChild();
 
@@ -5993,11 +6135,23 @@ public sealed class PluginUI
         return changed;
     }
 
-    private void DrawDebugButtons(string itemFinderText)
+    private void DrawDebugButtons()
     {
-        _ = itemFinderText;
         var firstInRow = true;
         if (DrawWrappedButton("收集古武理符NPC##debug-export-zodiac-leve-npcs", "收集古武理符NPC", ref firstInRow)) ExportZodiacLeveNpcIds();
+        if (DrawWrappedButton("导出道具检索##debug-export-itemfinder", "导出道具检索", ref firstInRow)) ExportItemFinderDump();
+        if (DrawWrappedButton("导出投影台缓存##debug-export-dresser-cache", "导出投影台缓存", ref firstInRow)) ExportGlamourDresserCache();
+        if (DrawWrappedButton("读取道具检索##debug-print-itemfinder", "读取道具检索", ref firstInRow))
+        {
+            try
+            {
+                PrintChat(GetItemFinderDebugText());
+            }
+            catch (Exception ex)
+            {
+                PrintChat($"读取道具检索失败：{ex.Message}");
+            }
+        }
         if (DrawWrappedButton("读取当前坐标##debug-print-coords", "读取当前坐标", ref firstInRow))
         {
             var player = DalamudApi.ObjectTable[0];
@@ -6910,6 +7064,120 @@ public sealed class PluginUI
         return items.TryGetRow(itemId, out var item) && !item.Name.IsEmpty
             ? item.Name.ExtractText()
             : "未知物品";
+    }
+
+    private static unsafe void ExportItemFinderDump()
+    {
+        var lines = new List<string>();
+        var finder = ItemFinderModule.Instance();
+        if (finder == null)
+        {
+            lines.Add("ItemFinderModule.Instance() == null");
+        }
+        else
+        {
+            lines.Add($"ItemFinderModule ptr = 0x{(nint)finder:X}");
+            lines.Add($"IsRequestUnfulfilled = {finder->IsRequestUnfulfilled}");
+            lines.Add($"CabinetState = {finder->CabinetState}");
+            lines.Add($"IsRetainerManagerReady = {finder->IsRetainerManagerReady}");
+            lines.Add($"IsSaddleBagCached = {finder->IsSaddleBagCached}");
+            lines.Add($"IsGlamourDresserCached = {finder->IsGlamourDresserCached}");
+            lines.Add($"ShouldResetInvalid = {finder->ShouldResetInvalid}");
+
+            lines.Add("--- RequestItemIds ---");
+            var requestIndex = 0;
+            foreach (var id in finder->RequestItemIds)
+            {
+                if (id != 0)
+                {
+                    lines.Add($"  [{requestIndex}] raw={id} low={NormalizeItemId(id)}");
+                }
+
+                requestIndex++;
+            }
+
+            var result = finder->Result;
+            lines.Add($"--- Result ---");
+            if (result == null)
+            {
+                lines.Add("Result == null");
+            }
+            else
+            {
+                lines.Add($"Result ptr = 0x{(nint)result:X}");
+                lines.Add($"ItemName = \"{result->ItemName.ToString().Trim()}\"");
+                lines.Add($"ItemNameHQ = \"{result->ItemNameHQ.ToString().Trim()}\"");
+                lines.Add($"ItemNameCollectible = \"{result->ItemNameCollectible.ToString().Trim()}\"");
+                lines.Add($"EquipmentSlot = {result->EquipmentSlot}");
+                lines.Add($"ArmouryChestCount = {result->ArmouryChestCount}");
+                lines.Add($"CrystalsCount = {result->CrystalsCount}");
+                lines.Add($"InventoryPage1Count = {result->InventoryPage1Count}");
+                lines.Add($"InventoryPage2Count = {result->InventoryPage2Count}");
+                lines.Add($"InventoryPage3Count = {result->InventoryPage3Count}");
+                lines.Add($"InventoryPage4Count = {result->InventoryPage4Count}");
+                lines.Add($"ArmoireCount = {result->ArmoireCount}");
+                lines.Add($"SaddleBagPage1Count = {result->SaddleBagPage1Count}");
+                lines.Add($"SaddleBagPage2Count = {result->SaddleBagPage2Count}");
+                lines.Add($"PremiumSaddleBagPage1Count = {result->PremiumSaddleBagPage1Count}");
+                lines.Add($"PremiumSaddleBagPage2Count = {result->PremiumSaddleBagPage2Count}");
+                lines.Add($"GlamourDresserCount = {result->GlamourDresserCount}");
+                lines.Add($"ShowHQCount = {result->ShowHQCount}");
+                lines.Add($"ShowCollectibleCount = {result->ShowCollectibleCount}");
+                lines.Add($"RetainerCount = {result->RetainerCount}");
+                for (var i = 0; i < result->RetainerCount && i < 16; i++)
+                {
+                    var retainer = result->Retainer[i];
+                    if (retainer == null)
+                    {
+                        lines.Add($"  Retainer[{i}] = null");
+                        continue;
+                    }
+
+                    lines.Add($"  Retainer[{i}] id={retainer->RetainerId} equip={retainer->EquipmentSlot} crystals={retainer->CrystalsCount} p1={retainer->Page1Count} p2={retainer->Page2Count} p3={retainer->Page3Count} p4={retainer->Page4Count} p5={retainer->Page5Count}");
+                }
+            }
+        }
+
+        var output = string.Join(Environment.NewLine, lines);
+        var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "itemfinder-dump.txt");
+        File.WriteAllText(path, output);
+        ImGui.SetClipboardText(output);
+        PrintChat($"已导出 ItemFinder 状态，文件：{path}");
+    }
+
+    private static unsafe void ExportGlamourDresserCache()
+    {
+        var finder = ItemFinderModule.Instance();
+        if (finder == null)
+        {
+            PrintChat("导出投影台缓存：ItemFinderModule.Instance() == null");
+            return;
+        }
+
+        var lines = new List<string>();
+        lines.Add($"IsGlamourDresserCached = {finder->IsGlamourDresserCached}");
+
+        var ids = finder->GlamourDresserItemIds;
+        var index = 0;
+        var nonZero = 0;
+        foreach (var rawId in ids)
+        {
+            if (rawId != 0)
+            {
+                nonZero++;
+                lines.Add($"[{index}] raw={rawId} low={NormalizeItemId(rawId)}");
+            }
+
+            index++;
+        }
+
+        lines.Insert(1, $"GlamourDresserItemIds.Length = {ids.Length}，非零 = {nonZero}");
+
+        var output = string.Join(Environment.NewLine, lines);
+        var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "dresser-cache.txt");
+        File.WriteAllText(path, output);
+        ImGui.SetClipboardText(output);
+        PrintChat($"已导出投影台缓存：非零 {nonZero} 项，文件：{path}");
     }
 
     private static unsafe string GetItemFinderDebugText()

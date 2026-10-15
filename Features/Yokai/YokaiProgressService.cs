@@ -222,10 +222,7 @@ public sealed class YokaiProgressService
 
         foreach (var itemId in finder->GlamourDresserItemIds)
         {
-            if (itemId > 0)
-            {
-                result.Add(NormalizeItemId(itemId));
-            }
+            AddDresserCacheId(result, itemId);
         }
 
         var mirage = FFXIVClientStructs.FFXIV.Client.Game.MirageManager.Instance();
@@ -296,7 +293,7 @@ public sealed class YokaiProgressService
 
         AddCabinetItemIds(result, finder);
 
-        if (finder->Result != null && (finder->Result->GlamourDresserCount > 0 || finder->Result->ArmoireCount > 0))
+        if (finder->Result != null)
         {
             foreach (var itemId in finder->RequestItemIds)
             {
@@ -314,6 +311,33 @@ public sealed class YokaiProgressService
         {
             result.Add(normalizedItemId);
         }
+    }
+
+    private static void AddDresserCacheId(HashSet<uint> result, uint rawId)
+    {
+        if (rawId == 0)
+        {
+            return;
+        }
+
+        var normalized = NormalizeItemId(rawId);
+        if (normalized == 0)
+        {
+            return;
+        }
+
+        var setSheet = DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.MirageStoreSetItem>();
+        if (setSheet.TryGetRow(normalized, out var setRow))
+        {
+            foreach (var id in new[] { setRow.MainHand.RowId, setRow.OffHand.RowId, setRow.Head.RowId, setRow.Body.RowId, setRow.Hands.RowId, setRow.Legs.RowId, setRow.Feet.RowId, setRow.Earrings.RowId, setRow.Necklace.RowId, setRow.Bracelets.RowId, setRow.Ring.RowId })
+            {
+                AddItemId(result, id);
+            }
+
+            return;
+        }
+
+        result.Add(normalized);
     }
 
     private static unsafe void AddCabinetItemIds(HashSet<uint> result, ItemFinderModule* finder)
