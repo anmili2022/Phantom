@@ -26,7 +26,7 @@ public sealed class PluginUI
         IReadOnlyList<PhantomWeaponProgressStage> Stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> ItemLookup);
     private sealed record FateCatalogEntry(uint FateId, string Name, string Annotations);
-    private sealed record PityItem(uint ItemId, string Name, string? SourceLabel = null);
+    private sealed record PityItem(uint ItemId, string Name, string? SourceLabel = null, int Needed = 0, string? WikiTitle = null, string? SourceOverride = null);
     private static readonly string[] TrackedEquipmentSetSlotOrder =
     {
         "武器", "头部", "身体", "手部", "腿部", "脚部",
@@ -66,6 +66,63 @@ public sealed class PluginUI
                 new PityItem(38940, "稀少球粒陨石"),
                 new PityItem(40322, "稀少无球粒陨石"),
                 new PityItem(41032, "雏晶"),
+            },
+            ["eureka"] = new[]
+            {
+                new PityItem(21801, "乱属性水晶", "eureka-anemos", 1300, SourceOverride: "在禁地优雷卡 常风之地中，击杀同级或更高级的怪物有几率获得，连锁奖励可以增加概率，或于盖罗尔特优雷卡常风之地 (X: 17.9, Y: 32.2)处分解常风水晶获得。"),
+                new PityItem(21802, "帕祖祖的羽毛", "eureka-anemos", 3, SourceOverride: "通过危命任务 暴风魔王——帕祖祖，金牌3个，银牌1个；乱属性水晶*300可兑换1个。"),
+                new PityItem(23309, "结冰乱属性水晶", "eureka-pagos", 31, SourceOverride: "在禁地优雷卡 恒冰之地中，于试制水晶炉优雷卡恒冰之地 (X: 6.1, Y: 21.5)处结晶化优雷卡以太壶中的混合以太获得。"),
+                new PityItem(22976, "恒冰水晶", "eureka-pagos", 500, SourceOverride: "通过危命任务获得。"),
+                new PityItem(22975, "娄希的冰片", "eureka-pagos", 5, SourceOverride: "通过危命任务 苍蓝冰刃——娄希 获得，金牌2个，银牌1个；通过恒冰水晶*50兑换1个。"),
+                new PityItem(24124, "涌火水晶", "eureka-pyros", 650, SourceOverride: "通过危命任务获得。"),
+                new PityItem(24123, "彭忒西勒亚的火种", "eureka-pyros", 5, SourceOverride: "通过危命任务 炎蝶的女王——彭忒西勒亚 获得，金牌3个，银牌1个；通过 涌火水晶*50兑换1个。"),
+                new PityItem(24807, "丰水水晶", "eureka-hydatos", 350, SourceOverride: "通过危命任务获得。"),
+                new PityItem(24806, "水晶龙之鳞", "eureka-hydatos", 5, SourceOverride: "通过危命任务 水晶之龙——起源守望者 获得，金牌3个，银牌1个。"),
+                new PityItem(24808, "优雷卡的断片", "eureka-physeos", 100, SourceOverride: "在禁地优雷卡-巴尔德西昂兵武塔中获得。"),
+            },
+            ["resistance"] = new[]
+            {
+                new PityItem(30273, "萨维奈灵鳞粉", "resistance-base", 4),
+                new PityItem(31573, "烦恼的记忆晶块", "resistance-augmented", 20),
+                new PityItem(31574, "悲伤的记忆晶块", "resistance-augmented", 20),
+                new PityItem(31575, "恐惧的记忆晶块", "resistance-augmented", 20),
+                new PityItem(31576, "勇猛的记忆晶块", "resistance-recollection", 6),
+                new PityItem(32956, "厌恶的记忆晶块", "resistance-law-order", 15),
+                new PityItem(32957, "不祥的记忆晶块", "resistance-augmented-law-order", 18),
+                new PityItem(32958, "忌讳的记忆晶块", "resistance-augmented-law-order", 18),
+                new PityItem(32959, "被丢掉的遗物", "resistance-augmented-law-order", 15),
+                new PityItem(33757, "超小型传动轴", "resistance-blades", 30),
+                new PityItem(33758, "超小型弹簧", "resistance-blades", 30),
+                new PityItem(33759, "激战的战斗记录：第一集", "resistance-blades", 30),
+                new PityItem(33760, "激战的战斗记录：第二集", "resistance-blades", 30),
+                new PityItem(33763, "沉重的记忆晶块", "resistance-blades", 30),
+                new PityItem(33764, "粗暴的记忆晶块", "resistance-blades", 30),
+                new PityItem(33767, "光辉的激情晶块", "resistance-blades", 15),
+            },
+            ["zodiac"] = new[]
+            {
+                new PityItem(28, "亚拉戈诗学神典石", "zodiac-relic", 15, "亚拉戈诗学神典石", "通过副本、随机任务、对战、寻宝、怪物狩猎、深层迷宫、特殊场景探索、特殊迷宫探索、友好部族任务、天书奇谈和假面狂欢获得。"),
+                new PityItem(6268, "萨维奈灵药", "zodiac-zenith", 3, SourceOverride: "通过 诗学 兑换。"),
+                new PityItem(7851, "室女之魂晶", "zodiac-atma", 1, SourceOverride: "在西萨纳兰的 FATE 获取。"),
+                new PityItem(7852, "天蝎之魂晶", "zodiac-atma", 1, SourceOverride: "在北萨纳兰的 FATE 获取。"),
+                new PityItem(7853, "宝瓶之魂晶", "zodiac-atma", 1, SourceOverride: "在南黑衣森林的 FATE 获取。"),
+                new PityItem(7854, "摩羯之魂晶", "zodiac-atma", 1, SourceOverride: "在摩杜纳的 FATE 获取。"),
+                new PityItem(7855, "金牛之魂晶", "zodiac-atma", 1, SourceOverride: "在东拉诺西亚的 FATE 获取。"),
+                new PityItem(7856, "白羊之魂晶", "zodiac-atma", 1, SourceOverride: "在中拉诺西亚的 FATE 获取。"),
+                new PityItem(7857, "双子之魂晶", "zodiac-atma", 1, SourceOverride: "在西拉诺西亚的 FATE 获取。"),
+                new PityItem(7858, "狮子之魂晶", "zodiac-atma", 1, SourceOverride: "在东萨纳兰的 FATE 获取。"),
+                new PityItem(7859, "双鱼之魂晶", "zodiac-atma", 1, SourceOverride: "在北黑衣森林的 FATE 获取。"),
+                new PityItem(7860, "人马之魂晶", "zodiac-atma", 1, SourceOverride: "在库尔札斯中央高地的 FATE 获取。"),
+                new PityItem(7861, "天秤之魂晶", "zodiac-atma", 1, SourceOverride: "在中萨纳兰的 FATE 获取。"),
+                new PityItem(7862, "巨蟹之魂晶", "zodiac-atma", 1, SourceOverride: "在南萨纳兰的 FATE 获取。"),
+            },
+            ["anima"] = new[]
+            {
+                new PityItem(13579, "神圣水", "anima-anima", 10, SourceOverride: "通过 神秘原石*10 + 破魔箭*4 兑换。"),
+                new PityItem(14899, "亚拉戈绝灵油", "anima-hyperconductive", 5),
+                new PityItem(15841, "水晶砂", "anima-reconditioned", 80, SourceOverride: "通过制作蓝票的票据、月长石、神秘骨片、神秘贝壳、神秘原石、神秘种子等材料兑换。"),
+                new PityItem(15840, "硬灵性岩", "anima-reconditioned", 80, SourceOverride: "通过诗学兑换。"),
+                new PityItem(16934, "古代附魔墨水", "anima-complete", 1),
             },
         };
 
@@ -2814,7 +2871,8 @@ public sealed class PluginUI
             completed => $"群星完成职业 {completed}/{RelicWeaponGuide.CosmicToolJobs.Count}。未显示的工具通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
 
     private void DrawZodiacWeaponProgressPanel()
-        => DrawWeaponProgressPanel(
+    {
+        DrawWeaponProgressPanel(
             "zodiac",
             "古武",
             RelicWeaponGuide.ZodiacWeaponJobs,
@@ -2822,9 +2880,12 @@ public sealed class PluginUI
             GetZodiacWeaponItemLookup(),
             stage => stage.Key == "zodiac-zeta",
             completed => $"本我完成职业 {completed}/{RelicWeaponGuide.ZodiacWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+        DrawPityItems("zodiac");
+    }
 
     private void DrawAnimaWeaponProgressPanel()
-        => DrawWeaponProgressPanel(
+    {
+        DrawWeaponProgressPanel(
             "anima",
             "魂武",
             RelicWeaponGuide.AnimaWeaponJobs,
@@ -2832,9 +2893,12 @@ public sealed class PluginUI
             GetAnimaWeaponItemLookup(),
             stage => stage.Key == "anima-lux",
             completed => $"灵光完成职业 {completed}/{RelicWeaponGuide.AnimaWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+        DrawPityItems("anima");
+    }
 
     private void DrawEurekaWeaponProgressPanel()
-        => DrawWeaponProgressPanel(
+    {
+        DrawWeaponProgressPanel(
             "eureka",
             "优武",
             RelicWeaponGuide.EurekaWeaponJobs,
@@ -2842,9 +2906,12 @@ public sealed class PluginUI
             GetEurekaWeaponItemLookup(),
             stage => stage.Key == "eureka-physeos",
             completed => $"补正完成职业 {completed}/{RelicWeaponGuide.EurekaWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+        DrawPityItems("eureka");
+    }
 
     private void DrawResistanceWeaponProgressPanel()
-        => DrawWeaponProgressPanel(
+    {
+        DrawWeaponProgressPanel(
             "resistance",
             "义武",
             RelicWeaponGuide.ResistanceWeaponJobs,
@@ -2852,6 +2919,8 @@ public sealed class PluginUI
             GetResistanceWeaponItemLookup(),
             stage => stage.Key == "resistance-blades",
             completed => $"女王完成职业 {completed}/{RelicWeaponGuide.ResistanceWeaponJobs.Count}。未显示的武器通常表示上次同步时不在背包、兵装库、装备栏或已加载的雇员库存。 ");
+        DrawPityItems("resistance");
+    }
 
     private void DrawSkysteelToolProgressPanel()
         => DrawWeaponProgressPanel(
@@ -3082,7 +3151,7 @@ public sealed class PluginUI
 
         ImGui.Spacing();
         ImGui.Separator();
-        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "低保数量");
+        ImGui.TextColored(new Vector4(0.58f, 0.86f, 0.90f, 1f), "材料数量");
         ImGui.TextDisabled("读取当前已加载的背包、鞍囊和雇员库存；未打开过的雇员缓存可能不完整。");
         var quantities = GetLoadedItemQuantities(items.Select(item => item.ItemId));
         if (seriesKey == "elegant")
@@ -3091,7 +3160,13 @@ public sealed class PluginUI
             return;
         }
 
-        var columns = Math.Min(items.Count, seriesKey == "ultimate" ? 4 : items.Count);
+        var columns = seriesKey switch
+        {
+            "ultimate" => Math.Min(items.Count, 4),
+            "eureka" or "resistance" => Math.Min(items.Count, 5),
+            "zodiac" or "anima" => Math.Min(items.Count, 5),
+            _ => items.Count,
+        };
         if (!ImGui.BeginTable($"pity-items-{seriesKey}", columns, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.PadOuterX))
         {
             return;
@@ -3103,12 +3178,17 @@ public sealed class PluginUI
             {
                 "manderville" => Math.Max(0, GetTotalWeaponCount("manderville") - GetCompletedWeaponCount("manderville", GetMandervillePityStage(item.Name))) * 3,
                 "phantom" => Math.Max(0, GetTotalWeaponCount("phantom") - GetCompletedWeaponCount("phantom", GetPhantomPityStage(item.Name))) * 3,
+                "eureka" => Math.Max(0, GetTotalWeaponCount("eureka") - GetCompletedWeaponCount("eureka", item.SourceLabel)) * item.Needed,
+                "resistance" => Math.Max(0, GetTotalWeaponCount("resistance") - GetCompletedWeaponCount("resistance", item.SourceLabel)) * item.Needed,
+                "zodiac" => Math.Max(0, GetTotalWeaponCount("zodiac") - GetCompletedWeaponCount("zodiac", item.SourceLabel)) * item.Needed,
+                "anima" => Math.Max(0, GetTotalWeaponCount("anima") - GetCompletedWeaponCount("anima", item.SourceLabel)) * item.Needed,
                 "ultimate" => GetUltimatePityRequirement(item.SourceLabel),
                 _ => 0,
             };
             var note = seriesKey switch
             {
                 "manderville" or "phantom" => "每把武器需要 3 个",
+                "eureka" or "resistance" or "zodiac" or "anima" => $"每把需要 {item.Needed} 个",
                 "ultimate" => item.SourceLabel,
                 _ => item.SourceLabel,
             };
@@ -3193,6 +3273,28 @@ public sealed class PluginUI
         ImGui.EndTable();
     }
 
+    private static string? GetPitySource(string seriesKey, string itemName)
+    {
+        if (!RelicWeaponGuide.Series.TryGetValue(seriesKey, out var series))
+        {
+            return null;
+        }
+
+        foreach (var stage in series.Stages)
+        {
+            foreach (var requirement in stage.Requirements)
+            {
+                if (string.Equals(requirement.Name, itemName, StringComparison.Ordinal)
+                    && !string.IsNullOrWhiteSpace(requirement.Source))
+                {
+                    return requirement.Source;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private static void DrawPityItemCard(string seriesKey, PityItem item, int quantity, int required, string? note)
     {
         var width = Math.Max(138f, ImGui.GetColumnWidth() - 8f);
@@ -3211,11 +3313,63 @@ public sealed class PluginUI
         ImGui.TextDisabled(note ?? $"Item ID {item.ItemId}");
         ImGui.SetCursorScreenPos(cursor);
         ImGui.InvisibleButton($"pity-item-{seriesKey}-{item.ItemId}", new Vector2(width, height));
+        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+        {
+            OpenPityItemWiki(item);
+        }
+
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip($"{item.Name}\nItem.RowId: {item.ItemId}\n当前已加载库存：{quantity}\n全部目标需求：{required}");
+            var source = item.SourceOverride ?? GetPitySource(seriesKey, item.Name);
+            var tooltip = $"{item.Name}\n当前已加载库存：{quantity}\n全部目标需求：{required}";
+            if (!string.IsNullOrWhiteSpace(source))
+            {
+                tooltip += $"\n来源：{source}";
+            }
+
+            tooltip += "\n右键打开 wiki";
+            ImGui.SetTooltip(tooltip);
         }
         ImGui.SetCursorScreenPos(cursor + new Vector2(0f, height + 6f));
+    }
+
+    private static void OpenPityItemWiki(PityItem item)
+    {
+        var items = DalamudApi.DataManager.GetExcelSheet<Item>();
+        var wikiTitle = item.WikiTitle;
+        if (string.IsNullOrWhiteSpace(wikiTitle))
+        {
+            var wikiName = items.TryGetRow(item.ItemId, out var itemRow) ? itemRow.Name.ExtractText() : item.Name;
+            if (string.IsNullOrWhiteSpace(wikiName))
+            {
+                wikiName = item.Name;
+            }
+
+            wikiTitle = $"物品:{wikiName}";
+        }
+
+        OpenUrl($"https://ff14.huijiwiki.com/wiki/{Uri.EscapeDataString(wikiTitle)}");
+    }
+
+    private unsafe void PrintPityQuantities()
+    {
+        var ids = new[] { 31573u, 31574u, 31575u, 30273u, 21801u };
+        var quantities = GetLoadedItemQuantities(ids);
+        var parts = ids.Select(id => $"{id}={quantities.GetValueOrDefault(id)}");
+        PrintChat($"材料数量：{string.Join("，", parts)}");
+
+        var inventoryManager = InventoryManager.Instance();
+        if (inventoryManager == null)
+        {
+            PrintChat("InventoryManager.Instance() == null");
+            return;
+        }
+
+        foreach (var type in PityInventoryTypes)
+        {
+            var container = inventoryManager->GetInventoryContainer(type);
+            PrintChat($"  {type}: {(container == null ? "null" : $"loaded={container->IsLoaded}, size={container->Size}")}");
+        }
     }
 
     private int GetTotalWeaponCount(string seriesKey, string? stageKey = null)
@@ -3224,6 +3378,10 @@ public sealed class PluginUI
             "phantom" => PhantomWeaponGuide.WeaponJobs.Count,
             "manderville" => MandervilleWeaponGuide.WeaponJobs.Count,
             "elegant" => RelicWeaponGuide.ElegantWeaponJobs.Count,
+            "eureka" => RelicWeaponGuide.EurekaWeaponJobs.Count,
+            "resistance" => RelicWeaponGuide.ResistanceWeaponJobs.Count,
+            "zodiac" => RelicWeaponGuide.ZodiacWeaponJobs.Count,
+            "anima" => RelicWeaponGuide.AnimaWeaponJobs.Count,
             "ultimate" => GetUltimateWeaponCount(stageKey),
             _ => 0,
         };
@@ -3257,6 +3415,10 @@ public sealed class PluginUI
             "phantom" => GetCompletedCumulativeStageCount("phantom", stageKey, PhantomWeaponGuide.WeaponJobs, PhantomWeaponGuide.ProgressStages, GetPhantomWeaponItemLookup(), syncedItems),
             "manderville" => GetCompletedCumulativeStageCount("manderville", stageKey, MandervilleWeaponGuide.WeaponJobs, MandervilleWeaponGuide.ProgressStages, GetMandervilleWeaponItemLookup(), syncedItems),
             "elegant" => GetCompletedCumulativeStageCount("elegant", stageKey, RelicWeaponGuide.ElegantWeaponJobs, RelicWeaponGuide.ElegantProgressStages, GetElegantWeaponItemLookup(), syncedItems),
+            "eureka" => GetCompletedCumulativeStageCount("eureka", stageKey, RelicWeaponGuide.EurekaWeaponJobs, RelicWeaponGuide.EurekaProgressStages, GetEurekaWeaponItemLookup(), syncedItems),
+            "resistance" => GetCompletedCumulativeStageCount("resistance", stageKey, RelicWeaponGuide.ResistanceWeaponJobs, RelicWeaponGuide.ResistanceProgressStages, GetResistanceWeaponItemLookup(), syncedItems),
+            "zodiac" => GetCompletedCumulativeStageCount("zodiac", stageKey, RelicWeaponGuide.ZodiacWeaponJobs, RelicWeaponGuide.ZodiacProgressStages, GetZodiacWeaponItemLookup(), syncedItems),
+            "anima" => GetCompletedCumulativeStageCount("anima", stageKey, RelicWeaponGuide.AnimaWeaponJobs, RelicWeaponGuide.AnimaProgressStages, GetAnimaWeaponItemLookup(), syncedItems),
             "ultimate" => GetCompletedStageCount("ultimate", stageKey, RelicWeaponGuide.UltimateWeaponJobs, RelicWeaponGuide.UltimateProgressStages, GetUltimateWeaponItemLookup(), syncedItems),
             _ => 0,
         };
@@ -3344,6 +3506,33 @@ public sealed class PluginUI
                 if (targets.Contains(itemId))
                 {
                     result[itemId] += slot->Quantity;
+                }
+            }
+        }
+
+        var finder = ItemFinderModule.Instance();
+        if (finder != null)
+        {
+            foreach (var retainerPointer in finder->RetainerInventories.Values)
+            {
+                var retainer = retainerPointer.Value;
+                if (retainer == null)
+                {
+                    continue;
+                }
+
+                var ids = retainer->ItemIds;
+                var counts = retainer->ItemCount;
+                for (var index = 0; index < ids.Length; index++)
+                {
+                    var itemId = NormalizeItemId(ids[index]);
+                    if (itemId == 0 || !targets.Contains(itemId))
+                    {
+                        continue;
+                    }
+
+                    var quantity = index < counts.Length ? counts[index] : 0;
+                    result[itemId] += quantity > 0 ? quantity : 1;
                 }
             }
         }
@@ -6140,6 +6329,8 @@ public sealed class PluginUI
         var firstInRow = true;
         if (DrawWrappedButton("收集古武理符NPC##debug-export-zodiac-leve-npcs", "收集古武理符NPC", ref firstInRow)) ExportZodiacLeveNpcIds();
         if (DrawWrappedButton("导出道具检索##debug-export-itemfinder", "导出道具检索", ref firstInRow)) ExportItemFinderDump();
+        if (DrawWrappedButton("导出低保Item.RowId##debug-export-pity-ids", "导出低保Item.RowId", ref firstInRow)) ExportPityItemIds();
+        if (DrawWrappedButton("查询材料数量##debug-print-pity-qty", "查询材料数量", ref firstInRow)) PrintPityQuantities();
         if (DrawWrappedButton("导出投影台缓存##debug-export-dresser-cache", "导出投影台缓存", ref firstInRow)) ExportGlamourDresserCache();
         if (DrawWrappedButton("读取道具检索##debug-print-itemfinder", "读取道具检索", ref firstInRow))
         {
@@ -6380,6 +6571,55 @@ public sealed class PluginUI
             (Series: "曼武", RequestedName: "稀少球粒陨石", SearchTerms: new[] { "稀少球粒陨石" }),
             (Series: "曼武", RequestedName: "稀少无球粒陨石", SearchTerms: new[] { "稀少无球粒陨石" }),
             (Series: "曼武", RequestedName: "雏晶", SearchTerms: new[] { "雏晶" }),
+            (Series: "优武", RequestedName: "乱属性水晶", SearchTerms: new[] { "乱属性水晶" }),
+            (Series: "优武", RequestedName: "帕祖祖的羽毛", SearchTerms: new[] { "帕祖祖的羽毛" }),
+            (Series: "优武", RequestedName: "结冰乱属性水晶", SearchTerms: new[] { "结冰乱属性水晶" }),
+            (Series: "优武", RequestedName: "恒冰水晶", SearchTerms: new[] { "恒冰水晶" }),
+            (Series: "优武", RequestedName: "娄希的冰片", SearchTerms: new[] { "娄希的冰片" }),
+            (Series: "优武", RequestedName: "涌火水晶", SearchTerms: new[] { "涌火水晶" }),
+            (Series: "优武", RequestedName: "彭忒西勒亚的火种", SearchTerms: new[] { "彭忒西勒亚的火种" }),
+            (Series: "优武", RequestedName: "文理技能图鉴", SearchTerms: new[] { "文理技能图鉴" }),
+            (Series: "优武", RequestedName: "丰水水晶", SearchTerms: new[] { "丰水水晶" }),
+            (Series: "优武", RequestedName: "水晶龙之鳞", SearchTerms: new[] { "水晶龙之鳞" }),
+            (Series: "优武", RequestedName: "优雷卡的断片", SearchTerms: new[] { "优雷卡的断片" }),
+            (Series: "义武", RequestedName: "萨维奈灵鳞粉", SearchTerms: new[] { "萨维奈灵鳞粉" }),
+            (Series: "义武", RequestedName: "烦恼的记忆晶块", SearchTerms: new[] { "烦恼的记忆晶块" }),
+            (Series: "义武", RequestedName: "悲伤的记忆晶块", SearchTerms: new[] { "悲伤的记忆晶块" }),
+            (Series: "义武", RequestedName: "恐惧的记忆晶块", SearchTerms: new[] { "恐惧的记忆晶块" }),
+            (Series: "义武", RequestedName: "勇猛的记忆晶块", SearchTerms: new[] { "勇猛的记忆晶块" }),
+            (Series: "义武", RequestedName: "厌恶的记忆晶块", SearchTerms: new[] { "厌恶的记忆晶块" }),
+            (Series: "义武", RequestedName: "不祥的记忆晶块", SearchTerms: new[] { "不祥的记忆晶块" }),
+            (Series: "义武", RequestedName: "忌讳的记忆晶块", SearchTerms: new[] { "忌讳的记忆晶块" }),
+            (Series: "义武", RequestedName: "被丢掉的遗物", SearchTerms: new[] { "被丢掉的遗物" }),
+            (Series: "义武", RequestedName: "超小型传动轴", SearchTerms: new[] { "超小型传动轴" }),
+            (Series: "义武", RequestedName: "超小型弹簧", SearchTerms: new[] { "超小型弹簧" }),
+            (Series: "义武", RequestedName: "激战的战斗记录：第一集", SearchTerms: new[] { "激战的战斗记录" }),
+            (Series: "义武", RequestedName: "激战的战斗记录：第二集", SearchTerms: new[] { "激战的战斗记录" }),
+            (Series: "义武", RequestedName: "沉重的记忆晶块", SearchTerms: new[] { "沉重的记忆晶块" }),
+            (Series: "义武", RequestedName: "粗暴的记忆晶块", SearchTerms: new[] { "粗暴的记忆晶块" }),
+            (Series: "义武", RequestedName: "光辉的激情晶块", SearchTerms: new[] { "光辉的激情晶块" }),
+            (Series: "古武", RequestedName: "亚拉戈诗学神典石", SearchTerms: new[] { "亚拉戈诗学神典石" }),
+            (Series: "古武", RequestedName: "叁型魔晶石", SearchTerms: new[] { "叁型魔晶石" }),
+            (Series: "古武", RequestedName: "萨维奈灵药", SearchTerms: new[] { "萨维奈灵药" }),
+            (Series: "古武", RequestedName: "十二魂晶", SearchTerms: new[] { "魂晶" }),
+            (Series: "古武", RequestedName: "亚历山大石", SearchTerms: new[] { "亚历山大石" }),
+            (Series: "古武", RequestedName: "拉札罕淬火油", SearchTerms: new[] { "淬火油" }),
+            (Series: "古武", RequestedName: "黄道十二文书", SearchTerms: new[] { "黄道十二文书" }),
+            (Series: "魂武", RequestedName: "发光水晶", SearchTerms: new[] { "发光水晶" }),
+            (Series: "魂武", RequestedName: "魔法橡胶", SearchTerms: new[] { "魔法橡胶" }),
+            (Series: "魂武", RequestedName: "快速硬化碳化油", SearchTerms: new[] { "快速硬化碳化油" }),
+            (Series: "魂武", RequestedName: "神圣水", SearchTerms: new[] { "神圣水" }),
+            (Series: "魂武", RequestedName: "高效古代附魔剂", SearchTerms: new[] { "高效古代附魔剂" }),
+            (Series: "魂武", RequestedName: "亚拉戈绝灵油", SearchTerms: new[] { "绝灵油" }),
+            (Series: "魂武", RequestedName: "水晶砂", SearchTerms: new[] { "水晶砂" }),
+            (Series: "魂武", RequestedName: "硬灵性岩", SearchTerms: new[] { "硬灵性岩" }),
+            (Series: "魂武", RequestedName: "古代附魔墨水", SearchTerms: new[] { "古代附魔墨水" }),
+            (Series: "探查", RequestedName: "亚历山大石", SearchTerms: new[] { "亚历山大", "天球书卷" }),
+            (Series: "探查", RequestedName: "发光水晶", SearchTerms: new[] { "发光", "发光的" }),
+            (Series: "探查", RequestedName: "魔法橡胶", SearchTerms: new[] { "橡胶" }),
+            (Series: "探查", RequestedName: "碳化油", SearchTerms: new[] { "碳化油", "硬化" }),
+            (Series: "探查", RequestedName: "附魔剂", SearchTerms: new[] { "附魔剂", "高效率", "高效" }),
+            (Series: "探查", RequestedName: "叁型魔晶石", SearchTerms: new[] { "叁型" }),
         };
 
         try
