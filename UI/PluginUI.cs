@@ -26,7 +26,7 @@ public sealed class PluginUI
         IReadOnlyList<PhantomWeaponProgressStage> Stages,
         IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> ItemLookup);
     private sealed record FateCatalogEntry(uint FateId, string Name, string Annotations);
-    private sealed record PityItem(uint ItemId, string Name, string? SourceLabel = null, int Needed = 0, string? WikiTitle = null, string? SourceOverride = null);
+    private sealed record PityItem(uint ItemId, string Name, string? SourceLabel = null, int Needed = 0, string? WikiTitle = null, string? SourceOverride = null, bool Once = false);
     private static readonly string[] TrackedEquipmentSetSlotOrder =
     {
         "武器", "头部", "身体", "手部", "腿部", "脚部",
@@ -88,15 +88,7 @@ public sealed class PluginUI
                 new PityItem(31575, "恐惧的记忆晶块", "resistance-augmented", 20),
                 new PityItem(31576, "勇猛的记忆晶块", "resistance-recollection", 6),
                 new PityItem(32956, "厌恶的记忆晶块", "resistance-law-order", 15),
-                new PityItem(32957, "不祥的记忆晶块", "resistance-augmented-law-order", 18),
-                new PityItem(32958, "忌讳的记忆晶块", "resistance-augmented-law-order", 18),
                 new PityItem(32959, "被丢掉的遗物", "resistance-augmented-law-order", 15),
-                new PityItem(33757, "超小型传动轴", "resistance-blades", 30),
-                new PityItem(33758, "超小型弹簧", "resistance-blades", 30),
-                new PityItem(33759, "激战的战斗记录：第一集", "resistance-blades", 30),
-                new PityItem(33760, "激战的战斗记录：第二集", "resistance-blades", 30),
-                new PityItem(33763, "沉重的记忆晶块", "resistance-blades", 30),
-                new PityItem(33764, "粗暴的记忆晶块", "resistance-blades", 30),
                 new PityItem(33767, "光辉的激情晶块", "resistance-blades", 15),
             },
             ["zodiac"] = new[]
@@ -3178,8 +3170,8 @@ public sealed class PluginUI
             {
                 "manderville" => Math.Max(0, GetTotalWeaponCount("manderville") - GetCompletedWeaponCount("manderville", GetMandervillePityStage(item.Name))) * 3,
                 "phantom" => Math.Max(0, GetTotalWeaponCount("phantom") - GetCompletedWeaponCount("phantom", GetPhantomPityStage(item.Name))) * 3,
-                "eureka" => Math.Max(0, GetTotalWeaponCount("eureka") - GetCompletedWeaponCount("eureka", item.SourceLabel)) * item.Needed,
-                "resistance" => Math.Max(0, GetTotalWeaponCount("resistance") - GetCompletedWeaponCount("resistance", item.SourceLabel)) * item.Needed,
+                "eureka" => item.Once ? item.Needed : Math.Max(0, GetTotalWeaponCount("eureka") - GetCompletedWeaponCount("eureka", item.SourceLabel)) * item.Needed,
+                "resistance" => item.Once ? item.Needed : Math.Max(0, GetTotalWeaponCount("resistance") - GetCompletedWeaponCount("resistance", item.SourceLabel)) * item.Needed,
                 "zodiac" => Math.Max(0, GetTotalWeaponCount("zodiac") - GetCompletedWeaponCount("zodiac", item.SourceLabel)) * item.Needed,
                 "anima" => Math.Max(0, GetTotalWeaponCount("anima") - GetCompletedWeaponCount("anima", item.SourceLabel)) * item.Needed,
                 "ultimate" => GetUltimatePityRequirement(item.SourceLabel),
@@ -3188,7 +3180,7 @@ public sealed class PluginUI
             var note = seriesKey switch
             {
                 "manderville" or "phantom" => "每把武器需要 3 个",
-                "eureka" or "resistance" or "zodiac" or "anima" => $"每把需要 {item.Needed} 个",
+                "eureka" or "resistance" or "zodiac" or "anima" => item.Once ? $"一次性交付 {item.Needed} 个" : $"每把需要 {item.Needed} 个",
                 "ultimate" => item.SourceLabel,
                 _ => item.SourceLabel,
             };
