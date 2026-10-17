@@ -235,6 +235,8 @@ public sealed class PluginUI
     private bool floatingPhantomTargetsOpen;
     private bool floatingPhantomDutiesOpen;
     private bool floatingZodiacMonitorOpen = true;
+    private bool floatingEurekaMonitorOpen = true;
+    private bool floatingResistanceMonitorOpen = true;
     private bool floatingPhantomMonitorOpen = true;
     private bool floatingFateAssistantOpen = true;
     private bool floatingHuntAssistantOpen = true;
@@ -1861,6 +1863,28 @@ public sealed class PluginUI
             var secondaryLabel = series.Key == "zodiac" ? "打开黄道武器Wiki" : $"打开{series.Name} Wiki 2";
             DrawWikiButton(secondaryLabel, $"{series.Key}-secondary", series.SecondarySourceUrl);
         }
+        if (series.Key == "eureka")
+        {
+            ImGui.SameLine();
+            var monitorEureka = configuration.ShowEurekaMonitorInFloatingWindow;
+            if (ImGui.Checkbox("监控优武##eureka-floating-window", ref monitorEureka))
+            {
+                configuration.ShowEurekaMonitorInFloatingWindow = monitorEureka;
+                configuration.Save();
+            }
+        }
+
+        if (series.Key == "resistance")
+        {
+            ImGui.SameLine();
+            var monitorResistance = configuration.ShowResistanceMonitorInFloatingWindow;
+            if (ImGui.Checkbox("监控义武##resistance-floating-window", ref monitorResistance))
+            {
+                configuration.ShowResistanceMonitorInFloatingWindow = monitorResistance;
+                configuration.Save();
+            }
+        }
+
         if (series.Key == "zodiac")
         {
             ImGui.SameLine();
@@ -1991,6 +2015,15 @@ public sealed class PluginUI
             }
 
             DrawStage(stages[selectedIndex], zodiacRequirements, zodiacObjectives);
+            if (series.Key == "eureka")
+            {
+                DrawPityItems("eureka", stages[selectedIndex].Key);
+            }
+            else if (series.Key == "resistance")
+            {
+                DrawPityItems("resistance", stages[selectedIndex].Key);
+            }
+
             if (series.Key == "zodiac" && zodiacProgress != null)
             {
                 DrawZodiacObjectives(stages[selectedIndex].Key, zodiacProgress);
@@ -5833,6 +5866,8 @@ public sealed class PluginUI
             DrawSettingCard("悬浮窗", "显示或隐藏悬浮目标窗", configuration.ShowFloatingObjectiveWindow, "floating-window", value => configuration.ShowFloatingObjectiveWindow = value);
             DrawSettingCard("自动隐藏已完成项目", "减少悬浮窗中的已完成条目", configuration.AutoHideCompletedFloatingItems, "auto-hide", value => configuration.AutoHideCompletedFloatingItems = value);
             DrawSettingCard("古武监控", "在悬浮窗显示当前角色古武阶段进度", configuration.ShowZodiacMonitorInFloatingWindow, "zodiac-monitor", value => configuration.ShowZodiacMonitorInFloatingWindow = value);
+            DrawSettingCard("优武监控", "在悬浮窗显示所选阶段优武材料数量", configuration.ShowEurekaMonitorInFloatingWindow, "eureka-monitor", value => configuration.ShowEurekaMonitorInFloatingWindow = value);
+            DrawSettingCard("义武监控", "在悬浮窗显示所选阶段义武材料数量", configuration.ShowResistanceMonitorInFloatingWindow, "resistance-monitor", value => configuration.ShowResistanceMonitorInFloatingWindow = value);
             ImGui.EndTable();
         }
 
@@ -7955,7 +7990,7 @@ public sealed class PluginUI
         }
 
         ImGui.SetNextWindowSize(new Vector2(400f, 420f), ImGuiCond.FirstUseEver);
-        ImGui.SetNextWindowSizeConstraints(new Vector2(340f, 180f), new Vector2(float.MaxValue, float.MaxValue));
+        ImGui.SetNextWindowSizeConstraints(new Vector2(200f, 140f), new Vector2(float.MaxValue, float.MaxValue));
         var floatingOpen = configuration.ShowFloatingObjectiveWindow;
         if (!ImGui.Begin("肝武助手##floating-secret-targets", ref floatingOpen))
         {
@@ -7992,6 +8027,24 @@ public sealed class PluginUI
         if (configuration.ShowZodiacMonitorInFloatingWindow)
         {
             DrawFloatingZodiacMonitor();
+            if (configuration.ShowSecretTargetsInFloatingWindow || configuration.ShowSecretDutiesInFloatingWindow || configuration.ShowEurekaMonitorInFloatingWindow)
+            {
+                ImGui.Separator();
+            }
+        }
+
+        if (configuration.ShowEurekaMonitorInFloatingWindow)
+        {
+            DrawFloatingEurekaMonitor();
+            if (configuration.ShowSecretTargetsInFloatingWindow || configuration.ShowSecretDutiesInFloatingWindow || configuration.ShowResistanceMonitorInFloatingWindow)
+            {
+                ImGui.Separator();
+            }
+        }
+
+        if (configuration.ShowResistanceMonitorInFloatingWindow)
+        {
+            DrawFloatingResistanceMonitor();
             if (configuration.ShowSecretTargetsInFloatingWindow || configuration.ShowSecretDutiesInFloatingWindow)
             {
                 ImGui.Separator();
@@ -8147,6 +8200,126 @@ public sealed class PluginUI
             }
 
             DrawFloatingZodiacStageSummary(selectedStage.Key, progress);
+        }
+
+        ImGui.EndChild();
+    }
+
+    private void DrawFloatingEurekaMonitor()
+        => DrawFloatingMaterialsMonitor(
+            "eureka",
+            "优武监控",
+            "floating-eureka",
+            RelicWeaponGuide.EurekaProgressStages,
+            configuration.FloatingEurekaStageKey,
+            key => configuration.FloatingEurekaStageKey = key,
+            ref floatingEurekaMonitorOpen);
+
+    private void DrawFloatingResistanceMonitor()
+        => DrawFloatingMaterialsMonitor(
+            "resistance",
+            "义武监控",
+            "floating-resistance",
+            RelicWeaponGuide.ResistanceProgressStages,
+            configuration.FloatingResistanceStageKey,
+            key => configuration.FloatingResistanceStageKey = key,
+            ref floatingResistanceMonitorOpen);
+
+    private void DrawFloatingMaterialsMonitor(
+        string seriesKey,
+        string title,
+        string idPrefix,
+        IReadOnlyList<PhantomWeaponProgressStage> stages,
+        string currentStageKey,
+        Action<string> setStageKey,
+        ref bool open)
+    {
+        const string allKey = "__all";
+        var selectedStage = stages.FirstOrDefault(stage => stage.Key == currentStageKey);
+        if (selectedStage == null && currentStageKey != allKey)
+        {
+            selectedStage = stages[0];
+            setStageKey(selectedStage.Key);
+        }
+
+        var showAll = selectedStage == null || selectedStage.Key == allKey;
+        var selectedLabel = showAll ? "总进度" : selectedStage!.Name;
+
+        var items = PityItems.TryGetValue(seriesKey, out var allItems)
+            ? (showAll
+                ? allItems.ToArray()
+                : allItems.Where(item => string.Equals(item.SourceLabel, selectedStage!.Key, StringComparison.Ordinal)).ToArray())
+            : Array.Empty<PityItem>();
+        var monitorHeight = open
+            ? GetFloatingCardHeight(1 + Math.Max(items.Length, 1))
+            : GetCollapsedFloatingCardHeight();
+        if (ImGui.BeginChild($"{idPrefix}-monitor", new Vector2(-1f, monitorHeight), true, ImGuiWindowFlags.NoScrollbar))
+        {
+            if (DrawFloatingMonitorHeaderButton(title, $"{idPrefix}-monitor-header", new Vector4(0.35f, 0.88f, 0.82f, 1f)))
+            {
+                open = !open;
+            }
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip($"{title}\n选择阶段后显示该阶段所需的材料数量；选择“总进度”显示全部材料。点击标题可折叠或展开卡片。");
+            }
+
+            ImGui.SameLine();
+            ImGui.TextDisabled(open ? "收起" : "展开");
+            if (!open)
+            {
+                ImGui.EndChild();
+                return;
+            }
+
+            ImGui.SameLine();
+            ImGui.TextDisabled(selectedLabel);
+
+            ImGui.SetNextItemWidth(-1f);
+            if (ImGui.BeginCombo($"##{idPrefix}-stage", selectedLabel))
+            {
+                if (ImGui.Selectable($"总进度##{idPrefix}-stage-{allKey}", showAll))
+                {
+                    setStageKey(allKey);
+                    configuration.Save();
+                }
+
+                if (showAll) ImGui.SetItemDefaultFocus();
+
+                foreach (var stage in stages)
+                {
+                    var active = stage.Key == selectedStage?.Key;
+                    if (ImGui.Selectable($"{stage.Name}##{idPrefix}-stage-{stage.Key}", active))
+                    {
+                        setStageKey(stage.Key);
+                        configuration.Save();
+                    }
+
+                    if (active) ImGui.SetItemDefaultFocus();
+                }
+
+                ImGui.EndCombo();
+            }
+
+            if (items.Length == 0)
+            {
+                ImGui.TextDisabled("该阶段无材料。");
+            }
+            else
+            {
+                var quantities = GetLoadedItemQuantities(items.Select(item => item.ItemId));
+                foreach (var item in items)
+                {
+                    var quantity = quantities.GetValueOrDefault(item.ItemId);
+                    var stageKey = showAll ? item.SourceLabel : selectedStage!.Key;
+                    var required = Math.Max(0, GetTotalWeaponCount(seriesKey) - GetCompletedWeaponCount(seriesKey, stageKey));
+                    var need = item.Once ? item.Needed : required * item.Needed;
+                    var complete = need > 0 && quantity >= need;
+                    var color = complete ? new Vector4(0.54f, 0.94f, 0.76f, 1f) : new Vector4(0.88f, 0.90f, 0.94f, 1f);
+                    ImGui.TextColored(color, $"{item.Name}：{quantity}/{need}");
+                }
+            }
         }
 
         ImGui.EndChild();
@@ -8999,6 +9172,20 @@ public sealed class PluginUI
         if (ImGui.MenuItem("古武监控", string.Empty, monitorZodiac))
         {
             configuration.ShowZodiacMonitorInFloatingWindow = !monitorZodiac;
+            configuration.Save();
+        }
+
+        var monitorEureka = configuration.ShowEurekaMonitorInFloatingWindow;
+        if (ImGui.MenuItem("优武监控", string.Empty, monitorEureka))
+        {
+            configuration.ShowEurekaMonitorInFloatingWindow = !monitorEureka;
+            configuration.Save();
+        }
+
+        var monitorResistance = configuration.ShowResistanceMonitorInFloatingWindow;
+        if (ImGui.MenuItem("义武监控", string.Empty, monitorResistance))
+        {
+            configuration.ShowResistanceMonitorInFloatingWindow = !monitorResistance;
             configuration.Save();
         }
 

@@ -25,6 +25,10 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public int ZodiacFateNotificationRepeatCount { get; set; } = 3;
     public List<TrackedFate> TrackedFates { get; set; } = new();
     public bool ShowZodiacMonitorInFloatingWindow { get; set; } = true;
+    public bool ShowEurekaMonitorInFloatingWindow { get; set; } = true;
+    public string FloatingEurekaStageKey { get; set; } = "eureka-anemos";
+    public bool ShowResistanceMonitorInFloatingWindow { get; set; } = true;
+    public string FloatingResistanceStageKey { get; set; } = "resistance-base";
     public bool FateAssistantEnabled { get; set; }
     public bool AutoHideCompletedFloatingItems { get; set; } = true;
     public bool NavigateToFlagDirectly { get; set; } = true;
