@@ -2,6 +2,7 @@
 
 > 更新日期：2026-08-02 | 版本：0.1.12.0 | Git: `main`
 > 远程仓库：https://github.com/anmili2022/Phantom
+> 协作约定见根目录 `AGENTS.md`；新增联动活动按 `docs/add-collab-event.md` 步骤执行。
 
 ---
 
@@ -207,6 +208,9 @@ PhantomWeaponTarget  // 秘影目标
 - 幻影台同步（2026-10-11）：新增 `AddGlamourDresserItemIds()` 读取 `MirageManager.Instance().PrismBoxItemIds`（`PrismBoxLoaded` 为真时），并接入 `GetOwnedWeaponItemIds`（武器/改后同步）、`GetItemStorageLocations`（BIS/装备位置，标记为“幻影台”）与 `YokaiProgressService.GetCachedStorageItemIds`（联动奖励）。解决已存入幻影台（含套装幻影化）的装备无法同步的问题，无需 `/道具检索`。
 - 套装幻影化支持（2026-10-11）：套装化后棱晶盒 / 投影台缓存中该套装各件被替换为套装 `RowId`（`MirageStoreSetItem`，实测蟾蜍套装=45342）。读取投影台缓存 `ItemFinderModule.GlamourDresserItemIds` 与幻影台 `MirageManager.PrismBoxItemIds` 时**必须“套装优先”**：先 `MirageStoreSetItem.TryGetRow` 命中则展开十一个槽位物品计为拥有，未命中再按 `Item` 表当普通物品——因为 `Item` 表也存在同名套装占位物品（45342=「蟾蜍套装」），若先判物品会吞掉套装 id 永不展开。统一由 `AddDresserCacheItemId` / `AddSetItems`（PluginUI）与 `AddDresserCacheId`（YokaiProgressService）处理，覆盖同步与位置显示。
 - 导航区域与跨图修复（2026-10-11）：`VnavService` 定义 `CityTerritoryTypes` 白名单（三主城/金碟/伊修加德/黄金港/水晶都/旧萨雷安/拉扎罕/图莱尤拉），主城/金碟内不尝试上坐骑且强制步行；`QueueMountBeforeMove` 不再按 `fly` 决定是否上坐骑；`StartPathfind` 飞行被拒绝时自动改步行重试；跨地图传送进入目标地图即置 `pendingTeleportBegan=true`，跳过以太水晶 90y 距离门与 8 秒等待，修复换图后原地不动。`TerritoryIntendedUse` 不可靠（130=0、141=1），故改用 ID 白名单。
+- 联动活动新增流程文档（`docs/add-collab-event.md`）：以守护天节为模板，记录 Guide 类、Item/成就 ID 获取、配置字段、页签接入（`DrawIdBasedCollabContent`）、构建验证与文档维护的完整步骤。`AGENTS.md` 已要求新增/修改联动活动前先读该文档并严格按步骤执行。
+- 守护天节联动（2026-10）：新建 `Features/Collabs/GuardianFestivalCollabGuide.cs`（2026-10-15 16:00 ~ 2026-11-02 22:59，南瓜头女人任务 NPC 与守护天节的店员商铺 NPC，奖励按 `Item.RowId`：狰狞熊头套 `52402`、狰狞熊服 `52403`、瞪眼守夜菇 `51293`、狂笑守夜菇 `51292`、守夜鬼魂小车 `51294`、海报 `51304`/`51302`/`51303`，成就「找呀找呀找朋友 10」`3945`）；当前联动栏目新增「守护天节」页签；配置新增 `GuardianFestivalOwnedRewardKeysByCharacter`/`GuardianFestivalSyncTimesByCharacter`/`HideOwnedGuardianFestivalRewards`。
+- 格里达尼亚旧街导航（2026-10）：旧街（133）无主城以太水晶，`VnavService` 新增 `GridaniaRouteStep` 状态机：目标为旧街且不在 133 时，先到新街（132）主城大水晶 `2`（在 132 且 30 米外时重传送，期间不发起 `StartMove` 以免打断读条；用 `BetweenAreas`/Lifestream busy 判定传送真正开始，同图重传不产生 `BetweenAreas` 时 6 秒兜底），再以 Lifestream 小以太固定 ID `30`（米·凯特露天剧场）传送到旧街后导航目标。
 
 ---
 

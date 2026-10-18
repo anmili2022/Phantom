@@ -204,6 +204,7 @@ public sealed class PluginUI
     private IReadOnlyList<YokaiRewardProgress> ffxvResults = Array.Empty<YokaiRewardProgress>();
     private IReadOnlyList<YokaiRewardProgress> fallGuysResults = Array.Empty<YokaiRewardProgress>();
     private IReadOnlyList<YokaiRewardProgress> mogMogResults = Array.Empty<YokaiRewardProgress>();
+    private IReadOnlyList<YokaiRewardProgress> guardianFestivalResults = Array.Empty<YokaiRewardProgress>();
     private IReadOnlyList<YokaiRewardProgress> mogMogRareResults = Array.Empty<YokaiRewardProgress>();
     private bool collabTabInitialized;
     private string activeCollabTabKey = "yokai";
@@ -3376,6 +3377,29 @@ public sealed class PluginUI
         OpenUrl($"https://ff14.huijiwiki.com/wiki/{Uri.EscapeDataString(wikiTitle)}");
     }
 
+    private static void ExportGridaniaAetherytes()
+    {
+        var lines = new List<string> { "# Aetheryte.RowId|IsAetheryte|Territory|PlaceName|AethernetName" };
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
+        {
+            var territory = aetheryte.Territory.RowId;
+            if (territory is not (132 or 133))
+            {
+                continue;
+            }
+
+            var placeName = aetheryte.PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty;
+            var aethernetName = aetheryte.AethernetName.ValueNullable?.Name.ExtractText() ?? string.Empty;
+            lines.Add($"{aetheryte.RowId}|{aetheryte.IsAetheryte}|{territory}|{placeName}|{aethernetName}");
+        }
+
+        var output = string.Join(Environment.NewLine, lines);
+        var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "gridania-aetherytes.txt");
+        File.WriteAllText(path, output);
+        ImGui.SetClipboardText(output);
+        PrintChat($"已导出格里达尼亚以太水晶，文件：{path}");
+    }
+
     private unsafe void PrintPityQuantities()
     {
         var ids = new[] { 31573u, 31574u, 31575u, 30273u, 21801u };
@@ -4823,6 +4847,7 @@ public sealed class PluginUI
             ("ff15", "FF15联动", ff15Active),
             ("fallguys", "糖豆人", fallGuysActive),
             ("mogmog", "莫古莫古大收集", mogMogActive),
+            ("guardian", "守护天节", GuardianFestivalCollabGuide.IsEventActive(now)),
         };
 
         if (autoHide)
@@ -4883,6 +4908,10 @@ public sealed class PluginUI
                         DrawCollabEventBanner(MogMogCollabGuide.EventTimeText, mogMogActive);
                         DrawMogMogCollabContent();
                         break;
+                    case "guardian":
+                        DrawCollabEventBanner(GuardianFestivalCollabGuide.EventTimeText, GuardianFestivalCollabGuide.IsEventActive(now));
+                        DrawGuardianFestivalCollabContent();
+                        break;
                 }
 
                 ImGui.EndTabItem();
@@ -4908,6 +4937,38 @@ public sealed class PluginUI
     {
         var color = active ? new Vector4(0.45f, 0.95f, 0.55f, 1f) : new Vector4(1f, 0.72f, 0.28f, 1f);
         ImGui.TextColored(color, $"活动时间：{eventTimeText}　{(active ? "进行中" : "未开放")}");
+    }
+
+    private void DrawGuardianFestivalCollabContent()
+    {
+        DrawIdBasedCollabContent(
+            idPrefix: "guardian",
+            label: "守护天节",
+            rewards: GuardianFestivalCollabGuide.Rewards,
+            npcs: GuardianFestivalCollabGuide.Npcs,
+            achievements: GuardianFestivalCollabGuide.Achievements,
+            categories:
+            [
+                GuardianFestivalCollabGuide.FashionCategory,
+                GuardianFestivalCollabGuide.FurnitureCategory,
+                GuardianFestivalCollabGuide.MiscCategory,
+            ],
+            summaryCategories: [GuardianFestivalCollabGuide.FashionCategory],
+            wikiUrl: GuardianFestivalCollabGuide.WikiUrl,
+            wikiButtonLabel: "打开守护天节Wiki",
+            introTitle: "参与方式：",
+            introLines:
+            [
+                "活动期间前往米·凯特露天剧场找「南瓜头女人」接取任务「守护天节与奇妙的人偶们」（全职业 15 级）。",
+                "完成任务可获得狰狞熊头套与狰狞熊服；往期道具可在季节商铺「守护天节的店员」处用金币兑换。",
+            ],
+            getResults: () => guardianFestivalResults,
+            setResults: value => guardianFestivalResults = value,
+            ownedKeys: configuration.GuardianFestivalOwnedRewardKeysByCharacter,
+            syncTimes: configuration.GuardianFestivalSyncTimesByCharacter,
+            getHide: () => configuration.HideOwnedGuardianFestivalRewards,
+            setHide: value => configuration.HideOwnedGuardianFestivalRewards = value,
+            syncTooltip: "扫描当前角色已加载的背包、关键道具、装备栏和完整兵装库，统计守护天节奖励。已同步结果按角色 ContentId 保存。");
     }
 
     private void DrawCollabNpcButtons(IReadOnlyList<CollabNpc> npcs, string idPrefix)
@@ -6358,6 +6419,7 @@ public sealed class PluginUI
         if (DrawWrappedButton("导出道具检索##debug-export-itemfinder", "导出道具检索", ref firstInRow)) ExportItemFinderDump();
         if (DrawWrappedButton("导出低保Item.RowId##debug-export-pity-ids", "导出低保Item.RowId", ref firstInRow)) ExportPityItemIds();
         if (DrawWrappedButton("查询材料数量##debug-print-pity-qty", "查询材料数量", ref firstInRow)) PrintPityQuantities();
+        if (DrawWrappedButton("导出以太水晶##debug-export-aetherytes", "导出以太水晶", ref firstInRow)) ExportGridaniaAetherytes();
         if (DrawWrappedButton("导出投影台缓存##debug-export-dresser-cache", "导出投影台缓存", ref firstInRow)) ExportGlamourDresserCache();
         if (DrawWrappedButton("读取道具检索##debug-print-itemfinder", "读取道具检索", ref firstInRow))
         {
@@ -6647,6 +6709,15 @@ public sealed class PluginUI
             (Series: "探查", RequestedName: "碳化油", SearchTerms: new[] { "碳化油", "硬化" }),
             (Series: "探查", RequestedName: "附魔剂", SearchTerms: new[] { "附魔剂", "高效率", "高效" }),
             (Series: "探查", RequestedName: "叁型魔晶石", SearchTerms: new[] { "叁型" }),
+            (Series: "守护天节", RequestedName: "狰狞熊头套", SearchTerms: new[] { "狰狞熊头套" }),
+            (Series: "守护天节", RequestedName: "狰狞熊服", SearchTerms: new[] { "狰狞熊服" }),
+            (Series: "守护天节", RequestedName: "魔法棱晶（南瓜头）", SearchTerms: new[] { "魔法棱晶", "南瓜头" }),
+            (Series: "守护天节", RequestedName: "瞪眼守夜菇", SearchTerms: new[] { "瞪眼守夜菇" }),
+            (Series: "守护天节", RequestedName: "狂笑守夜菇", SearchTerms: new[] { "狂笑守夜菇" }),
+            (Series: "守护天节", RequestedName: "守夜鬼魂小车", SearchTerms: new[] { "守夜鬼魂小车" }),
+            (Series: "守护天节", RequestedName: "守护天节海报2017", SearchTerms: new[] { "守护天节海报", "2017" }),
+            (Series: "守护天节", RequestedName: "守护天节海报2025-2", SearchTerms: new[] { "守护天节海报", "2025" }),
+            (Series: "守护天节", RequestedName: "守护天节桌面海报2025-2", SearchTerms: new[] { "桌面海报", "2025" }),
         };
 
         try
@@ -8276,6 +8347,17 @@ public sealed class PluginUI
             ImGui.SameLine();
             ImGui.TextDisabled(selectedLabel);
 
+            TrySameLineRight(GetButtonWidth("同步"));
+            if (ImGui.SmallButton($"同步##{idPrefix}-sync"))
+            {
+                SyncRelicSeries(seriesKey);
+            }
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip("同步当前角色：扫描背包、兵装库、装备栏及已加载的雇员/鞍囊/投影台缓存。");
+            }
+
             ImGui.SetNextItemWidth(-1f);
             if (ImGui.BeginCombo($"##{idPrefix}-stage", selectedLabel))
             {
@@ -8323,6 +8405,28 @@ public sealed class PluginUI
         }
 
         ImGui.EndChild();
+    }
+
+    private void SyncRelicSeries(string seriesKey)
+    {
+        var characterKey = GetCurrentCharacterKey();
+        if (characterKey.Length == 0)
+        {
+            return;
+        }
+
+        (IReadOnlyList<PhantomWeaponJob> Jobs, IReadOnlyList<PhantomWeaponProgressStage> Stages, IReadOnlyDictionary<(string JobKey, string StageKey), IReadOnlyList<Item>> Lookup)? data = seriesKey switch
+        {
+            "eureka" => (RelicWeaponGuide.EurekaWeaponJobs, RelicWeaponGuide.EurekaProgressStages, GetEurekaWeaponItemLookup()),
+            "resistance" => (RelicWeaponGuide.ResistanceWeaponJobs, RelicWeaponGuide.ResistanceProgressStages, GetResistanceWeaponItemLookup()),
+            _ => null,
+        };
+        if (data == null)
+        {
+            return;
+        }
+
+        SyncCurrentCharacterWeaponProgress(characterKey, seriesKey, data.Value.Jobs, data.Value.Stages, data.Value.Lookup);
     }
 
     private static bool DrawFloatingMonitorHeaderButton(string label, string id, Vector4 textColor)

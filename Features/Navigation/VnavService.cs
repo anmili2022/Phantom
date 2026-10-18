@@ -16,6 +16,9 @@ namespace Phantom;
 public sealed class VnavService : IDisposable
 {
     private const uint EasternLaNosceaTerritoryType = 137;
+    private const uint NewGridaniaTerritoryType = 132;
+    private const uint OldGridaniaTerritoryType = 133;
+    private const uint OldGridaniaMihKhettoAethernetId = 30;
     private const uint TuliyollalTerritoryType = 1185;
     private const uint OccultVillageTerritoryType = 1278;
     private const uint TuliyollalAetheryteId = 216;
@@ -52,6 +55,9 @@ public sealed class VnavService : IDisposable
     private ICallGateSubscriber<uint>? getActiveAetheryte;
     private Vector3? pendingTarget;
     private uint pendingTerritoryType;
+    private uint pendingSecondAethernetId;
+    private bool pendingSecondAethernetDone;
+    private uint pendingFinalTerritoryType;
     private Vector3? pendingAetherytePosition;
     private bool pendingFly;
     private bool pendingAutoDismount = true;
@@ -77,6 +83,20 @@ public sealed class VnavService : IDisposable
         None,
         WaitingTuliyollal,
         WaitingOccultVillageAethernet,
+        MovingToDestination,
+    }
+
+    private GridaniaRouteStep gridaniaRouteStep;
+    private DateTime gridaniaRouteStepStartedUtc;
+    private Vector3 gridaniaRouteFinalTarget;
+    private bool gridaniaTeleportObserved;
+
+    private enum GridaniaRouteStep
+    {
+        None,
+        TeleportingToNewGridania,
+        WalkingToAetheryte,
+        UsingAethernet,
         MovingToDestination,
     }
 
@@ -298,6 +318,12 @@ public sealed class VnavService : IDisposable
         var territoryType = map.TerritoryType.RowId;
         var fly = configuration.UseFlightNavigation && !IsCityTerritory(territoryType);
         TrySetMapFlag(territoryType, map.RowId, position);
+
+        if (territoryType == OldGridaniaTerritoryType && DalamudApi.ClientState.TerritoryType != OldGridaniaTerritoryType)
+        {
+            return StartGridaniaRoute(position);
+        }
+
         if (DalamudApi.ClientState.TerritoryType != territoryType)
         {
             return TryTeleportToTerritory(territoryType, position, fly);
@@ -740,6 +766,22 @@ public sealed class VnavService : IDisposable
 
         try { stop.InvokeAction(); } catch { }
 
+        var arrivalTerritory = territoryType;
+        var secondAethernetId = 0u;
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
+        {
+            if (aetheryte.RowId == aetheryteId)
+            {
+                arrivalTerritory = aetheryte.Territory.RowId;
+                break;
+            }
+        }
+
+        if (arrivalTerritory != territoryType)
+        {
+            secondAethernetId = FindNearestAethernetForTerritory(territoryType, target);
+        }
+
         try
         {
             if (!teleport.InvokeFunc(aetheryteId, 0))
@@ -757,7 +799,10 @@ public sealed class VnavService : IDisposable
         }
 
         pendingTarget = target;
-        pendingTerritoryType = territoryType;
+        pendingTerritoryType = arrivalTerritory;
+        pendingFinalTerritoryType = territoryType;
+        pendingSecondAethernetId = secondAethernetId;
+        pendingSecondAethernetDone = false;
         pendingAetherytePosition = TryFindAetherytePosition(aetheryteId, out var aetherytePosition) ? aetherytePosition : null;
         pendingFly = fly;
         pendingElevation = Math.Clamp(elevation, 0f, 200f);
@@ -766,6 +811,303 @@ public sealed class VnavService : IDisposable
         pendingStartedUtc = DateTime.UtcNow;
         PrintEcho($"已请求传送到目标地图 {territoryType}，等待读图完成后继续导航。 ");
         return true;
+    }
+
+    private static uint FindNearestAethernetForTerritory(uint territoryType, Vector3 target)
+    {
+        var nearestId = 0u;
+        var nearestDistance = float.MaxValue;
+        var fallbackId = 0u;
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
+        {
+            if (aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryType)
+            {
+                continue;
+            }
+
+            if (fallbackId == 0)
+            {
+                fallbackId = aetheryte.RowId;
+            }
+
+            if (!TryResolveAetheryteRawPosition(aetheryte, out var position))
+            {
+                continue;
+            }
+
+            var distance = Vector2.Distance(new Vector2(position.X, position.Z), new Vector2(target.X, target.Z));
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                nearestId = aetheryte.RowId;
+            }
+        }
+
+        return nearestId != 0 ? nearestId : fallbackId;
+    }
+
+    private bool StartGridaniaRoute(Vector3 finalTarget)
+    {
+        if (!EnsureLifestreamIpc() || teleport == null)
+        {
+            PrintEcho("导航失败：Lifestream 不可用。 ");
+            return false;
+        }
+
+        gridaniaRouteFinalTarget = finalTarget;
+        gridaniaRouteStepStartedUtc = DateTime.UtcNow;
+
+        if (DalamudApi.ClientState.TerritoryType == NewGridaniaTerritoryType && IsPlayerNearAetheryte(NewGridaniaTerritoryType, 30f))
+        {
+            gridaniaRouteStep = GridaniaRouteStep.WalkingToAetheryte;
+            PrintEcho("已在新街大水晶附近，步行前往大水晶。 ");
+            StartGridaniaWalkToAetheryte();
+            return true;
+        }
+
+        var mainAetheryteId = FindAetheryteForTerritory(NewGridaniaTerritoryType);
+        if (mainAetheryteId == 0)
+        {
+            PrintEcho("导航失败：未找到格里达尼亚新街的以太水晶。 ");
+            return false;
+        }
+
+        try { stop.InvokeAction(); } catch { }
+        try
+        {
+            if (!teleport.InvokeFunc(mainAetheryteId, 0))
+            {
+                PrintEcho("导航失败：无法传送到格里达尼亚新街。 ");
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            PrintEcho($"Lifestream IPC 失败：{ex.Message}");
+            return false;
+        }
+
+        gridaniaRouteStep = GridaniaRouteStep.TeleportingToNewGridania;
+        gridaniaTeleportObserved = false;
+        PrintEcho("已请求传送到格里达尼亚新街，等待读图。 ");
+        return true;
+    }
+
+    private void ProcessGridaniaRoute()
+    {
+        if (gridaniaRouteStep == GridaniaRouteStep.None)
+        {
+            return;
+        }
+
+        if (DateTime.UtcNow - gridaniaRouteStepStartedUtc > TimeSpan.FromSeconds(120))
+        {
+            PrintEcho("格里达尼亚旧街导航超时，已取消流程。 ");
+            gridaniaRouteStep = GridaniaRouteStep.None;
+            return;
+        }
+
+        if (DalamudApi.Condition[ConditionFlag.BetweenAreas] || DalamudApi.Condition[ConditionFlag.BetweenAreas51])
+        {
+            return;
+        }
+
+        switch (gridaniaRouteStep)
+        {
+            case GridaniaRouteStep.TeleportingToNewGridania:
+                var betweenAreas = DalamudApi.Condition[ConditionFlag.BetweenAreas]
+                    || DalamudApi.Condition[ConditionFlag.BetweenAreas51];
+                if (betweenAreas || lifestreamIsBusy?.InvokeFunc() == true)
+                {
+                    gridaniaTeleportObserved = true;
+                    return;
+                }
+
+                if (!gridaniaTeleportObserved)
+                {
+                    // 同图传送（已在 132 时重传大水晶）可能不产生 BetweenAreas；
+                    // 等待较短时间后视为已到达，避免永久卡住。
+                    if (DateTime.UtcNow - gridaniaRouteStepStartedUtc < TimeSpan.FromSeconds(6))
+                    {
+                        return;
+                    }
+                }
+
+                if (DalamudApi.ClientState.TerritoryType != NewGridaniaTerritoryType)
+                {
+                    return;
+                }
+
+                if (DateTime.UtcNow - gridaniaRouteStepStartedUtc < TimeSpan.FromSeconds(2))
+                {
+                    return;
+                }
+
+                if (IsPlayerNearAetheryte(NewGridaniaTerritoryType, 30f))
+                {
+                    gridaniaRouteStep = GridaniaRouteStep.UsingAethernet;
+                    gridaniaRouteStepStartedUtc = DateTime.UtcNow;
+                    PrintEcho("已到达格里达尼亚新街大水晶，准备前往旧街。 ");
+                }
+                else
+                {
+                    gridaniaRouteStep = GridaniaRouteStep.WalkingToAetheryte;
+                    gridaniaRouteStepStartedUtc = DateTime.UtcNow;
+                    PrintEcho("已到达格里达尼亚新街，步行前往大水晶。 ");
+                    StartGridaniaWalkToAetheryte();
+                }
+                break;
+
+            case GridaniaRouteStep.WalkingToAetheryte:
+                if (DalamudApi.ClientState.TerritoryType != NewGridaniaTerritoryType)
+                {
+                    return;
+                }
+
+                if (!IsPlayerNearAetheryte(NewGridaniaTerritoryType, 4f))
+                {
+                    return;
+                }
+
+                gridaniaRouteStep = GridaniaRouteStep.UsingAethernet;
+                gridaniaRouteStepStartedUtc = DateTime.UtcNow;
+                break;
+
+            case GridaniaRouteStep.UsingAethernet:
+                if (lifestreamIsBusy?.InvokeFunc() == true)
+                {
+                    return;
+                }
+
+                var aethernetId = OldGridaniaMihKhettoAethernetId;
+                if (aethernetTeleportById == null)
+                {
+                    PrintEcho("导航失败：Lifestream 不可用。 ");
+                    gridaniaRouteStep = GridaniaRouteStep.None;
+                    return;
+                }
+
+                try
+                {
+                    if (!aethernetTeleportById.InvokeFunc(aethernetId))
+                    {
+                        return;
+                    }
+                }
+                catch
+                {
+                    return;
+                }
+
+                gridaniaRouteStep = GridaniaRouteStep.MovingToDestination;
+                gridaniaRouteStepStartedUtc = DateTime.UtcNow;
+                PrintEcho("已通过大水晶前往格里达尼亚旧街，等待读图后导航到目标。 ");
+                break;
+
+            case GridaniaRouteStep.MovingToDestination:
+                if (lifestreamIsBusy?.InvokeFunc() == true)
+                {
+                    return;
+                }
+
+                if (DalamudApi.ClientState.TerritoryType != OldGridaniaTerritoryType)
+                {
+                    return;
+                }
+
+                if (DateTime.UtcNow - gridaniaRouteStepStartedUtc < TimeSpan.FromSeconds(2))
+                {
+                    return;
+                }
+
+                var player = DalamudApi.ObjectTable.LocalPlayer;
+                if (player == null)
+                {
+                    return;
+                }
+
+                var target = gridaniaRouteFinalTarget with { Y = player.Position.Y };
+                var snapped = SnapToNavmesh(target);
+                if (!snapped.HasValue)
+                {
+                    return;
+                }
+
+                gridaniaRouteStep = GridaniaRouteStep.None;
+                StartMove(snapped.Value, false);
+                PrintEcho("已到达格里达尼亚旧街，开始导航到目标。 ");
+                break;
+        }
+    }
+
+    private void StartGridaniaWalkToAetheryte()
+    {
+        var aetherytePosition = FindAetheryteWorldPosition(NewGridaniaTerritoryType);
+        if (aetherytePosition == null)
+        {
+            PrintEcho("导航失败：无法解析新街大水晶坐标。 ");
+            return;
+        }
+
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        var aetheryte = aetherytePosition.Value;
+        Vector3? snapped = null;
+        if (player != null)
+        {
+            var from = new Vector2(player.Position.X, player.Position.Z);
+            var to = new Vector2(aetheryte.X, aetheryte.Z);
+            for (var step = 0; step <= 10 && !snapped.HasValue; step++)
+            {
+                var t = step / 10f;
+                var x = to.X + (from.X - to.X) * t;
+                var z = to.Y + (from.Y - to.Y) * t;
+                snapped = SnapToNavmesh(new Vector3(x, player.Position.Y, z));
+            }
+        }
+        else
+        {
+            snapped = SnapToNavmesh(aetheryte with { Y = aetheryte.Y });
+        }
+
+        if (!snapped.HasValue)
+        {
+            PrintEcho("导航失败：新街大水晶附近没有可行走网格。 ");
+            return;
+        }
+
+        StartMove(snapped.Value, false);
+    }
+
+    private static Vector3? FindAetheryteWorldPosition(uint territoryType)
+    {
+        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
+        {
+            if (!aetheryte.IsAetheryte || aetheryte.Territory.RowId != territoryType)
+            {
+                continue;
+            }
+
+            if (TryResolveAetheryteRawPosition(aetheryte, out var position))
+            {
+                return position;
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsPlayerNearAetheryte(uint territoryType, float radius)
+    {
+        var aetherytePosition = FindAetheryteWorldPosition(territoryType);
+        var player = DalamudApi.ObjectTable.LocalPlayer;
+        if (aetherytePosition == null || player == null)
+        {
+            return false;
+        }
+
+        var playerXZ = new Vector2(player.Position.X, player.Position.Z);
+        var aetheryteXZ = new Vector2(aetherytePosition.Value.X, aetherytePosition.Value.Z);
+        return Vector2.Distance(playerXZ, aetheryteXZ) <= radius;
     }
 
     private static uint FindAetheryteForTerritory(uint territoryType)
@@ -868,6 +1210,12 @@ public sealed class VnavService : IDisposable
             }
         }
 
+        if (territoryType == OldGridaniaTerritoryType)
+        {
+            // 格里达尼亚旧街只有小以太点，主城以太水晶（2）位于新街（132），传送到新街后再前往旧街。
+            return FindAetheryteByName(NewGridaniaTerritoryType, "格里达尼亚");
+        }
+
         return FindNearestAetheryteForTerritory(territoryType, target);
     }
 
@@ -889,6 +1237,7 @@ public sealed class VnavService : IDisposable
     {
         _ = framework;
         ProcessOccultVillageRoute();
+        ProcessGridaniaRoute();
         ProcessPendingMove();
         ProcessActiveMove();
 
@@ -906,6 +1255,9 @@ public sealed class VnavService : IDisposable
         {
             pendingTarget = null;
             pendingTerritoryType = 0;
+            pendingFinalTerritoryType = 0;
+            pendingSecondAethernetId = 0;
+            pendingSecondAethernetDone = false;
             pendingAetherytePosition = null;
             pendingTeleportBegan = false;
             DalamudApi.Log.Warning("Timed out waiting for Lifestream teleport before vnavmesh navigation.");
@@ -915,6 +1267,33 @@ public sealed class VnavService : IDisposable
 
         if (pendingTerritoryType != 0 && DalamudApi.ClientState.TerritoryType != pendingTerritoryType)
         {
+            return;
+        }
+
+        if (pendingSecondAethernetId != 0 && !pendingSecondAethernetDone)
+        {
+            if (DalamudApi.Condition[ConditionFlag.BetweenAreas]
+                || DalamudApi.Condition[ConditionFlag.BetweenAreas51])
+            {
+                return;
+            }
+
+            try
+            {
+                if (aethernetTeleportById?.InvokeFunc(pendingSecondAethernetId) == true)
+                {
+                    pendingSecondAethernetDone = true;
+                    pendingTerritoryType = pendingFinalTerritoryType;
+                    pendingAetherytePosition = null;
+                    pendingTeleportBegan = false;
+                    pendingStartedUtc = DateTime.UtcNow;
+                }
+            }
+            catch
+            {
+                // Retry on the next frame.
+            }
+
             return;
         }
 
@@ -985,6 +1364,9 @@ public sealed class VnavService : IDisposable
 
         pendingTarget = null;
         pendingTerritoryType = 0;
+        pendingFinalTerritoryType = 0;
+        pendingSecondAethernetId = 0;
+        pendingSecondAethernetDone = false;
         pendingAetherytePosition = null;
         pendingElevation = 0f;
         pendingAutoDismount = true;
@@ -1009,7 +1391,8 @@ public sealed class VnavService : IDisposable
             if (!aethernetTeleportById.InvokeFunc(OccultVillageAethernetId))
             {
                 PrintEcho("前往幻境村失败：Lifestream 没有开始传送到幻境村。 ");
-                occultRouteStep = OccultVillageRouteStep.None;
+        occultRouteStep = OccultVillageRouteStep.None;
+        gridaniaRouteStep = GridaniaRouteStep.None;
                 return;
             }
         }

@@ -94,7 +94,8 @@
 - 总览页按当前角色汇总职业收藏、绝武收藏、联动奖励、雇员缓存覆盖和各系列完成度，支持一键同步全部系列。
 - 武器同步除扫描当前可读取的物品外，还读取内置成就映射对应的 `Achievement.RowId`；当前物品命中或历史成就已解锁均判定为该职业阶段曾经拥有。成就来源在阶段卡片上显示“成就”，悬停提示显示“成就已解锁，判定为曾经拥有”，不伪装成当前 Item.RowId。
 - 各系列武器进度页支持按职业分组、物品图标、角色维度保存和库存自动同步。
-- 当前联动页面为“妖表”和“FF15联动”两个页签，顶部显示各联动活动起止日期与进行中/未开放状态；默认打开活动期内的联动页签，选择持久化到 `SelectedCollabTabKey`。
+- 当前联动页面为“妖表”“FF15联动”“糖豆人”“莫古莫古大收集”“守护天节”页签，顶部显示各联动活动起止日期与进行中/未开放状态；默认打开活动期内的联动页签，选择持久化到 `SelectedCollabTabKey`。新增联动活动的完整步骤见 `docs/add-collab-event.md`。
+- 守护天节（`GuardianFestivalCollabGuide`）：活动时间 2026-10-15 16:00 ~ 2026-11-02 22:59；NPC 为米·凯特露天剧场的「南瓜头女人」（接任务）与「守护天节的店员」（季节商铺）；奖励按外观/家具/其他分类，含任务奖励狰狞熊头套 `52402`、狰狞熊服 `52403` 及用金币兑换的往期家具，成就「找呀找呀找朋友 10」`3945`；每日同步、隐藏已获得与右键 Wiki 复用通用联动实现 `DrawIdBasedCollabContent`。
 - 妖表联动奖励扫描，支持隐藏已获得奖励、投影台缓存状态、按类别展示和 NPC 导航按钮；奖励物品右键打开灰机 Wiki 对应物品页面。
 - 妖表坐骑“地缚猫沙发”使用固定 `MountId = 228` 检查解锁状态，避免仅依赖物品表中的坐骑道具关联数据。
 - FF15 联动全部按物品 `Item.RowId` 匹配（不使用名称片段），覆盖时装 4 件、坐骑、发型、九宫幻卡和 6 张乐谱；坐骑通过 `ItemAction = 1322` 与坐骑名回查双重判定解锁状态。
@@ -190,7 +191,8 @@
 - `FfxvOwnedRewardKeysByCharacter` / `FfxvSyncTimesByCharacter`：按角色维度保存 FF15 联动奖励和同步时间。
 - `FallGuysOwnedRewardKeysByCharacter` / `FallGuysSyncTimesByCharacter`：按角色维度保存糖豆人联动奖励和同步时间。
 - `MogMogOwnedRewardKeysByCharacter` / `MogMogSyncTimesByCharacter`：按角色维度保存莫古莫古大收集奖励和同步时间。
-- `SelectedCollabTabKey`：当前联动栏目选中的页签（`yokai` / `ff15` / `fallguys` / `mogmog`），未记录时按活动期默认。
+- `GuardianFestivalOwnedRewardKeysByCharacter` / `GuardianFestivalSyncTimesByCharacter`：按角色维度保存守护天节奖励和同步时间；`HideOwnedGuardianFestivalRewards` 控制隐藏已获得。
+- `SelectedCollabTabKey`：当前联动栏目选中的页签（`yokai` / `ff15` / `fallguys` / `mogmog` / `guardian`），未记录时按活动期默认。
 - `MogMogRareShowCn` / `MogMogRareShowGlobal`：稀有兑换内容一览的国服（默认开）与国际服（默认关）过滤开关。
 - `AutoHideExpiredCollabs`：是否自动隐藏已过期联动页签，默认开启。
 - `ZodiacProgressByCharacter`：按角色、职业保存古武制作进度；材料数值写入 `RequirementProgress`，任务/目标勾选写入 `CompletedObjectives`。

@@ -61,6 +61,9 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public Dictionary<string, string> FallGuysSyncTimesByCharacter { get; set; } = new();
     public Dictionary<string, List<string>> MogMogOwnedRewardKeysByCharacter { get; set; } = new();
     public Dictionary<string, string> MogMogSyncTimesByCharacter { get; set; } = new();
+    public bool HideOwnedGuardianFestivalRewards { get; set; }
+    public Dictionary<string, List<string>> GuardianFestivalOwnedRewardKeysByCharacter { get; set; } = new();
+    public Dictionary<string, string> GuardianFestivalSyncTimesByCharacter { get; set; } = new();
     public string? SelectedCollabTabKey { get; set; }
     public Dictionary<string, ZodiacCharacterProgress> ZodiacProgressByCharacter { get; set; } = new();
     public string SelectedZodiacJobKey { get; set; } = "pld";
