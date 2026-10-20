@@ -204,13 +204,14 @@ PhantomWeaponTarget  // 秘影目标
 - 糖豆人调整（2026-10-11）：移除家具类统计（原 6 件家具），奖励 22→16 条；成就补齐“勇夺桂冠”四档 `3404/3405/3406/3407`。
 - DEBUG 查询合并（2026-10-11）：原“物品ID查询”“成就ID查询”合并为单个 `DrawCollabDebugSearch()`，同时查 `Item`（按 `ItemUICategory` 自动分类）与 `Achievement`，结果按类型分组，复制格式为 `类型 名称 ID`。该查询已从当前联动页签移到「设置」页「同步」区域。
 - 古武理符 NPC 校正（2026-10-11）：用一次性按钮「收集古武理符NPC」导出 9 本黄道文书 27 条理符的 `Leve.RowId` 与接取 NPC 核对；`ZodiacGuide.LeveIdsByName` 固化 23 条（去重后）理符名→Leve ID 映射，`ZodiacLeveObjective` 新增 `LeveId` 字段；修正「索敌指令：潜伏在库尔札斯的通缉犯」NPC 为洛蒂耶（洛蒂耶白名单补「通缉犯」）。坐标沿用现有手工值，不做换算。
-- 设置页「同步」调试按钮精简：仅保留「收集古武理符NPC」「读取当前坐标」「解析地图参数」「打开 Wiki」，其余导出按钮移除（相关方法暂留）。
+- 设置页「同步」调试按钮精简：当前保留「收集古武理符NPC」「导出低保Item.RowId」「导出优武强化ID」「读取当前坐标」「解析地图参数」「打开 Wiki」；「导出道具检索」「读取道具检索」「查询材料数量」「导出以太水晶」「导出投影台缓存」的按钮已移除（相关方法已删除或暂留）。仍缺的固定 Item.RowId 候选：`叁型魔晶石`、`亚历山大石`、`黄道十二文书`、`发光水晶`、`魔法橡胶`、`快速硬化碳化油`、`高效古代附魔剂`（古武/魂武材料，等有人反馈再补；`文理技能图鉴` 非物品）。
 - 幻影台同步（2026-10-11）：新增 `AddGlamourDresserItemIds()` 读取 `MirageManager.Instance().PrismBoxItemIds`（`PrismBoxLoaded` 为真时），并接入 `GetOwnedWeaponItemIds`（武器/改后同步）、`GetItemStorageLocations`（BIS/装备位置，标记为“幻影台”）与 `YokaiProgressService.GetCachedStorageItemIds`（联动奖励）。解决已存入幻影台（含套装幻影化）的装备无法同步的问题，无需 `/道具检索`。
 - 套装幻影化支持（2026-10-11）：套装化后棱晶盒 / 投影台缓存中该套装各件被替换为套装 `RowId`（`MirageStoreSetItem`，实测蟾蜍套装=45342）。读取投影台缓存 `ItemFinderModule.GlamourDresserItemIds` 与幻影台 `MirageManager.PrismBoxItemIds` 时**必须“套装优先”**：先 `MirageStoreSetItem.TryGetRow` 命中则展开十一个槽位物品计为拥有，未命中再按 `Item` 表当普通物品——因为 `Item` 表也存在同名套装占位物品（45342=「蟾蜍套装」），若先判物品会吞掉套装 id 永不展开。统一由 `AddDresserCacheItemId` / `AddSetItems`（PluginUI）与 `AddDresserCacheId`（YokaiProgressService）处理，覆盖同步与位置显示。
 - 导航区域与跨图修复（2026-10-11）：`VnavService` 定义 `CityTerritoryTypes` 白名单（三主城/金碟/伊修加德/黄金港/水晶都/旧萨雷安/拉扎罕/图莱尤拉），主城/金碟内不尝试上坐骑且强制步行；`QueueMountBeforeMove` 不再按 `fly` 决定是否上坐骑；`StartPathfind` 飞行被拒绝时自动改步行重试；跨地图传送进入目标地图即置 `pendingTeleportBegan=true`，跳过以太水晶 90y 距离门与 8 秒等待，修复换图后原地不动。`TerritoryIntendedUse` 不可靠（130=0、141=1），故改用 ID 白名单。
 - 联动活动新增流程文档（`docs/add-collab-event.md`）：以守护天节为模板，记录 Guide 类、Item/成就 ID 获取、配置字段、页签接入（`DrawIdBasedCollabContent`）、构建验证与文档维护的完整步骤。`AGENTS.md` 已要求新增/修改联动活动前先读该文档并严格按步骤执行。
 - 守护天节联动（2026-10）：新建 `Features/Collabs/GuardianFestivalCollabGuide.cs`（2026-10-15 16:00 ~ 2026-11-02 22:59，南瓜头女人任务 NPC 与守护天节的店员商铺 NPC，奖励按 `Item.RowId`：狰狞熊头套 `52402`、狰狞熊服 `52403`、瞪眼守夜菇 `51293`、狂笑守夜菇 `51292`、守夜鬼魂小车 `51294`、海报 `51304`/`51302`/`51303`，成就「找呀找呀找朋友 10」`3945`）；当前联动栏目新增「守护天节」页签；配置新增 `GuardianFestivalOwnedRewardKeysByCharacter`/`GuardianFestivalSyncTimesByCharacter`/`HideOwnedGuardianFestivalRewards`。
 - 格里达尼亚旧街导航（2026-10）：旧街（133）无主城以太水晶，`VnavService` 新增 `GridaniaRouteStep` 状态机：目标为旧街且不在 133 时，先到新街（132）主城大水晶 `2`（在 132 且 30 米外时重传送，期间不发起 `StartMove` 以免打断读条；用 `BetweenAreas`/Lifestream busy 判定传送真正开始，同图重传不产生 `BetweenAreas` 时 6 秒兜底），再以 Lifestream 小以太固定 ID `30`（米·凯特露天剧场）传送到旧街后导航目标。
+- 优武中间形态识别（2026-10）：`weapon-item-ids.txt` 的 eureka 映射按“同一强化阶段”补全该阶段全部武器形态（常风：禁地兵装/+1/+2/·常风；恒冰：·恒冰/·恒冰+1/·元素；涌火：·元素+1/·元素+2/·涌火；丰水：基础形态/·优雷卡；补正：·改）。`IsStageOwned` 对优武取“任一持有”，`GetHighestSyncedStage` 取最高阶段，武器进度条按累计点亮，修复玩家升到中间形态后不再持有基础形态导致进度显示为 0 的问题。阶段归组依据灰机 wiki「禁地兵装」页的强化材料表。新增一次性 DEBUG 按钮「导出优武强化ID」（按武器 token 全量列出整条链），确认后可移除。
 
 ---
 

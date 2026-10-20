@@ -1,4 +1,4 @@
-using Dalamud.Bindings.ImGui;
+﻿using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Fates;
 using Dalamud.Interface;
 using Dalamud.Interface.Internal;
@@ -3377,47 +3377,82 @@ public sealed class PluginUI
         OpenUrl($"https://ff14.huijiwiki.com/wiki/{Uri.EscapeDataString(wikiTitle)}");
     }
 
-    private static void ExportGridaniaAetherytes()
+    private static void ExportEurekaUpgradeItemIds()
     {
-        var lines = new List<string> { "# Aetheryte.RowId|IsAetheryte|Territory|PlaceName|AethernetName" };
-        foreach (var aetheryte in DalamudApi.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Aetheryte>())
+        try
         {
-            var territory = aetheryte.Territory.RowId;
-            if (territory is not (132 or 133))
+            var itemSheet = DalamudApi.DataManager.GetExcelSheet<Item>();
+
+            var lines = new List<string>
             {
-                continue;
+                "# Token|Item.RowId|ItemName",
+            };
+            var tokens = new HashSet<string>(StringComparer.Ordinal) { "丰水", "旧化" };
+            foreach (var ((_, stageKey), ids) in WeaponItemIds.Get("eureka"))
+            {
+                if (stageKey == "eureka-physeos")
+                {
+                    continue;
+                }
+
+                foreach (var id in ids)
+                {
+                    if (!itemSheet.TryGetRow(id, out var item))
+                    {
+                        continue;
+                    }
+
+                    var name = item.Name.ExtractText();
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    var cut = name.IndexOfAny(new[] { '·', '+' });
+                    var token = cut > 0 ? name[..cut] : name;
+                    if (token.Length >= 2)
+                    {
+                        tokens.Add(token);
+                    }
+                }
             }
 
-            var placeName = aetheryte.PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty;
-            var aethernetName = aetheryte.AethernetName.ValueNullable?.Name.ExtractText() ?? string.Empty;
-            lines.Add($"{aetheryte.RowId}|{aetheryte.IsAetheryte}|{territory}|{placeName}|{aethernetName}");
+            var matched = 0;
+            foreach (var item in itemSheet)
+            {
+                if (item.RowId == 0)
+                {
+                    continue;
+                }
+
+                var name = item.Name.ExtractText();
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+
+                foreach (var token in tokens)
+                {
+                    if (name.Contains(token, StringComparison.Ordinal))
+                    {
+                        matched++;
+                        lines.Add($"{token}|{item.RowId}|{name}");
+                        break;
+                    }
+                }
+            }
+            lines.Insert(1, $"# tokens={tokens.Count}");
+
+            var output = string.Join(Environment.NewLine, lines);
+            var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "eureka-upgrade-item-ids.txt");
+            File.WriteAllText(path, output);
+            ImGui.SetClipboardText(output);
+            PrintChat($"已导出优武强化候选：{matched} 条。文件：{path}");
         }
-
-        var output = string.Join(Environment.NewLine, lines);
-        var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "gridania-aetherytes.txt");
-        File.WriteAllText(path, output);
-        ImGui.SetClipboardText(output);
-        PrintChat($"已导出格里达尼亚以太水晶，文件：{path}");
-    }
-
-    private unsafe void PrintPityQuantities()
-    {
-        var ids = new[] { 31573u, 31574u, 31575u, 30273u, 21801u };
-        var quantities = GetLoadedItemQuantities(ids);
-        var parts = ids.Select(id => $"{id}={quantities.GetValueOrDefault(id)}");
-        PrintChat($"材料数量：{string.Join("，", parts)}");
-
-        var inventoryManager = InventoryManager.Instance();
-        if (inventoryManager == null)
+        catch (Exception ex)
         {
-            PrintChat("InventoryManager.Instance() == null");
-            return;
-        }
-
-        foreach (var type in PityInventoryTypes)
-        {
-            var container = inventoryManager->GetInventoryContainer(type);
-            PrintChat($"  {type}: {(container == null ? "null" : $"loaded={container->IsLoaded}, size={container->Size}")}");
+            DalamudApi.Log.Error(ex, "Failed to export Eureka upgrade item ids.");
+            PrintChat($"导出优武强化 ID 失败：{ex.Message}");
         }
     }
 
@@ -6416,22 +6451,8 @@ public sealed class PluginUI
     {
         var firstInRow = true;
         if (DrawWrappedButton("收集古武理符NPC##debug-export-zodiac-leve-npcs", "收集古武理符NPC", ref firstInRow)) ExportZodiacLeveNpcIds();
-        if (DrawWrappedButton("导出道具检索##debug-export-itemfinder", "导出道具检索", ref firstInRow)) ExportItemFinderDump();
         if (DrawWrappedButton("导出低保Item.RowId##debug-export-pity-ids", "导出低保Item.RowId", ref firstInRow)) ExportPityItemIds();
-        if (DrawWrappedButton("查询材料数量##debug-print-pity-qty", "查询材料数量", ref firstInRow)) PrintPityQuantities();
-        if (DrawWrappedButton("导出以太水晶##debug-export-aetherytes", "导出以太水晶", ref firstInRow)) ExportGridaniaAetherytes();
-        if (DrawWrappedButton("导出投影台缓存##debug-export-dresser-cache", "导出投影台缓存", ref firstInRow)) ExportGlamourDresserCache();
-        if (DrawWrappedButton("读取道具检索##debug-print-itemfinder", "读取道具检索", ref firstInRow))
-        {
-            try
-            {
-                PrintChat(GetItemFinderDebugText());
-            }
-            catch (Exception ex)
-            {
-                PrintChat($"读取道具检索失败：{ex.Message}");
-            }
-        }
+        if (DrawWrappedButton("导出优武强化ID##debug-export-eureka-upgrades", "导出优武强化ID", ref firstInRow)) ExportEurekaUpgradeItemIds();
         if (DrawWrappedButton("读取当前坐标##debug-print-coords", "读取当前坐标", ref firstInRow))
         {
             var player = DalamudApi.ObjectTable[0];
@@ -7404,166 +7425,6 @@ public sealed class PluginUI
             : "未知物品";
     }
 
-    private static unsafe void ExportItemFinderDump()
-    {
-        var lines = new List<string>();
-        var finder = ItemFinderModule.Instance();
-        if (finder == null)
-        {
-            lines.Add("ItemFinderModule.Instance() == null");
-        }
-        else
-        {
-            lines.Add($"ItemFinderModule ptr = 0x{(nint)finder:X}");
-            lines.Add($"IsRequestUnfulfilled = {finder->IsRequestUnfulfilled}");
-            lines.Add($"CabinetState = {finder->CabinetState}");
-            lines.Add($"IsRetainerManagerReady = {finder->IsRetainerManagerReady}");
-            lines.Add($"IsSaddleBagCached = {finder->IsSaddleBagCached}");
-            lines.Add($"IsGlamourDresserCached = {finder->IsGlamourDresserCached}");
-            lines.Add($"ShouldResetInvalid = {finder->ShouldResetInvalid}");
-
-            lines.Add("--- RequestItemIds ---");
-            var requestIndex = 0;
-            foreach (var id in finder->RequestItemIds)
-            {
-                if (id != 0)
-                {
-                    lines.Add($"  [{requestIndex}] raw={id} low={NormalizeItemId(id)}");
-                }
-
-                requestIndex++;
-            }
-
-            var result = finder->Result;
-            lines.Add($"--- Result ---");
-            if (result == null)
-            {
-                lines.Add("Result == null");
-            }
-            else
-            {
-                lines.Add($"Result ptr = 0x{(nint)result:X}");
-                lines.Add($"ItemName = \"{result->ItemName.ToString().Trim()}\"");
-                lines.Add($"ItemNameHQ = \"{result->ItemNameHQ.ToString().Trim()}\"");
-                lines.Add($"ItemNameCollectible = \"{result->ItemNameCollectible.ToString().Trim()}\"");
-                lines.Add($"EquipmentSlot = {result->EquipmentSlot}");
-                lines.Add($"ArmouryChestCount = {result->ArmouryChestCount}");
-                lines.Add($"CrystalsCount = {result->CrystalsCount}");
-                lines.Add($"InventoryPage1Count = {result->InventoryPage1Count}");
-                lines.Add($"InventoryPage2Count = {result->InventoryPage2Count}");
-                lines.Add($"InventoryPage3Count = {result->InventoryPage3Count}");
-                lines.Add($"InventoryPage4Count = {result->InventoryPage4Count}");
-                lines.Add($"ArmoireCount = {result->ArmoireCount}");
-                lines.Add($"SaddleBagPage1Count = {result->SaddleBagPage1Count}");
-                lines.Add($"SaddleBagPage2Count = {result->SaddleBagPage2Count}");
-                lines.Add($"PremiumSaddleBagPage1Count = {result->PremiumSaddleBagPage1Count}");
-                lines.Add($"PremiumSaddleBagPage2Count = {result->PremiumSaddleBagPage2Count}");
-                lines.Add($"GlamourDresserCount = {result->GlamourDresserCount}");
-                lines.Add($"ShowHQCount = {result->ShowHQCount}");
-                lines.Add($"ShowCollectibleCount = {result->ShowCollectibleCount}");
-                lines.Add($"RetainerCount = {result->RetainerCount}");
-                for (var i = 0; i < result->RetainerCount && i < 16; i++)
-                {
-                    var retainer = result->Retainer[i];
-                    if (retainer == null)
-                    {
-                        lines.Add($"  Retainer[{i}] = null");
-                        continue;
-                    }
-
-                    lines.Add($"  Retainer[{i}] id={retainer->RetainerId} equip={retainer->EquipmentSlot} crystals={retainer->CrystalsCount} p1={retainer->Page1Count} p2={retainer->Page2Count} p3={retainer->Page3Count} p4={retainer->Page4Count} p5={retainer->Page5Count}");
-                }
-            }
-        }
-
-        var output = string.Join(Environment.NewLine, lines);
-        var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "itemfinder-dump.txt");
-        File.WriteAllText(path, output);
-        ImGui.SetClipboardText(output);
-        PrintChat($"已导出 ItemFinder 状态，文件：{path}");
-    }
-
-    private static unsafe void ExportGlamourDresserCache()
-    {
-        var finder = ItemFinderModule.Instance();
-        if (finder == null)
-        {
-            PrintChat("导出投影台缓存：ItemFinderModule.Instance() == null");
-            return;
-        }
-
-        var lines = new List<string>();
-        lines.Add($"IsGlamourDresserCached = {finder->IsGlamourDresserCached}");
-
-        var ids = finder->GlamourDresserItemIds;
-        var index = 0;
-        var nonZero = 0;
-        foreach (var rawId in ids)
-        {
-            if (rawId != 0)
-            {
-                nonZero++;
-                lines.Add($"[{index}] raw={rawId} low={NormalizeItemId(rawId)}");
-            }
-
-            index++;
-        }
-
-        lines.Insert(1, $"GlamourDresserItemIds.Length = {ids.Length}，非零 = {nonZero}");
-
-        var output = string.Join(Environment.NewLine, lines);
-        var path = Path.Combine(DalamudApi.PluginInterface.GetPluginConfigDirectory(), "dresser-cache.txt");
-        File.WriteAllText(path, output);
-        ImGui.SetClipboardText(output);
-        PrintChat($"已导出投影台缓存：非零 {nonZero} 项，文件：{path}");
-    }
-
-    private static unsafe string GetItemFinderDebugText()
-    {
-        var finder = ItemFinderModule.Instance();
-        if (finder == null)
-        {
-            return "道具检索：不可用（ItemFinderModule.Instance() == null）";
-        }
-
-        var result = finder->Result;
-        if (result == null)
-        {
-            return "道具检索：无结果（Result == null）";
-        }
-
-        var equipped = result->EquipmentSlot >= 0 ? 1 : 0;
-        var inventory = result->InventoryPage1Count
-            + result->InventoryPage2Count
-            + result->InventoryPage3Count
-            + result->InventoryPage4Count;
-        var armoury = result->ArmouryChestCount;
-        var saddle = result->SaddleBagPage1Count
-            + result->SaddleBagPage2Count
-            + result->PremiumSaddleBagPage1Count
-            + result->PremiumSaddleBagPage2Count;
-        var storage = result->ArmoireCount + result->GlamourDresserCount;
-        var retainer = 0;
-        for (var i = 0; i < result->RetainerCount; i++)
-        {
-            var retainerResult = result->Retainer[i];
-            if (retainerResult == null)
-            {
-                continue;
-            }
-
-            retainer += retainerResult->EquipmentSlot >= 0 ? 1 : 0;
-            retainer += retainerResult->Page1Count
-                + retainerResult->Page2Count
-                + retainerResult->Page3Count
-                + retainerResult->Page4Count
-                + retainerResult->Page5Count;
-        }
-
-        var total = equipped + inventory + armoury + saddle + storage + retainer;
-        var state = total > 0 ? "有数据" : "无命中";
-        return $"道具检索：{state}，总数 {total}（装备 {equipped}，背包 {inventory}，兵装库 {armoury}，雇员 {retainer}/{result->RetainerCount}，鞍囊 {saddle}，投影/收藏 {storage}）";
-    }
 
     private static void DrawWikiButton(string label, string key, string url)
     {
