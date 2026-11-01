@@ -38,6 +38,14 @@ public sealed class PluginConfiguration : IPluginConfiguration
     public bool ShowHuntAssistantInFloatingWindow { get; set; } = true;
     public string HuntLeaderName { get; set; } = string.Empty;
     public float HuntTargetHeight { get; set; } = 50f;
+    public string HuntingLogSelectedJobKey { get; set; } = string.Empty;
+    public bool HuntingLogAutoCount { get; set; } = true;
+    public bool HuntingLogAutoNavigateNext { get; set; }
+    public bool HuntingLogAutoTarget { get; set; } = true;
+    public bool HuntingLogShowCompletedEntries { get; set; } = true;
+    public bool HuntingLogHideLockedRanks { get; set; } = true;
+    public bool ShowHuntingLogInFloatingWindow { get; set; } = true;
+    public Dictionary<string, Dictionary<string, int>> HuntingLogKillCountsByCharacter { get; set; } = new();
     public bool ShowNavigationLogs { get; set; } = true;
     public bool GroupWeaponProgressByRole { get; set; }
     public bool ShowWeaponProgressIcons { get; set; } = true;

@@ -140,11 +140,12 @@ public sealed class PluginUI
         ("settings", "设置", "-"),
         ("fate", "危命助手", "-"),
         ("hunt", "狩猎助手", "-"),
+        ("hunting-log", "讨伐笔记", "-"),
     };
     private static readonly (string Key, string Label, string Count)[] WorkspaceSections =
-        MainSections.Where(section => section.Key is not "settings" and not "fate" and not "hunt").ToArray();
+        MainSections.Where(section => section.Key is not "settings" and not "fate" and not "hunt" and not "hunting-log").ToArray();
     private static readonly (string Key, string Label, string Count)[] ToolSections =
-        MainSections.Where(section => section.Key is "settings" or "fate" or "hunt").ToArray();
+        MainSections.Where(section => section.Key is "settings" or "fate" or "hunt" or "hunting-log").ToArray();
     private static readonly InventoryType[] WeaponInventoryTypes =
     {
         InventoryType.Inventory1,
@@ -186,6 +187,7 @@ public sealed class PluginUI
     private readonly AutoDutyService autoDuty;
     private readonly EdgeTtsService edgeTts;
     private readonly HuntAssistant huntAssistant;
+    private readonly HuntingLogTracker huntingLogTracker;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? weaponItemLookup;
     private Dictionary<string, IReadOnlyList<Item>>? phantomRewardWeaponItemLookup;
     private Dictionary<(string JobKey, string StageKey), IReadOnlyList<Item>>? mandervilleWeaponItemLookup;
@@ -241,6 +243,10 @@ public sealed class PluginUI
     private bool floatingPhantomMonitorOpen = true;
     private bool floatingFateAssistantOpen = true;
     private bool floatingHuntAssistantOpen = true;
+    private bool floatingHuntingLogOpen = true;
+    private int floatingHuntingLogRankIndex = -1;
+    private string huntingLogJobKey = string.Empty;
+    private int huntingLogRankIndex;
     private string fateWatchSearch = string.Empty;
     private IReadOnlyList<FateCatalogEntry>? fateCatalog;
     private string backpackOrganizeSearch = string.Empty;
@@ -283,13 +289,14 @@ public sealed class PluginUI
     private static readonly HashSet<uint> ChroniclerFateTerritories = new() { 1252, 1346 };
     private static readonly HashSet<uint> UnsupportedFateTerritories = new() { 732, 763, 795, 827, 920, 975 };
 
-    public PluginUI(PluginConfiguration configuration, VnavService vnav, AutoDutyService autoDuty, EdgeTtsService edgeTts, HuntAssistant huntAssistant)
+    public PluginUI(PluginConfiguration configuration, VnavService vnav, AutoDutyService autoDuty, EdgeTtsService edgeTts, HuntAssistant huntAssistant, HuntingLogTracker huntingLogTracker)
     {
         this.configuration = configuration;
         this.vnav = vnav;
         this.autoDuty = autoDuty;
         this.edgeTts = edgeTts;
         this.huntAssistant = huntAssistant;
+        this.huntingLogTracker = huntingLogTracker;
     }
 
     public void OpenMainWindow()
@@ -513,6 +520,7 @@ public sealed class PluginUI
             "settings" => FontAwesomeIcon.Cog,
             "fate" => FontAwesomeIcon.Flag,
             "hunt" => FontAwesomeIcon.Crosshairs,
+            "hunting-log" => FontAwesomeIcon.Book,
             _ => FontAwesomeIcon.Circle,
         };
 
@@ -635,6 +643,9 @@ public sealed class PluginUI
                 break;
             case "hunt":
                 DrawHuntAssistantWorkspace();
+                break;
+            case "hunting-log":
+                DrawHuntingLogWorkspace();
                 break;
             case "bis":
                 DrawBisWorkspace();
@@ -6109,6 +6120,350 @@ public sealed class PluginUI
         ImGui.TextDisabled("目标贴地后自动上抬");
     }
 
+    private HuntingLogJob? GetSelectedHuntingLogJob()
+    {
+        if (HuntingLogGuide.Jobs.Count == 0)
+        {
+            return null;
+        }
+
+        var job = HuntingLogGuide.FindJob(configuration.HuntingLogSelectedJobKey);
+        if (job != null)
+        {
+            return job;
+        }
+
+        var currentJobId = DalamudApi.ObjectTable.LocalPlayer?.ClassJob.RowId ?? 0;
+        job = HuntingLogGuide.FindJob(currentJobId.ToString()) ?? HuntingLogGuide.Jobs[0];
+        if (configuration.HuntingLogSelectedJobKey != job.Key)
+        {
+            configuration.HuntingLogSelectedJobKey = job.Key;
+            configuration.Save();
+        }
+
+        return job;
+    }
+
+    private void DrawHuntingLogWorkspace()
+    {
+        DrawSettingsSectionHeader("讨伐笔记", "清单 + 导航");
+
+        var autoCount = configuration.HuntingLogAutoCount;
+        if (ImGui.Checkbox("击杀自动计数##hunting-log-auto-count", ref autoCount))
+        {
+            configuration.HuntingLogAutoCount = autoCount;
+            configuration.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("实验性功能：战斗中击杀目标怪物时自动 +1，只统计当前选中职业的清单。");
+        }
+
+        ImGui.SameLine();
+        var autoNext = configuration.HuntingLogAutoNavigateNext;
+        if (ImGui.Checkbox("完成后自动前往下一个##hunting-log-auto-next", ref autoNext))
+        {
+            configuration.HuntingLogAutoNavigateNext = autoNext;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        var autoTarget = configuration.HuntingLogAutoTarget;
+        if (ImGui.Checkbox("到达后自动选中怪物##hunting-log-auto-target", ref autoTarget))
+        {
+            configuration.HuntingLogAutoTarget = autoTarget;
+            configuration.Save();
+        }
+
+        var showCompleted = configuration.HuntingLogShowCompletedEntries;
+        if (ImGui.Checkbox("显示已完成##hunting-log-show-completed", ref showCompleted))
+        {
+            configuration.HuntingLogShowCompletedEntries = showCompleted;
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+        var hideLocked = configuration.HuntingLogHideLockedRanks;
+        if (ImGui.Checkbox("隐藏未解锁##hunting-log-hide-locked", ref hideLocked))
+        {
+            configuration.HuntingLogHideLockedRanks = hideLocked;
+            configuration.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("读取客户端讨伐手册数据，隐藏角色尚未解锁的阶（等级不足或未加入对应军队）。");
+        }
+
+        ImGui.SameLine();
+        var showFloating = configuration.ShowHuntingLogInFloatingWindow;
+        if (ImGui.Checkbox("在悬浮窗显示##hunting-log-floating", ref showFloating))
+        {
+            configuration.ShowHuntingLogInFloatingWindow = showFloating;
+            configuration.Save();
+        }
+
+        ImGui.Spacing();
+
+        if (HuntingLogGuide.Jobs.Count == 0)
+        {
+            ImGui.TextDisabled("讨伐笔记数据未加载。");
+            return;
+        }
+
+        var job = GetSelectedHuntingLogJob() ?? HuntingLogGuide.Jobs[0];
+        if (huntingLogJobKey != job.Key)
+        {
+            huntingLogJobKey = job.Key;
+            huntingLogRankIndex = 0;
+        }
+
+        var firstInRow = true;
+        foreach (var candidate in HuntingLogGuide.Jobs)
+        {
+            if (DrawWrappedTabButton($"hunting-log-job-{candidate.Key}", HuntingLogGuide.GetJobName(candidate.Key), candidate.Key == job.Key, ref firstInRow))
+            {
+                configuration.HuntingLogSelectedJobKey = candidate.Key;
+                configuration.Save();
+                job = candidate;
+                huntingLogJobKey = candidate.Key;
+                huntingLogRankIndex = 0;
+            }
+        }
+
+        var (completed, total) = huntingLogTracker.GetJobProgress(job);
+        ImGui.Spacing();
+        ImGui.TextDisabled($"完成 {completed}/{total} 项");
+        ImGui.SameLine();
+        if (ImGui.Button("下一个目标##hunting-log-next-target"))
+        {
+            huntingLogTracker.NavigateToNextTarget(job.Key);
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("停止导航##hunting-log-stop-navigation"))
+        {
+            huntingLogTracker.StopNavigation();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("同步当前角色##hunting-log-sync"))
+        {
+            var (jobsSynced, completedEntries, totalEntries) = huntingLogTracker.SyncFromGame();
+            if (jobsSynced == 0)
+            {
+                PrintChat("讨伐笔记同步失败：无法读取客户端讨伐手册数据（请先登录角色）。");
+            }
+            else
+            {
+                PrintChat($"讨伐笔记已同步当前角色：{jobsSynced} 个职业，完成 {completedEntries}/{totalEntries} 项。");
+            }
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("读取游戏内讨伐手册的真实进度并覆盖本地记录：已完成的阶自动标记完成，当前阶按每个怪物的实际击杀数填入。");
+        }
+
+        var currentTarget = huntingLogTracker.CurrentTargetLabel;
+        if (!string.IsNullOrEmpty(currentTarget))
+        {
+            ImGui.SameLine();
+            ImGui.TextColored(new Vector4(0.45f, 0.86f, 0.82f, 1f), $"前往：{currentTarget}");
+        }
+
+        ImGui.Spacing();
+        var visibleRanks = new List<int>(job.Ranks.Count);
+        for (var i = 0; i < job.Ranks.Count; i++)
+        {
+            if (!configuration.HuntingLogHideLockedRanks || huntingLogTracker.IsRankUnlocked(job, i))
+            {
+                visibleRanks.Add(i);
+            }
+        }
+
+        if (visibleRanks.Count == 0)
+        {
+            ImGui.TextDisabled("该讨伐笔记尚未解锁（未加入对应军队或等级不足）。");
+            return;
+        }
+
+        if (!visibleRanks.Contains(huntingLogRankIndex))
+        {
+            huntingLogRankIndex = visibleRanks[^1];
+        }
+
+        var rankIndex = huntingLogRankIndex;
+        firstInRow = true;
+        foreach (var i in visibleRanks)
+        {
+            var rank = job.Ranks[i];
+            var label = $"第 {i + 1} 阶 ({huntingLogTracker.GetRankCompleted(job, rank)}/{rank.Entries.Count})";
+            if (DrawWrappedTabButton($"hunting-log-rank-{job.Key}-{i}", label, i == rankIndex, ref firstInRow))
+            {
+                huntingLogRankIndex = i;
+                rankIndex = i;
+            }
+        }
+
+        ImGui.Spacing();
+        var visibleEntries = 0;
+        foreach (var entry in job.Ranks[rankIndex].Entries)
+        {
+            if (!configuration.HuntingLogShowCompletedEntries && huntingLogTracker.IsEntryComplete(job.Key, entry))
+            {
+                continue;
+            }
+
+            visibleEntries++;
+            DrawHuntingLogEntryCard(job, entry);
+        }
+
+        if (visibleEntries == 0)
+        {
+            ImGui.TextDisabled("本阶没有需要显示的条目。");
+        }
+    }
+
+    private static bool DrawWrappedTabButton(string id, string label, bool active, ref bool firstInRow)
+    {
+        var width = ImGui.CalcTextSize(label).X + 24f;
+        if (!firstInRow)
+        {
+            var lastItemRight = ImGui.GetItemRectMax().X;
+            var contentRight = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+            if (lastItemRight + ImGui.GetStyle().ItemSpacing.X + width > contentRight)
+            {
+                firstInRow = true;
+            }
+        }
+
+        if (!firstInRow)
+        {
+            ImGui.SameLine();
+        }
+
+        var clicked = DrawContentTabButton(id, label, active);
+        firstInRow = false;
+        return clicked;
+    }
+
+    private void DrawHuntingLogEntryCard(HuntingLogJob job, HuntingLogEntry entry)
+    {
+        var complete = huntingLogTracker.IsEntryComplete(job.Key, entry);
+        var frameHeight = ImGui.GetFrameHeight();
+        var cardHeight = frameHeight + 16f + (frameHeight + ImGui.GetStyle().ItemSpacing.Y + 2f) * entry.Monsters.Count;
+        if (!ImGui.BeginChild(
+                $"hunting-log-entry-{job.Key}-{entry.RankIndex}-{entry.EntryIndex}",
+                new Vector2(0f, cardHeight),
+                true,
+                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        ImGui.TextColored(
+            complete ? new Vector4(0.42f, 0.88f, 0.58f, 1f) : new Vector4(0.78f, 0.84f, 0.88f, 1f),
+            HuntingLogGuide.GetEntryName(job, entry));
+
+        var buttonsWidth = ImGui.CalcTextSize("完成").X + ImGui.CalcTextSize("重置").X
+            + ImGui.GetStyle().FramePadding.X * 4f + ImGui.GetStyle().ItemSpacing.X + 8f;
+        var buttonsX = ImGui.GetWindowContentRegionMax().X - buttonsWidth;
+        ImGui.SameLine(MathF.Max(ImGui.GetCursorPosX() + 8f, buttonsX));
+        if (ImGui.SmallButton($"完成##hunting-log-complete-{job.Key}-{entry.RankIndex}-{entry.EntryIndex}"))
+        {
+            huntingLogTracker.CompleteEntry(job.Key, entry);
+        }
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton($"重置##hunting-log-reset-{job.Key}-{entry.RankIndex}-{entry.EntryIndex}"))
+        {
+            huntingLogTracker.ResetEntry(job.Key, entry);
+        }
+
+        for (var i = 0; i < entry.Monsters.Count; i++)
+        {
+            var monster = entry.Monsters[i];
+            var id = $"{job.Key}-{entry.RankIndex}-{entry.EntryIndex}-{i}";
+            var count = huntingLogTracker.GetKillCount(job.Key, entry, monster);
+            var done = count >= monster.Required;
+            ImGui.TextColored(
+                done ? new Vector4(0.42f, 0.88f, 0.58f, 1f) : new Vector4(0.72f, 0.78f, 0.81f, 1f),
+                $"{HuntingLogGuide.GetMonsterName(monster.NameId)} {count}/{monster.Required}");
+
+            ImGui.SameLine();
+            ImGui.BeginDisabled(count <= 0);
+            if (ImGui.SmallButton($"-##hunting-log-dec-{id}"))
+            {
+                huntingLogTracker.SetKillCount(job.Key, entry, monster, count - 1);
+            }
+
+            ImGui.EndDisabled();
+            ImGui.SameLine();
+            ImGui.BeginDisabled(count >= monster.Required);
+            if (ImGui.SmallButton($"+##hunting-log-inc-{id}"))
+            {
+                huntingLogTracker.SetKillCount(job.Key, entry, monster, count + 1);
+            }
+
+            ImGui.EndDisabled();
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"导航##hunting-log-nav-{id}"))
+            {
+                huntingLogTracker.NavigateToMonster(job, entry, monster);
+            }
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(BuildHuntingLogLocationTooltip(monster));
+            }
+
+            if (monster.Locations.Count <= 1)
+            {
+                continue;
+            }
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton($"位置##hunting-log-locations-{id}"))
+            {
+                ImGui.OpenPopup($"hunting-log-location-popup-{id}");
+            }
+
+            if (!ImGui.BeginPopup($"hunting-log-location-popup-{id}"))
+            {
+                continue;
+            }
+
+            foreach (var location in monster.Locations)
+            {
+                var label = $"{HuntingLogGuide.GetLocationName(location)}  ({location.X:0.#}, {location.Y:0.#})";
+                if (ImGui.MenuItem($"{label}##hunting-log-nav-{id}-{location.TerritoryType}-{location.MapId}-{location.X:0.#}"))
+                {
+                    huntingLogTracker.NavigateToMonster(job, entry, monster, location);
+                }
+            }
+
+            ImGui.EndPopup();
+        }
+
+        ImGui.EndChild();
+    }
+
+    private static string BuildHuntingLogLocationTooltip(HuntingLogMonster monster)
+    {
+        if (monster.Locations.Count == 0)
+        {
+            return "没有可用坐标。";
+        }
+
+        return string.Join(
+            "\n",
+            monster.Locations.Select(location =>
+                $"{HuntingLogGuide.GetLocationName(location)}  ({location.X:0.#}, {location.Y:0.#})"));
+    }
+
     private void DrawFateAssistantWorkspace()
     {
         DrawSettingsSectionHeader("危命助手", "当前地图");
@@ -7956,6 +8311,12 @@ public sealed class PluginUI
             ImGui.Separator();
         }
 
+        if (configuration.ShowHuntingLogInFloatingWindow)
+        {
+            DrawFloatingHuntingLog();
+            ImGui.Separator();
+        }
+
         if (configuration.ShowZodiacMonitorInFloatingWindow)
         {
             DrawFloatingZodiacMonitor();
@@ -8860,6 +9221,167 @@ public sealed class PluginUI
         ImGui.EndChild();
     }
 
+    private void DrawFloatingHuntingLog()
+    {
+        var job = GetSelectedHuntingLogJob();
+        var rankOptions = new List<int> { -1 };
+        if (job != null)
+        {
+            for (var i = 0; i < job.Ranks.Count; i++)
+            {
+                if (!configuration.HuntingLogHideLockedRanks || huntingLogTracker.IsRankUnlocked(job, i))
+                {
+                    rankOptions.Add(i);
+                }
+            }
+        }
+
+        if (!rankOptions.Contains(floatingHuntingLogRankIndex))
+        {
+            floatingHuntingLogRankIndex = -1;
+        }
+
+        var targets = job == null
+            ? Array.Empty<(HuntingLogEntry Entry, HuntingLogMonster Monster)>()
+            : huntingLogTracker
+                .GetNextTargets(job.Key, 3, configuration.HuntingLogHideLockedRanks, floatingHuntingLogRankIndex)
+                .ToArray();
+        var currentTarget = huntingLogTracker.CurrentTargetLabel;
+
+        var availableWidth = ImGui.GetContentRegionAvail().X - ImGui.GetStyle().WindowPadding.X * 2f;
+        var comboWidth = MathF.Max(110f, (availableWidth - ImGui.GetStyle().ItemSpacing.X) * 0.5f);
+        var stackCombos = availableWidth <= comboWidth * 2f + ImGui.GetStyle().ItemSpacing.X + 4f;
+
+        var height = floatingHuntingLogOpen
+            ? GetFloatingCardHeight(1 + (currentTarget.Length > 0 ? 1 : 0) + Math.Max(targets.Length, 1))
+              + ImGui.GetFrameHeightWithSpacing() * (stackCombos ? 2f : 1f)
+            : GetCollapsedFloatingCardHeight();
+        if (!ImGui.BeginChild("floating-hunting-log-card", new Vector2(-1f, height), true, ImGuiWindowFlags.NoScrollbar))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        if (DrawFloatingMonitorHeaderButton("讨伐笔记", "floating-hunting-log-header", new Vector4(0.35f, 0.88f, 0.82f, 1f)))
+        {
+            floatingHuntingLogOpen = !floatingHuntingLogOpen;
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("讨伐笔记\n用下拉选单切换职业和阶，显示前几个未完成目标，可直接导航。点击标题可折叠或展开卡片。");
+        }
+
+        ImGui.SameLine();
+        ImGui.TextDisabled(floatingHuntingLogOpen ? "收起" : "展开");
+
+        if (!floatingHuntingLogOpen)
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        TrySameLineRight(GetButtonWidth("停止导航"));
+        if (ImGui.SmallButton("停止导航##floating-hunting-log-stop-navigation"))
+        {
+            huntingLogTracker.StopNavigation();
+        }
+
+        if (job == null)
+        {
+            ImGui.TextDisabled("讨伐笔记数据未加载。");
+            ImGui.EndChild();
+            return;
+        }
+
+        ImGui.SetNextItemWidth(stackCombos ? -1f : comboWidth);
+        if (ImGui.BeginCombo("##floating-hunting-log-job", HuntingLogGuide.GetJobName(job.Key)))
+        {
+            foreach (var candidate in HuntingLogGuide.Jobs)
+            {
+                var active = candidate.Key == job.Key;
+                if (ImGui.Selectable($"{HuntingLogGuide.GetJobName(candidate.Key)}##floating-hunting-log-job-{candidate.Key}", active))
+                {
+                    configuration.HuntingLogSelectedJobKey = candidate.Key;
+                    floatingHuntingLogRankIndex = -1;
+                    configuration.Save();
+                }
+
+                if (active)
+                {
+                    ImGui.SetItemDefaultFocus();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        if (!stackCombos)
+        {
+            ImGui.SameLine();
+        }
+
+        ImGui.SetNextItemWidth(stackCombos ? -1f : comboWidth);
+        var rankLabel = floatingHuntingLogRankIndex < 0 ? "全部阶" : $"第 {floatingHuntingLogRankIndex + 1} 阶";
+        if (ImGui.BeginCombo("##floating-hunting-log-rank", rankLabel))
+        {
+            foreach (var option in rankOptions)
+            {
+                var active = option == floatingHuntingLogRankIndex;
+                var optionLabel = option < 0 ? "全部阶" : $"第 {option + 1} 阶";
+                if (ImGui.Selectable($"{optionLabel}##floating-hunting-log-rank-{option}", active))
+                {
+                    floatingHuntingLogRankIndex = option;
+                }
+
+                if (active)
+                {
+                    ImGui.SetItemDefaultFocus();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        var (completed, total) = huntingLogTracker.GetJobProgress(job);
+        ImGui.TextDisabled($"完成 {completed}/{total}");
+        if (currentTarget.Length > 0)
+        {
+            ImGui.TextColored(new Vector4(0.45f, 0.86f, 0.82f, 1f), $"前往：{currentTarget}");
+        }
+
+        if (targets.Length == 0)
+        {
+            ImGui.TextDisabled(floatingHuntingLogRankIndex < 0
+                ? "该职业的讨伐目标已全部完成。"
+                : "该阶的讨伐目标已全部完成。");
+            ImGui.EndChild();
+            return;
+        }
+
+        foreach (var (entry, monster) in targets)
+        {
+            var count = huntingLogTracker.GetKillCount(job.Key, entry, monster);
+            var location = monster.Locations.Count > 0
+                ? HuntingLogGuide.GetLocationName(monster.Locations[0])
+                : "无坐标";
+            ImGui.TextUnformatted($"{HuntingLogGuide.GetMonsterName(monster.NameId)} {count}/{monster.Required}");
+            if (ImGui.GetContentRegionAvail().X > ImGui.CalcTextSize(location).X + ImGui.GetStyle().ItemSpacing.X + GetButtonWidth("导航"))
+            {
+                ImGui.SameLine();
+            }
+
+            ImGui.TextDisabled(location);
+            TrySameLineRight(GetButtonWidth("导航"));
+            if (ImGui.SmallButton($"导航##floating-hunting-log-nav-{job.Key}-{entry.RankIndex}-{entry.EntryIndex}-{monster.NameId}"))
+            {
+                huntingLogTracker.NavigateToMonster(job, entry, monster);
+            }
+        }
+
+        ImGui.EndChild();
+    }
+
     private void DrawFloatingAvailableFates()
     {
         var fates = GetAvailableFates();
@@ -9173,6 +9695,13 @@ public sealed class PluginUI
         if (ImGui.MenuItem("危命助手", string.Empty, showFateAssistant))
         {
             configuration.ShowAvailableFatesInFloatingWindow = !showFateAssistant;
+            configuration.Save();
+        }
+
+        var showHuntingLog = configuration.ShowHuntingLogInFloatingWindow;
+        if (ImGui.MenuItem("讨伐笔记", string.Empty, showHuntingLog))
+        {
+            configuration.ShowHuntingLogInFloatingWindow = !showHuntingLog;
             configuration.Save();
         }
 

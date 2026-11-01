@@ -611,6 +611,20 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 右键菜单继续保留“打开主窗口”“飞行导航”“自动标记击杀”“关闭悬浮窗”；所有配置切换均立即调用 `configuration.Save()`。
 - 幻武监控、狩猎助手、危命助手三张卡片标题行的“停止导航”按钮均右对齐贴边，与行内“展开/收起”按钮使用相同的右侧对齐方式。
 
+### 讨伐笔记页面
+
+左侧 Tools 新增“讨伐笔记”入口（内部 key `hunting-log`），为 ARR 的 9 个战斗职业与 3 个军队讨伐笔记提供“清单 + 导航”：
+
+- 数据来自 `Features/Hunt/hunting-log.json`（内嵌为 `Phantom.HuntingLog`）：540 个条目、361 种怪物（`BNpcName.RowId`）、每种怪物的击杀数与地图坐标。职业名、怪物名和地图名运行时取自 Lumina 客户端表，不按名称匹配。
+- 进度按角色 ContentId 保存在 `HuntingLogKillCountsByCharacter`，键为 `职业|阶.条目|BNpcName`；条目内每个怪物独立计数，全部达到所需数量才算该条完成。
+- 清单结构：职业页签（剑术师…双剑师 9 个 + 黑涡团/双蛇党/恒辉队）→ 阶页签（1–5 阶，显示该阶完成数）→ 条目卡片。怪物行提供 `-`/`+`、条目级“完成/重置”和“导航”；多地点时提供“位置”下拉逐点导航。
+- 导航复用 `VnavService.NavigateToHuntTarget`：同地图优先选离角色最近的地点，跨地图按 `TerritoryType` 用 Lifestream 传送后再 vnavmesh 寻路，并使用配置的接地抬升高度。
+- 自动计数（实验，`HuntingLogAutoCount` 默认开）只针对当前选中职业的未完成怪物扫描 `ObjectTable`：45 米内同名 `NameId` 的 `IBattleNpc` 死亡或消失、且 10 秒内进入过战斗才 +1；同一实体只计一次，读图或换图时清空观察表。
+- `HuntingLogAutoNavigateNext`（默认关）在条目完成且脱战后自动导航下一个未完成怪物；`HuntingLogAutoTarget`（默认开）在非战斗中把 30 米内最近的同名怪物设为目标。
+- 同步当前角色：读取客户端 `MonsterNoteManager`（`FFXIVClientStructs.FFXIV.Client.Game`）的 12 组 `MonsterNoteRankInfo`。槽位顺序沿用 Hunty/SealHunter 的 `JobInMemory`：0–7 为剑术师…秘术师，8–10 为黑涡团/双蛇党/恒辉队，11 为双剑师（双剑师晚于军队加入，故排在末尾）。`Rank` 是当前（最高已解锁）阶的 0 基下标：更低的阶视为全部完成，相等阶按 `RankData[条目].Counts[怪物]` 填入实际击杀数，更高的阶清零（未解锁）。同步会先清除该职业的本地计数再写入，最后 `Save()`；非本角色的军队讨伐笔记跳过。
+- 隐藏未解锁（`HuntingLogHideLockedRanks` 默认开）：阶页签按 `MonsterNoteManager` 的 `Rank` 过滤；军队页签额外要求 `PlayerState.GrandCompany` 与军队 ID（10001/10002/10003）一致，未加入时整页提示未解锁。客户端结构不可用时（未登录）不隐藏，避免误藏。
+- 悬浮窗新增“讨伐笔记”卡片（`ShowHuntingLogInFloatingWindow` 默认开，右键菜单可开关）：卡片内用两个下拉选单切换职业与阶（阶可选“全部阶”，仅列出已解锁阶），显示该职业的完成度、导航目标，以及最多 3 个未完成怪物（含首个地点与“导航”按钮）；开启“隐藏未解锁”时同样跳过未解锁的阶。卡片按行数计算高度并使用 `NoScrollbar`。
+
 ### 当前联动页面
 
 左侧导航入口名为“当前联动”（内部 key 仍为 `yokai`），无数量角标。页面内为“妖表”“FF15联动”“糖豆人”“莫古莫古大收集”四个页签：顶部各自显示活动起止日期横幅（进行中绿色/未开放橙色）；顶部另有“自动隐藏已过期联动”开关（默认开，`AutoHideExpiredCollabs`），开启后活动已结束的页签不显示，但全部过期时仍显示全部页签；首次打开默认选中活动期内的联动（按妖表→FF15→糖豆人→莫古莫古顺序取第一个进行中），否则默认首个页签；用户切换页签的选择持久化保存到 `SelectedCollabTabKey`。

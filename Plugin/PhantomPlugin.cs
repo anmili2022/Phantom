@@ -12,6 +12,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
     private readonly ZodiacMonsterTracker zodiacMonsterTracker;
     private readonly DutyCompletionTracker dutyCompletionTracker;
     private readonly HuntAssistant huntAssistant;
+    private readonly HuntingLogTracker huntingLogTracker;
     private readonly AutoDutyService autoDuty;
     private readonly EdgeTtsService edgeTts;
     private readonly FateNotificationService fateNotificationService;
@@ -34,10 +35,11 @@ public sealed class PhantomPlugin : IDalamudPlugin
         zodiacMonsterTracker = new ZodiacMonsterTracker(Configuration);
         dutyCompletionTracker = new DutyCompletionTracker(Configuration);
         huntAssistant = new HuntAssistant(Configuration, vnav);
+        huntingLogTracker = new HuntingLogTracker(Configuration, vnav);
         autoDuty = new AutoDutyService(pluginInterface);
         edgeTts = new EdgeTtsService(pluginInterface);
         fateNotificationService = new FateNotificationService(Configuration, edgeTts);
-        ui = new PluginUI(Configuration, vnav, autoDuty, edgeTts, huntAssistant);
+        ui = new PluginUI(Configuration, vnav, autoDuty, edgeTts, huntAssistant, huntingLogTracker);
 
         DalamudApi.Commands.AddHandler(CommandName, new Dalamud.Game.Command.CommandInfo(OnCommand)
         {
@@ -67,6 +69,7 @@ public sealed class PhantomPlugin : IDalamudPlugin
         zodiacMonsterTracker.Dispose();
         dutyCompletionTracker.Dispose();
         huntAssistant.Dispose();
+        huntingLogTracker.Dispose();
         fateNotificationService.Dispose();
         vnav.Dispose();
         Configuration.Save();
