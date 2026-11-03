@@ -139,7 +139,7 @@
 - 左侧导航显示当前角色与插件状态，右侧阶段页签使用与武器进度卡片一致的自绘配色。
 - vnavmesh + Lifestream 的两段式导航，以及“前往幻境村”独立入口。
 - 导航前会先尝试上坐骑（8 秒内未成功则直接发起 vnavmesh）；**主城与金碟游乐场内不上坐骑**，并按步行寻路，即便开启了「飞行导航」也不在该区域使用飞行。主城通过 territory 白名单判定（129/130/131/132/133/134 三主城、144 金碟、418/419 伊修加德、628 黄金港、819 水晶都、962 旧萨雷安、963 拉扎罕、1185 图莱尤拉）；摩杜纳 156、西萨纳兰 141 等非主城照常上坐骑。
-- 抵达飞行导航目标 8 yalms 内时停止路径并以 `ActionType.Mount, 0` 自动下坐骑，每 500ms 重试至游戏确认已下坐骑。
+- 抵达飞行导航目标 8 yalms 内且垂直高差不超过 4 yalms 时停止路径并以 `ActionType.Mount, 0` 自动下坐骑，每 500ms 重试至游戏确认已下坐骑；仍在高空时先等 vnavmesh 把角色带到地面，避免半空下坐骑后坠落。
 - 飞行导航支持按调用场景控制抵达后的下坐骑行为；狩猎助手抵达目标后保持骑乘，危命和其他普通导航保留原有自动下坐骑逻辑。
 - 跨地图导航使用 Lifestream 传送，读图稳定、Lifestream 空闲且 vnavmesh ready 后继续导航；一旦检测到已进入目标地图即视为传送完成，跳过以太水晶距离判定与稳定等待，直接进入后续上坐骑/寻路，避免换图后原地不动。
 - 狩猎助手可指定车头，监听其聊天中的地图 Flag，并支持跨地图自动传送后飞行导航到目标点。
@@ -618,7 +618,7 @@ None → WaitingTuliyollal → WaitingOccultVillageAethernet → MovingToDestina
 - 数据来自 `Features/Hunt/hunting-log.json`（内嵌为 `Phantom.HuntingLog`）：540 个条目、361 种怪物（`BNpcName.RowId`）、每种怪物的击杀数与地图坐标。职业名、怪物名和地图名运行时取自 Lumina 客户端表，不按名称匹配。
 - 进度按角色 ContentId 保存在 `HuntingLogKillCountsByCharacter`，键为 `职业|阶.条目|BNpcName`；条目内每个怪物独立计数，全部达到所需数量才算该条完成。
 - 清单结构：职业页签（剑术师…双剑师 9 个 + 黑涡团/双蛇党/恒辉队）→ 阶页签（1–5 阶，显示该阶完成数）→ 条目卡片。怪物行提供 `-`/`+`、条目级“完成/重置”和“导航”；多地点时提供“位置”下拉逐点导航。
-- 导航复用 `VnavService.NavigateToHuntTarget`：同地图优先选离角色最近的地点，跨地图按 `TerritoryType` 用 Lifestream 传送后再 vnavmesh 寻路，并使用配置的接地抬升高度。
+- 导航走 `VnavService.NavigateToGroundTarget`（`NavigateToTerritoryTarget` 的零抬升分支）：同地图优先选离角色最近的地点，取 vnavmesh 网格吸附后的地面点，飞行寻路后自动下坐骑落地；跨地图按 `TerritoryType` 用 Lifestream 传送后再寻路。地图链接只有 X/Z 时同图借用角色高度查询网格，避免从 Y=0 开始。狩猎助手的 `NavigateToHuntTarget` 仍保留配置抬升高度（用于狩猎列车在空中标记）。
 - 自动计数（实验，`HuntingLogAutoCount` 默认开）只针对当前选中职业的未完成怪物扫描 `ObjectTable`：45 米内同名 `NameId` 的 `IBattleNpc` 死亡或消失、且 10 秒内进入过战斗才 +1；同一实体只计一次，读图或换图时清空观察表。
 - `HuntingLogAutoNavigateNext`（默认关）在条目完成且脱战后自动导航下一个未完成怪物；`HuntingLogAutoTarget`（默认开）在非战斗中把 30 米内最近的同名怪物设为目标。
 - 同步当前角色：读取客户端 `MonsterNoteManager`（`FFXIVClientStructs.FFXIV.Client.Game`）的 12 组 `MonsterNoteRankInfo`。槽位顺序沿用 Hunty/SealHunter 的 `JobInMemory`：0–7 为剑术师…秘术师，8–10 为黑涡团/双蛇党/恒辉队，11 为双剑师（双剑师晚于军队加入，故排在末尾）。`Rank` 是当前（最高已解锁）阶的 0 基下标：更低的阶视为全部完成，相等阶按 `RankData[条目].Counts[怪物]` 填入实际击杀数，更高的阶清零（未解锁）。同步会先清除该职业的本地计数再写入，最后 `Save()`；非本角色的军队讨伐笔记跳过。

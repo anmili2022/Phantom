@@ -350,7 +350,7 @@ public sealed class HuntingLogTracker : IDisposable
             }
         }
 
-        vnav.NavigateToHuntTarget(chosen.Location.TerritoryType, chosen.Position, configuration.HuntTargetHeight);
+        vnav.NavigateToGroundTarget(chosen.Location.TerritoryType, chosen.Position);
         autoTargetNameId = monster.NameId;
         autoTargetTerritory = chosen.Location.TerritoryType;
         autoTargetUntilUtc = DateTime.UtcNow + AutoTargetDuration;

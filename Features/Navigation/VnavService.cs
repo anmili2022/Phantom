@@ -194,25 +194,46 @@ public sealed class VnavService : IDisposable
 
     public void NavigateToHuntTarget(uint territoryType, Vector3 targetPos, float height)
     {
+        NavigateToTerritoryTarget(territoryType, targetPos, height, "狩猎");
+    }
+
+    /// <summary>Navigate to a ground target such as a hunting log monster, landing on the navmesh.</summary>
+    public void NavigateToGroundTarget(uint territoryType, Vector3 targetPos)
+    {
+        NavigateToTerritoryTarget(territoryType, targetPos, 0f, "讨伐");
+    }
+
+    private void NavigateToTerritoryTarget(uint territoryType, Vector3 targetPos, float elevation, string label)
+    {
         try
         {
-            TrySetMapFlag(territoryType, targetPos);
+            var height = Math.Clamp(elevation, 0f, 200f);
+            var fly = true;
+            var autoDismount = height <= 0f;
+            var player = DalamudApi.ObjectTable.LocalPlayer;
             var currentTerritory = DalamudApi.ClientState.TerritoryType;
+
+            // 地图链接只给出 X/Z；同图时借用角色高度，避免从 Y=0 开始查网格。
+            if (targetPos.Y == 0f && player != null && currentTerritory == territoryType)
+            {
+                targetPos = targetPos with { Y = player.Position.Y };
+            }
+
+            TrySetMapFlag(territoryType, targetPos);
             if (currentTerritory != territoryType)
             {
-                if (TryTeleportToTerritory(territoryType, targetPos, true, height, false))
+                if (TryTeleportToTerritory(territoryType, targetPos, fly, height, autoDismount))
                 {
-                    PrintEcho($"狩猎目标位于地图 {territoryType}，已请求 Lifestream 传送。 ");
+                    PrintEcho($"{label}目标位于地图 {territoryType}，已请求 Lifestream 传送。 ");
                 }
                 else
                 {
-                    PrintEcho($"狩猎目标位于地图 {territoryType}，传送未开始；已取消当前导航，避免使用异地图坐标寻路。 ");
+                    PrintEcho($"{label}目标位于地图 {territoryType}，传送未开始；已取消当前导航，避免使用异地图坐标寻路。 ");
                 }
                 return;
             }
 
             var groundTarget = SnapToNavmesh(targetPos) ?? targetPos;
-            var player = DalamudApi.ObjectTable.LocalPlayer;
             var targetAetheryte = GetNearestCurrentTerritoryAetherytePosition(groundTarget);
             if (player != null && targetAetheryte.HasValue)
             {
@@ -224,22 +245,29 @@ public sealed class VnavService : IDisposable
                     new Vector2(targetAetheryte.Value.X, targetAetheryte.Value.Z));
 
                 if (playerToAetheryte >= targetToAetheryte
-                    && TryTeleportToTerritory(currentTerritory, groundTarget, true, height, false))
+                    && TryTeleportToTerritory(currentTerritory, groundTarget, fly, height, autoDismount))
                 {
-                    PrintEcho($"狩猎导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，先传送再导航。 ");
+                    PrintEcho($"{label}导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，先传送再导航。 ");
                     return;
                 }
 
-                PrintEcho($"狩猎导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，直接导航。 ");
+                PrintEcho($"{label}导航：角色到水晶 {playerToAetheryte:0.#} yalms，目标到水晶 {targetToAetheryte:0.#} yalms，直接导航。 ");
             }
 
-            var elevatedTarget = new Vector3(groundTarget.X, groundTarget.Y + Math.Clamp(height, 0f, 200f), groundTarget.Z);
+            if (autoDismount)
+            {
+                // 地面目标必须落在网格上，vnavmesh 才会下降落地而不是停在目标上方。
+                StartMove(groundTarget, fly, true);
+                return;
+            }
+
+            var elevatedTarget = new Vector3(groundTarget.X, groundTarget.Y + height, groundTarget.Z);
             StartMove(elevatedTarget, true, false);
         }
         catch (Exception ex)
         {
-            DalamudApi.Log.Warning(ex, "Hunt target navigation request failed.");
-            PrintEcho($"狩猎导航失败：{ex.Message}");
+            DalamudApi.Log.Warning(ex, "Territory target navigation request failed.");
+            PrintEcho($"{label}导航失败：{ex.Message}");
         }
     }
 
@@ -1745,7 +1773,8 @@ public sealed class VnavService : IDisposable
         var distance = Vector2.Distance(
             new Vector2(player.Position.X, player.Position.Z),
             new Vector2(target.X, target.Z));
-        if (distance > 8f)
+        // 水平接近但仍在高空时不要下坐骑，等 vnavmesh 把角色带到地面再落地。
+        if (distance > 8f || Math.Abs(player.Position.Y - target.Y) > 4f)
         {
             return;
         }
