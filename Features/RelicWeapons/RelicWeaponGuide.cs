@@ -306,7 +306,7 @@ public static class RelicWeaponGuide
             Stage("zodiac-zeta", "黄道武器·本我", "iLvl 135", "灵魂凝聚最终阶段", "使用十二文书型灵魂凝聚器完成最终光阶段。",
                 Requirements(("zodiac-zeta-mahatma", "黄道本我", 12, "逐个完成 12 个本我光阶段。"))),
         },
-        "https://ff14.huijiwiki.com/wiki/%E9%BB%84%E9%81%93%E6%AD%A6%E5%99%A8");
+        SecondarySourceUrl: "https://ff14.huijiwiki.com/wiki/%E9%BB%84%E9%81%93%E6%AD%A6%E5%99%A8");
 
     private static RelicWeaponSeries CreateAnima() => new(
         "anima",
